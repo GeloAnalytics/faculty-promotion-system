@@ -1,0 +1,35 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model FacultyProfile {
+  id              String       @id @default(cuid())
+  teacherId       String?
+  name            String
+  semester        String?
+  features        Json // {teaching: num, research: num, ...} from TQE or PDF parse
+  teachingQuality String?
+  promotion       Boolean? // Predicted
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+  predictions     Prediction[]
+
+  @@map("faculty_profiles")
+}
+
+model Prediction {
+  id             String         @id @default(cuid())
+  profileId      String
+  profile        FacultyProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  probability    Float
+  predictedClass Boolean
+  modelUsed      String // e.g. "logistic"
+  createdAt      DateTime       @default(now())
+
+  @@map("predictions")
+}
