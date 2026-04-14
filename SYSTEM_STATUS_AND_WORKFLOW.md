@@ -13,13 +13,14 @@ Current runtime status:
 - Training-example draft creation is active.
 - File upload and storage is active.
 - PDF text extraction is active.
+- Image OCR is active.
+- PDF/image analysis is active.
 - Guideline PDF parsing is active.
 - TQE.csv reference loading is active.
 - Model prediction is inactive.
 - Model comparison is inactive.
 - Feature-selection endpoint is inactive.
-- Image OCR is not yet implemented.
-- Excel/CSV parsing is not yet implemented.
+- Excel/CSV parsing is partially implemented.
 
 ## Short Answer To Your Question
 
@@ -35,30 +36,33 @@ It can currently:
 - create training-example draft records
 - save uploaded documents with metadata
 - save extracted PDF text
+- save OCR text from image uploads
 - save manual labels for promotion outcome
 - organize uploads by the five required upload panels
 
 ### Can it properly read and organize contents from file uploads?
 
-Partially.
+Partially, but much better than before.
 
 What it does properly right now:
 
 - It accepts PDF uploads and extracts text from them.
+- It accepts image uploads and extracts OCR text from them.
 - It stores PDF extraction metadata and extracted text.
+- It stores image OCR text and analysis metadata.
 - It organizes uploaded files by panel/category.
 - It restricts the `Tallied Points` panel to spreadsheet-like files (`csv`, `xls`, `xlsx`).
-- It stores spreadsheet uploads for later use in training-data preparation.
+- It reads CSV files as text and stores them for training-data preparation.
+- It generates structured document-analysis summaries for PDF, image, and CSV uploads.
 
 What it does **not** do yet:
 
-- It does not OCR image uploads.
 - It does not parse Excel files.
-- It does not parse CSV tallied points into structured database rows.
+- It does not normalize CSV tallied points into structured database rows.
 - It does not classify or normalize document contents into exact NBC 461 fields.
 - It does not yet turn uploaded evidence into a complete rule-based scoring engine.
 
-So the system already supports **collection and storage well**, but **content understanding is only partial** at this stage.
+So the system already supports **collection and storage well**, and it now **reads PDF and image content**, but **content normalization is still partial**.
 
 ## Where This Is Implemented
 
@@ -99,6 +103,14 @@ Declared in [src/server.ts](/c:/Users/PC/faculty-promotion-system/src/server.ts:
 
 Implemented in [src/server.ts](/c:/Users/PC/faculty-promotion-system/src/server.ts:345).
 
+### OCR processing
+
+Implemented in [scripts/ocr-image.ps1](/c:/Users/PC/faculty-promotion-system/scripts/ocr-image.ps1:1) and invoked from [src/server.ts](/c:/Users/PC/faculty-promotion-system/src/server.ts:418).
+
+### Shared document analysis
+
+Implemented in [src/utils.ts](/c:/Users/PC/faculty-promotion-system/src/utils.ts:83).
+
 ### Faculty record intake
 
 Implemented in [src/server.ts](/c:/Users/PC/faculty-promotion-system/src/server.ts:432).
@@ -111,9 +123,14 @@ Implemented in:
 - [src/server.ts](/c:/Users/PC/faculty-promotion-system/src/server.ts:525)
 - [src/server.ts](/c:/Users/PC/faculty-promotion-system/src/server.ts:554)
 
-### PDF extraction and reference loading
+### PDF/image extraction and reference loading
 
-Implemented in [src/utils.ts](/c:/Users/PC/faculty-promotion-system/src/utils.ts:51), [src/utils.ts](/c:/Users/PC/faculty-promotion-system/src/utils.ts:226), and [src/utils.ts](/c:/Users/PC/faculty-promotion-system/src/utils.ts:314).
+Implemented in:
+
+- [src/utils.ts](/c:/Users/PC/faculty-promotion-system/src/utils.ts:51)
+- [src/utils.ts](/c:/Users/PC/faculty-promotion-system/src/utils.ts:83)
+- [src/utils.ts](/c:/Users/PC/faculty-promotion-system/src/utils.ts:226)
+- [src/utils.ts](/c:/Users/PC/faculty-promotion-system/src/utils.ts:314)
 
 ### Database schema for stored records
 
@@ -203,7 +220,8 @@ How uploads are organized:
 - The `extractionMetadata` JSON stores:
   - the panel key
   - whether it is being stored for training
-  - extraction details when available
+  - extraction or OCR details when available
+  - analysis summaries when available
 
 This means the uploads are already organized at the database level by category.
 
@@ -213,8 +231,8 @@ For PDF files:
 
 - the backend uses `pdf-parse`
 - extracted text is stored
-- extraction metadata is stored
-- a preview and extraction summary are returned to the UI
+- analysis metadata is stored
+- a preview and structured analysis summary are returned to the UI
 
 Current extraction behavior:
 
@@ -224,30 +242,33 @@ Current extraction behavior:
   - extension services
   - IPCR average
   - professional development hours
-
-This is implemented in [src/utils.ts](/c:/Users/PC/faculty-promotion-system/src/utils.ts:51).
+- It also tags category and keyword matches based on the selected upload panel.
 
 What this means in practice:
 
 - The system can read PDF text
 - The system can store extracted text
-- The system can capture a basic extraction summary
+- The system can capture a structured analysis summary
 - The system cannot yet fully map documents to exact NBC 461 scoring fields
 
 ### 5. Image upload behavior
 
 For image files:
 
-- the route recognizes them as valid upload intent
-- the route returns `501 Not Implemented`
+- the backend runs OCR through the local Windows OCR helper
+- extracted text is stored
+- structured document analysis is generated
+- the upload is linked to a KRA or tallied-points panel
 
 This means:
 
-- the workflow is designed for image uploads
-- OCR is still missing
-- no image text is extracted yet
+- the workflow is operational for image uploads
+- OCR text can now be collected for future training
+- quality still depends on image clarity and Windows OCR performance
 
-So image uploads are conceptually supported by the UI and workflow, but not operationally processed.
+Current limitation:
+
+- OCR output is still heuristic and not yet converted into exact NBC 461 rule-scored fields
 
 ### 6. Tallied points upload behavior
 
@@ -256,12 +277,14 @@ For `csv`, `xls`, and `xlsx` files:
 - the backend accepts them only for the `tallied_points` panel
 - the file metadata is stored
 - the file is marked as stored for training-data preparation
+- CSV files are read as text and analyzed at a basic level
 
 Current limitation:
 
-- the file contents are **not parsed into structured rows yet**
+- `.xls` and `.xlsx` contents are **not parsed yet**
+- CSV contents are **not yet normalized into structured database rows**
 
-So this panel is good for **collection and storage**, but not yet for automated ingestion of tallied scores into the database.
+So this panel is good for **collection and storage**, but not yet for automated ingestion of tallied scores into normalized records.
 
 ### 7. Guideline reference behavior
 
@@ -385,12 +408,12 @@ Achieved:
 - review/performance data can be collected
 - promotion-history fields exist in the intake payload
 - PDF documents can be uploaded and text can be extracted
+- image documents can be OCR'd and analyzed
 - uploads are categorized into KRA panels and stored
 - training records are created and stored
 
 Not yet achieved:
 
-- scanned image OCR is not implemented
 - spreadsheet tallied-point parsing is not implemented
 - document-to-field mapping is still basic
 - automated preprocessing is only partial
@@ -451,13 +474,14 @@ Notes:
 - structured faculty-record storage
 - evidence-file categorization
 - PDF extraction and storage
+- image OCR and OCR-text storage
+- shared upload analysis summaries
 - future training-set assembly
 - auditability through user-linked records
 - production-minded backend structure
 
 ### What the system is not yet good at
 
-- extracting text from image uploads
 - parsing Excel/CSV tallied points into structured values
 - mapping uploads precisely to NBC 461 annex scoring rules
 - producing live promotion predictions
@@ -465,13 +489,13 @@ Notes:
 
 ## Current Risks and Weaknesses
 
-### 1. OCR gap
+### 1. Structured scoring gap
 
-Images are expected in the workflow but are not processable yet.
+Uploads can now be read, but they are not yet converted into exact NBC 461 scoring structures.
 
 Impact:
 
-- scanned requirements cannot yet be converted into structured text automatically
+- extracted content is still only partially normalized for training and policy analysis
 
 ### 2. Spreadsheet parsing gap
 
@@ -481,7 +505,23 @@ Impact:
 
 - important scoring data may exist in files without being usable in analytics yet
 
-### 3. No explicit file storage layer
+### 3. Database deployment gap
+
+The schema and migration files are present, but a real database deployment has not yet been executed in this environment.
+
+Still required:
+
+- provision a PostgreSQL database
+- set `DATABASE_URL` in production
+- run `prisma migrate deploy`
+- verify the new tables exist
+- verify account creation, uploads, and training-example writes against the live database
+
+Impact:
+
+- the app structure is ready, but persistence has not been validated end-to-end on a real deployed database
+
+### 4. No explicit file storage layer
 
 The database stores metadata and extracted text, but not a managed production file-storage strategy such as:
 
@@ -493,7 +533,7 @@ Impact:
 
 - deployment architecture still needs a real file-storage design
 
-### 4. Session model is simple
+### 5. Session model is simple
 
 The current cookie session is signed and useful, but it is still a lightweight custom approach.
 
@@ -506,13 +546,21 @@ Impact:
 
 ### Priority 1
 
-Implement OCR for image uploads.
+Implement structured parsing for tallied points and uploaded evidence.
 
 Why:
 
-- it directly unlocks the “scanned and digitized relevant documents” part of Objective 1
+- OCR now exists, but extracted text still needs to be normalized into training-ready fields
 
 ### Priority 2
+
+Deploy and validate the database.
+
+Why:
+
+- the schema is ready, but real persistence must be verified in a live PostgreSQL environment
+
+### Priority 3
 
 Implement spreadsheet parsing for the `Tallied Points` panel.
 
@@ -520,7 +568,7 @@ Why:
 
 - it turns stored training support files into usable structured features
 
-### Priority 3
+### Priority 4
 
 Map parsed evidence to NBC 461 categories and annex criteria.
 
@@ -528,7 +576,7 @@ Why:
 
 - it converts general document storage into a policy-aligned scoring dataset
 
-### Priority 4
+### Priority 5
 
 Create a training dataset export pipeline.
 
@@ -536,7 +584,7 @@ Why:
 
 - the collected records then become immediately usable for offline model development
 
-### Priority 5
+### Priority 6
 
 Only after enough labeled data exists, reactivate:
 
@@ -546,12 +594,27 @@ Only after enough labeled data exists, reactivate:
 - model evaluation
 - recommendation generation
 
+## PR Follow-Up Checklist
+
+The following work is still needed after this PR:
+
+- provision and connect a real PostgreSQL database
+- run `prisma migrate deploy` in the target environment
+- validate user registration/login against the live database
+- validate faculty intake, uploads, and training labels against the live database
+- implement `.xls/.xlsx` parsing for the `Tallied Points` panel
+- normalize CSV tallied-point data into structured database records
+- map parsed uploads to exact NBC 461 annex categories and scoring rules
+- define a production file-storage strategy for uploaded source files
+- decide whether to keep custom cookie sessions or replace them with a fuller auth/session solution
+- reactivate model endpoints only after enough labeled data exists
+
 ## Final Conclusion
 
 At this stage:
 
 - the system **can collect and store data well**
-- the system **can partially read and organize uploaded contents**
+- the system **can read PDF and image uploads and partially organize their contents**
 - the system is **strong for training-data preparation**
 - the system is **not yet a functional predictive analytics engine**
 
