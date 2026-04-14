@@ -7,29 +7,107 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum UserRole {
+  ADMIN
+  ANALYST
+  STAFF
+}
+
+enum DocumentKind {
+  REQUIREMENT
+  GUIDELINE
+  TRAINING_SUPPORT
+}
+
+enum TrainingExampleStatus {
+  DRAFT
+  LABELED
+  VALIDATED
+}
+
+model User {
+  id            String            @id @default(cuid())
+  email         String            @unique
+  passwordHash  String
+  passwordSalt  String
+  fullName      String
+  role          UserRole          @default(STAFF)
+  accountActive Boolean           @default(true)
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+  profiles      FacultyProfile[]
+  predictions   Prediction[]
+  documents     UploadedDocument[]
+  trainingItems TrainingExample[]
+
+  @@map("users")
+}
+
 model FacultyProfile {
-  id              String       @id @default(cuid())
+  id              String             @id @default(cuid())
   teacherId       String?
   name            String
   semester        String?
-  features        Json // {teaching: num, research: num, ...} from TQE or PDF parse
+  features        Json
   teachingQuality String?
-  promotion       Boolean? // Predicted
-  createdAt       DateTime     @default(now())
-  updatedAt       DateTime     @updatedAt
+  promotion       Boolean?
+  createdByUserId String?
+  createdBy       User?              @relation(fields: [createdByUserId], references: [id], onDelete: SetNull)
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
   predictions     Prediction[]
+  documents       UploadedDocument[]
+  trainingItems   TrainingExample[]
 
   @@map("faculty_profiles")
 }
 
 model Prediction {
-  id             String         @id @default(cuid())
-  profileId      String
-  profile        FacultyProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
-  probability    Float
-  predictedClass Boolean
-  modelUsed      String // e.g. "logistic"
-  createdAt      DateTime       @default(now())
+  id                String         @id @default(cuid())
+  profileId         String
+  profile           FacultyProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  probability       Float
+  predictedClass    Boolean
+  modelUsed         String
+  generatedByUserId String?
+  generatedBy       User?          @relation(fields: [generatedByUserId], references: [id], onDelete: SetNull)
+  createdAt         DateTime       @default(now())
 
   @@map("predictions")
+}
+
+model UploadedDocument {
+  id                 String         @id @default(cuid())
+  ownerUserId        String?
+  ownerUser          User?          @relation(fields: [ownerUserId], references: [id], onDelete: SetNull)
+  profileId          String?
+  profile            FacultyProfile? @relation(fields: [profileId], references: [id], onDelete: SetNull)
+  kind               DocumentKind
+  originalName       String
+  mimeType           String
+  extractedText      String?
+  extractionMetadata Json?
+  createdAt          DateTime       @default(now())
+
+  @@map("uploaded_documents")
+}
+
+model TrainingExample {
+  id              String                @id @default(cuid())
+  createdByUserId String?
+  createdBy       User?                 @relation(fields: [createdByUserId], references: [id], onDelete: SetNull)
+  profileId       String?
+  profile         FacultyProfile?       @relation(fields: [profileId], references: [id], onDelete: SetNull)
+  status          TrainingExampleStatus @default(DRAFT)
+  labelPromoted   Boolean?
+  labelSource     String?
+  datasetSplit    String?
+  notes           String?
+  rawInput        Json
+  featureSnapshot Json
+  modelSnapshot   Json?
+  createdAt       DateTime              @default(now())
+  updatedAt       DateTime              @updatedAt
+
+  @@map("training_examples")
 }

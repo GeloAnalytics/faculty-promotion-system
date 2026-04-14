@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Faculty Promotion Training Data System</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;700;800&family=Space+Grotesk:wght@500;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="page-shell">
+      <header class="hero">
+        <div class="hero-copy">
+          <p class="eyebrow">Faculty Promotion Training Data System</p>
+          <h1>Collect structured evidence first. Train the model later.</h1>
+          <p class="hero-text">
+            The prediction model remains in the roadmap, but this deployment is now focused on authenticated
+            collection of faculty records, KRA documents, and tallied-point files needed for future training.
+          </p>
+          <div class="hero-actions">
+            <button class="button button-primary" data-scroll-target="#auth-panel">Access Workspace</button>
+            <button class="button button-secondary" data-scroll-target="#upload-panels">Open Upload Panels</button>
+          </div>
+        </div>
+        <div class="hero-stats">
+          <div class="stat-card">
+            <span class="stat-label">System Status</span>
+            <strong id="health-status">Loading...</strong>
+          </div>
+          <div class="stat-card">
+            <span class="stat-label">Model Status</span>
+            <strong id="model-status">Loading...</strong>
+          </div>
+          <div class="stat-card">
+            <span class="stat-label">Guideline PDF</span>
+            <strong id="health-guideline">-</strong>
+          </div>
+          <div class="stat-card">
+            <span class="stat-label">Signed In User</span>
+            <strong id="session-user">Guest</strong>
+          </div>
+        </div>
+      </header>
+
+      <main class="content-grid">
+        <section class="panel" id="auth-panel">
+          <div class="panel-heading">
+            <div>
+              <p class="section-kicker">Account Access</p>
+              <h2>Register or sign in</h2>
+            </div>
+          </div>
+          <div class="auth-grid">
+            <form id="register-form" class="stack-form">
+              <label class="field">
+                <span>Full name</span>
+                <input type="text" id="register-name" placeholder="Faculty Analyst" required />
+              </label>
+              <label class="field">
+                <span>Email</span>
+                <input type="email" id="register-email" placeholder="analyst@example.com" required />
+              </label>
+              <label class="field">
+                <span>Password</span>
+                <input type="password" id="register-password" placeholder="Minimum 8 characters" required />
+              </label>
+              <button class="button button-primary" type="submit">Create Account</button>
+            </form>
+            <form id="login-form" class="stack-form">
+              <label class="field">
+                <span>Email</span>
+                <input type="email" id="login-email" placeholder="analyst@example.com" required />
+              </label>
+              <label class="field">
+                <span>Password</span>
+                <input type="password" id="login-password" placeholder="Password" required />
+              </label>
+              <button class="button button-secondary" type="submit">Sign In</button>
+              <button class="button button-ghost" id="logout-button" type="button">Sign Out</button>
+            </form>
+          </div>
+          <pre id="auth-result" class="code-block">No account action yet.</pre>
+        </section>
+
+        <section class="panel panel-wide">
+          <div class="panel-heading">
+            <div>
+              <p class="section-kicker">Faculty Record</p>
+              <h2>Create the base training record</h2>
+            </div>
+          </div>
+          <form id="faculty-form" class="stack-form">
+            <div class="field-row">
+              <label class="field">
+                <span>Faculty name</span>
+                <input type="text" id="fullName" value="Sample Faculty" required />
+              </label>
+              <label class="field">
+                <span>Teacher ID</span>
+                <input type="text" id="teacherId" value="T039" />
+              </label>
+            </div>
+            <div class="field-row">
+              <label class="field">
+                <span>Highest attainment</span>
+                <select id="attainment">
+                  <option>Doctorate</option>
+                  <option>Master's</option>
+                  <option>Bachelor's</option>
+                </select>
+              </label>
+              <label class="field">
+                <span>Academic rank</span>
+                <input type="text" id="academicRank" value="Assistant Professor" />
+              </label>
+            </div>
+            <div class="field-row">
+              <label class="field">
+                <span>Years in service</span>
+                <input type="number" id="yearsInService" value="11" min="0" step="1" />
+              </label>
+              <label class="field">
+                <span>Review period</span>
+                <input type="text" id="reviewPeriod" value="2025" />
+              </label>
+            </div>
+            <div class="field-row">
+              <label class="field">
+                <span>IPCR average</span>
+                <input type="number" id="ipcrAverage" value="4.5" min="0" max="5" step="0.01" />
+              </label>
+              <label class="field">
+                <span>Teaching effectiveness</span>
+                <input type="number" id="teachingEffectiveness" value="91.8" min="0" max="100" step="0.01" />
+              </label>
+            </div>
+            <div class="field-row">
+              <label class="field">
+                <span>Research outputs</span>
+                <input type="number" id="researchOutputs" value="4.4" min="0" step="0.01" />
+              </label>
+              <label class="field">
+                <span>Extension services</span>
+                <input type="number" id="extensionServices" value="3" min="0" step="0.01" />
+              </label>
+            </div>
+            <div class="field-row">
+              <label class="field">
+                <span>Administrative experience</span>
+                <input type="number" id="administrativeExperience" value="2" min="0" step="0.01" />
+              </label>
+              <label class="field">
+                <span>Professional development hours</span>
+                <input type="number" id="professionalDevelopmentHours" value="48" min="0" step="0.01" />
+              </label>
+            </div>
+            <label class="field">
+              <span>Notes</span>
+              <input type="text" id="analysis-notes" placeholder="Optional context for the faculty record" />
+            </label>
+            <button class="button button-primary" type="submit">Save Faculty Record</button>
+          </form>
+        </section>
+
+        <section class="panel panel-wide" id="upload-panels">
+          <div class="panel-heading">
+            <div>
+              <p class="section-kicker">Five Upload Panels</p>
+              <h2>Collect requirement files by KRA and tallied points</h2>
+            </div>
+          </div>
+          <div id="upload-panel-grid" class="upload-panel-grid"></div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-heading">
+            <div>
+              <p class="section-kicker">Reference Data</p>
+              <h2>TQE summary</h2>
+            </div>
+          </div>
+          <pre id="tqe-summary" class="code-block">Loading reference summary...</pre>
+        </section>
+
+        <section class="panel">
+          <div class="panel-heading">
+            <div>
+              <p class="section-kicker">Guidelines</p>
+              <h2>DBM-JC preview</h2>
+            </div>
+          </div>
+          <pre id="guideline-summary" class="code-block">Loading guideline reference...</pre>
+        </section>
+
+        <section class="panel">
+          <div class="panel-heading">
+            <div>
+              <p class="section-kicker">Training Labels</p>
+              <h2>Label collected records</h2>
+            </div>
+          </div>
+          <form id="training-form" class="stack-form">
+            <label class="field">
+              <span>Promotion outcome</span>
+              <select id="training-label">
+                <option value="true">Promoted</option>
+                <option value="false">Not Promoted</option>
+              </select>
+            </label>
+            <label class="field">
+              <span>Label source</span>
+              <input type="text" id="training-source" value="Committee decision" />
+            </label>
+            <label class="field">
+              <span>Dataset split</span>
+              <select id="training-split">
+                <option value="train">Train</option>
+                <option value="validation">Validation</option>
+                <option value="test">Test</option>
+              </select>
+            </label>
+            <label class="field">
+              <span>Notes</span>
+              <input type="text" id="training-notes" placeholder="Optional training annotation" />
+            </label>
+            <button class="button button-secondary" type="submit">Save Training Label</button>
+          </form>
+          <pre id="training-result" class="code-block">No training example labeled yet.</pre>
+        </section>
+
+        <section class="panel panel-wide">
+          <div class="panel-heading">
+            <div>
+              <p class="section-kicker">Collected Data</p>
+              <h2>Latest stored record and recent training examples</h2>
+            </div>
+          </div>
+          <div class="reference-grid">
+            <article class="card">
+              <h3>Latest Faculty Record</h3>
+              <pre id="prediction-result" class="code-block">No faculty record saved yet.</pre>
+            </article>
+            <article class="card">
+              <h3>Recent Training Examples</h3>
+              <pre id="training-list" class="code-block">No training examples loaded yet.</pre>
+            </article>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <script src="/app.js"></script>
+  </body>
+</html>
