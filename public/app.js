@@ -2,19 +2,20 @@ const healthStatus = document.getElementById("health-status");
 const modelStatus = document.getElementById("model-status");
 const healthGuideline = document.getElementById("health-guideline");
 const sessionUser = document.getElementById("session-user");
-const tqeSummary = document.getElementById("tqe-summary");
-const guidelineSummary = document.getElementById("guideline-summary");
 const authResult = document.getElementById("auth-result");
-const facultyForm = document.getElementById("faculty-form");
-const latestRecordResult = document.getElementById("prediction-result");
-const trainingForm = document.getElementById("training-form");
+const facultyResult = document.getElementById("faculty-result");
 const trainingResult = document.getElementById("training-result");
 const trainingList = document.getElementById("training-list");
-const registerForm = document.getElementById("register-form");
-const loginForm = document.getElementById("login-form");
-const logoutButton = document.getElementById("logout-button");
+const facultyForm = document.getElementById("faculty-form");
+const trainingForm = document.getElementById("training-form");
+const authForm = document.getElementById("auth-form");
 const uploadPanelGrid = document.getElementById("upload-panel-grid");
+const showLoginButton = document.getElementById("show-login");
+const showRegisterButton = document.getElementById("show-register");
+const nameField = document.getElementById("name-field");
+const authSubmit = document.getElementById("auth-submit");
 
+let authMode = "login";
 let latestRecordContext = null;
 
 document.querySelectorAll("[data-scroll-target]").forEach((button) => {
@@ -26,65 +27,43 @@ document.querySelectorAll("[data-scroll-target]").forEach((button) => {
   });
 });
 
-registerForm.addEventListener("submit", async (event) => {
+showLoginButton.addEventListener("click", () => setAuthMode("login"));
+showRegisterButton.addEventListener("click", () => setAuthMode("register"));
+
+authForm.addEventListener("submit", async (event) => {
   event.preventDefault();
-  authResult.textContent = "Creating account...";
+  setNotice(authResult, authMode === "login" ? "Signing in..." : "Creating account...");
 
   try {
-    const data = await apiFetch("/api/auth/register", {
+    const endpoint = authMode === "login" ? "/api/auth/login" : "/api/auth/register";
+    const body =
+      authMode === "login"
+        ? {
+            email: valueOf("auth-email"),
+            password: valueOf("auth-password"),
+          }
+        : {
+            fullName: valueOf("auth-name"),
+            email: valueOf("auth-email"),
+            password: valueOf("auth-password"),
+          };
+
+    const data = await apiFetch(endpoint, {
       method: "POST",
-      body: JSON.stringify({
-        fullName: valueOf("register-name"),
-        email: valueOf("register-email"),
-        password: valueOf("register-password"),
-      }),
+      body: JSON.stringify(body),
     });
 
-    authResult.textContent = JSON.stringify(data, null, 2);
     await refreshSession();
     await Promise.all([loadUploadPanels(), loadTrainingExamples()]);
+    setNotice(authResult, `${authMode === "login" ? "Signed in" : "Account created"} for ${data.user.fullName}.`);
   } catch (error) {
-    authResult.textContent = stringifyError(error);
-  }
-});
-
-loginForm.addEventListener("submit", async (event) => {
-  event.preventDefault();
-  authResult.textContent = "Signing in...";
-
-  try {
-    const data = await apiFetch("/api/auth/login", {
-      method: "POST",
-      body: JSON.stringify({
-        email: valueOf("login-email"),
-        password: valueOf("login-password"),
-      }),
-    });
-
-    authResult.textContent = JSON.stringify(data, null, 2);
-    await refreshSession();
-    await Promise.all([loadUploadPanels(), loadTrainingExamples()]);
-  } catch (error) {
-    authResult.textContent = stringifyError(error);
-  }
-});
-
-logoutButton.addEventListener("click", async () => {
-  try {
-    await apiFetch("/api/auth/logout", { method: "POST" }, false);
-    authResult.textContent = "Signed out.";
-    latestRecordContext = null;
-    sessionUser.textContent = "Guest";
-    uploadPanelGrid.innerHTML = "";
-    trainingList.textContent = "No training examples loaded yet.";
-  } catch (error) {
-    authResult.textContent = stringifyError(error);
+    setNotice(authResult, toErrorMessage(error), true);
   }
 });
 
 facultyForm.addEventListener("submit", async (event) => {
   event.preventDefault();
-  latestRecordResult.textContent = "Saving faculty record...";
+  setNotice(facultyResult, "Saving faculty record...");
 
   const payload = buildFacultyPayload();
 
@@ -99,10 +78,13 @@ facultyForm.addEventListener("submit", async (event) => {
       response: data,
     };
 
-    latestRecordResult.textContent = JSON.stringify(data, null, 2);
+    setNotice(
+      facultyResult,
+      `Faculty record saved. Profile ID: ${data.profileId}. Training example draft created and ready for uploads and labeling.`,
+    );
     await loadTrainingExamples();
   } catch (error) {
-    latestRecordResult.textContent = stringifyError(error);
+    setNotice(facultyResult, toErrorMessage(error), true);
   }
 });
 
@@ -110,15 +92,14 @@ trainingForm.addEventListener("submit", async (event) => {
   event.preventDefault();
 
   if (!latestRecordContext) {
-    trainingResult.textContent = "Save a faculty record first so there is a training example to label.";
+    setNotice(trainingResult, "Save a faculty record first so there is a training example to label.", true);
     return;
   }
 
-  const existingId = latestRecordContext.response.trainingExampleId;
-  trainingResult.textContent = "Saving training label...";
+  setNotice(trainingResult, "Saving training label...");
 
   try {
-    const data = await apiFetch(`/api/training/examples/${existingId}/label`, {
+    const data = await apiFetch(`/api/training/examples/${latestRecordContext.response.trainingExampleId}/label`, {
       method: "PATCH",
       body: JSON.stringify({
         labelPromoted: valueOf("training-label") === "true",
@@ -128,19 +109,20 @@ trainingForm.addEventListener("submit", async (event) => {
       }),
     });
 
-    trainingResult.textContent = JSON.stringify(data, null, 2);
+    setNotice(trainingResult, `Training example updated. Status is now ${data.status}.`);
     await loadTrainingExamples();
   } catch (error) {
-    trainingResult.textContent = stringifyError(error);
+    setNotice(trainingResult, toErrorMessage(error), true);
   }
 });
 
 bootstrap();
 
 async function bootstrap() {
-  await Promise.all([loadHealth(), loadTqeSummary(), loadGuidelines(), refreshSession()]);
+  setAuthMode("login");
+  await Promise.all([loadHealth(), refreshSession(), loadUploadPanels()]);
   if (sessionUser.textContent !== "Guest") {
-    await Promise.all([loadUploadPanels(), loadTrainingExamples()]);
+    await loadTrainingExamples();
   }
 }
 
@@ -158,51 +140,34 @@ async function loadHealth() {
     const data = await apiFetch("/api/health", { method: "GET" }, false);
     healthStatus.textContent = data.status;
     modelStatus.textContent = data.model?.status ?? "unknown";
-    healthGuideline.textContent = data.referenceData?.guidelinePdfFileName ?? "Missing";
-  } catch (error) {
+    healthGuideline.textContent = data.referenceData?.guidelinePdfFileName ? "Loaded" : "Missing";
+  } catch {
     healthStatus.textContent = "Unavailable";
     modelStatus.textContent = "-";
     healthGuideline.textContent = "-";
   }
 }
 
-async function loadTqeSummary() {
-  try {
-    const data = await apiFetch("/api/reference/tqe-summary", { method: "GET" }, false);
-    tqeSummary.textContent = JSON.stringify(data, null, 2);
-  } catch (error) {
-    tqeSummary.textContent = stringifyError(error);
-  }
-}
-
-async function loadGuidelines() {
-  try {
-    const data = await apiFetch("/api/reference/guidelines", { method: "GET" }, false);
-    guidelineSummary.textContent = JSON.stringify(data, null, 2);
-  } catch (error) {
-    guidelineSummary.textContent = stringifyError(error);
-  }
-}
-
 async function loadUploadPanels() {
   try {
-    const data = await apiFetch("/api/config/upload-panels", { method: "GET" });
-    renderUploadPanels(data.panels);
+    const data = await apiFetch("/api/config/upload-panels", { method: "GET" }, false);
+    renderUploadPanels(data.panels, sessionUser.textContent !== "Guest");
   } catch (error) {
-    uploadPanelGrid.innerHTML = `<pre class="code-block">${escapeHtml(stringifyError(error))}</pre>`;
+    uploadPanelGrid.innerHTML = `<div class="notice notice-error">${escapeHtml(toErrorMessage(error))}</div>`;
   }
 }
 
 async function loadTrainingExamples() {
   try {
     const data = await apiFetch("/api/training/examples", { method: "GET" });
-    trainingList.textContent = JSON.stringify(data, null, 2);
+    const count = Array.isArray(data.items) ? data.items.length : 0;
+    setNotice(trainingList, `Collected training records available: ${count}. Latest records are stored in PostgreSQL.`);
   } catch (error) {
-    trainingList.textContent = stringifyError(error);
+    setNotice(trainingList, toErrorMessage(error), true);
   }
 }
 
-function renderUploadPanels(panels) {
+function renderUploadPanels(panels, isAuthenticated) {
   uploadPanelGrid.innerHTML = "";
 
   panels.forEach((panel) => {
@@ -212,35 +177,59 @@ function renderUploadPanels(panels) {
       <h3>${panel.title}</h3>
       <p class="card-copy">${panel.description}</p>
       <p class="card-copy">Accepted: ${panel.acceptedFormats.join(", ")}</p>
+      <p class="card-copy">${isAuthenticated ? "Ready for upload." : "Sign in first to upload files into this panel."}</p>
       <form class="stack-form upload-panel-form" data-panel-key="${panel.key}">
         <label class="field">
           <span>Select file</span>
-          <input type="file" name="document" required />
+          <input type="file" name="document" ${isAuthenticated ? "" : "disabled"} required />
         </label>
-        <button class="button button-primary" type="submit">Upload to Panel</button>
+        <button class="button button-primary" type="submit" ${isAuthenticated ? "" : "disabled"}>Upload to Panel</button>
       </form>
-      <pre class="code-block panel-result">No file uploaded yet.</pre>
+      <div class="notice panel-result">${isAuthenticated ? "No file uploaded yet." : "Panel visible. Authentication is required before upload."}</div>
+      <div class="upload-preview">
+        <div class="upload-preview-label">Uploaded file preview</div>
+        <div class="upload-file-name">No file selected.</div>
+        <div class="upload-file-view"></div>
+        <div class="upload-text-preview">No extracted text available yet.</div>
+      </div>
     `;
 
     const form = article.querySelector(".upload-panel-form");
     const result = article.querySelector(".panel-result");
+    const fileInput = form.querySelector('input[type="file"]');
+    const fileName = article.querySelector(".upload-file-name");
+    const fileView = article.querySelector(".upload-file-view");
+    const textPreview = article.querySelector(".upload-text-preview");
+
+    fileInput?.addEventListener("change", () => {
+      const file = fileInput.files?.[0];
+      if (!file) {
+        fileName.textContent = "No file selected.";
+        fileView.innerHTML = "";
+        textPreview.textContent = "No extracted text available yet.";
+        return;
+      }
+
+      fileName.textContent = `Selected: ${file.name}`;
+      renderClientPreview(file, fileView, textPreview);
+    });
+
     form.addEventListener("submit", async (event) => {
       event.preventDefault();
-      const input = form.querySelector('input[type="file"]');
-      if (!input.files?.length) {
-        result.textContent = "Choose a file first.";
+      if (!fileInput.files?.length) {
+        setNotice(result, "Choose a file first.", true);
         return;
       }
 
       const formData = new FormData();
-      formData.append("document", input.files[0]);
+      formData.append("document", fileInput.files[0]);
       formData.append("panelKey", panel.key);
       formData.append("kind", panel.key === "tallied_points" ? "TRAINING_SUPPORT" : "REQUIREMENT");
       if (latestRecordContext?.response?.profileId) {
         formData.append("profileId", latestRecordContext.response.profileId);
       }
 
-      result.textContent = "Uploading...";
+      setNotice(result, "Uploading...");
       try {
         const response = await fetch("/api/documents/extract", {
           method: "POST",
@@ -248,14 +237,85 @@ function renderUploadPanels(panels) {
           credentials: "include",
         });
         const data = await readJson(response);
-        result.textContent = JSON.stringify(data, null, 2);
+        const message =
+          data.fileType === "image" || data.fileType === "pdf" || data.fileType === "csv"
+            ? `${panel.title} upload stored successfully. ${data.analysis?.summary ?? "Analysis completed."}`
+            : `${panel.title} upload stored successfully.`;
+        setNotice(result, message);
+        updateUploadedPreview(data, fileInput.files[0], fileView, textPreview);
       } catch (error) {
-        result.textContent = stringifyError(error);
+        setNotice(result, toErrorMessage(error), true);
       }
     });
 
     uploadPanelGrid.appendChild(article);
   });
+}
+
+function setAuthMode(mode) {
+  authMode = mode;
+  const isRegister = mode === "register";
+  nameField.style.display = isRegister ? "grid" : "none";
+  authSubmit.textContent = isRegister ? "Create Account" : "Sign In";
+  showLoginButton.classList.toggle("button-primary", !isRegister);
+  showLoginButton.classList.toggle("button-secondary", isRegister);
+  showRegisterButton.classList.toggle("button-primary", isRegister);
+  showRegisterButton.classList.toggle("button-secondary", !isRegister);
+}
+
+function setNotice(element, message, isError = false) {
+  element.textContent = message;
+  element.classList.toggle("notice-error", isError);
+}
+
+function renderClientPreview(file, fileView, textPreview) {
+  fileView.innerHTML = "";
+
+  if (file.type.startsWith("image/")) {
+    const img = document.createElement("img");
+    img.className = "upload-image-preview";
+    img.alt = file.name;
+    img.src = URL.createObjectURL(file);
+    fileView.appendChild(img);
+    textPreview.textContent = "Waiting for OCR after upload.";
+    return;
+  }
+
+  if (file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf")) {
+    const tag = document.createElement("div");
+    tag.className = "upload-file-tag";
+    tag.textContent = "PDF selected. Extracted text preview will appear after upload.";
+    fileView.appendChild(tag);
+    textPreview.textContent = "Waiting for PDF extraction after upload.";
+    return;
+  }
+
+  if (/\.(csv|xls|xlsx)$/i.test(file.name)) {
+    const tag = document.createElement("div");
+    tag.className = "upload-file-tag";
+    tag.textContent = "Spreadsheet selected. Parsed preview will appear when available.";
+    fileView.appendChild(tag);
+    textPreview.textContent = "Waiting for file analysis after upload.";
+    return;
+  }
+
+  textPreview.textContent = "Preview not available for this file type.";
+}
+
+function updateUploadedPreview(data, file, fileView, textPreview) {
+  if (data.textPreview) {
+    textPreview.textContent = `Extracted text preview:\n\n${data.textPreview}`;
+    return;
+  }
+
+  if (data.analysis?.summary) {
+    textPreview.textContent = data.analysis.summary;
+    return;
+  }
+
+  if (file) {
+    textPreview.textContent = `${file.name} uploaded successfully.`;
+  }
 }
 
 function buildFacultyPayload() {
@@ -313,14 +373,8 @@ function numberOf(id) {
   return Number.isFinite(value) ? value : 0;
 }
 
-function stringifyError(error) {
-  return JSON.stringify(
-    {
-      error: error instanceof Error ? error.message : String(error),
-    },
-    null,
-    2,
-  );
+function toErrorMessage(error) {
+  return error instanceof Error ? error.message : String(error);
 }
 
 function escapeHtml(value) {

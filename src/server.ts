@@ -322,7 +322,7 @@ app.get('/api/reference/tqe-summary', (_req: Request, res: Response) => {
   });
 });
 
-app.get('/api/config/upload-panels', requireAuth, (_req: Request, res: Response) => {
+app.get('/api/config/upload-panels', (_req: Request, res: Response) => {
   res.json({
     modelStatus: 'inactive',
     panels: uploadPanels,

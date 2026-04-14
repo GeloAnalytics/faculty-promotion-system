@@ -19,8 +19,8 @@
           <p class="eyebrow">Faculty Promotion Training Data System</p>
           <h1>Collect structured evidence first. Train the model later.</h1>
           <p class="hero-text">
-            The prediction model remains in the roadmap, but this deployment is now focused on authenticated
-            collection of faculty records, KRA documents, and tallied-point files needed for future training.
+            This workspace is focused on faculty record intake, KRA upload collection, OCR-assisted reading,
+            and training-data preparation for the future model.
           </p>
           <div class="hero-actions">
             <button class="button button-primary" data-scroll-target="#auth-panel">Access Workspace</button>
@@ -38,7 +38,7 @@
           </div>
           <div class="stat-card">
             <span class="stat-label">Guideline PDF</span>
-            <strong id="health-guideline">-</strong>
+            <strong id="health-guideline">Loading...</strong>
           </div>
           <div class="stat-card">
             <span class="stat-label">Signed In User</span>
@@ -52,39 +52,29 @@
           <div class="panel-heading">
             <div>
               <p class="section-kicker">Account Access</p>
-              <h2>Register or sign in</h2>
+              <h2>Create an account or sign in</h2>
             </div>
           </div>
-          <div class="auth-grid">
-            <form id="register-form" class="stack-form">
-              <label class="field">
-                <span>Full name</span>
-                <input type="text" id="register-name" placeholder="Faculty Analyst" required />
-              </label>
-              <label class="field">
-                <span>Email</span>
-                <input type="email" id="register-email" placeholder="analyst@example.com" required />
-              </label>
-              <label class="field">
-                <span>Password</span>
-                <input type="password" id="register-password" placeholder="Minimum 8 characters" required />
-              </label>
-              <button class="button button-primary" type="submit">Create Account</button>
-            </form>
-            <form id="login-form" class="stack-form">
-              <label class="field">
-                <span>Email</span>
-                <input type="email" id="login-email" placeholder="analyst@example.com" required />
-              </label>
-              <label class="field">
-                <span>Password</span>
-                <input type="password" id="login-password" placeholder="Password" required />
-              </label>
-              <button class="button button-secondary" type="submit">Sign In</button>
-              <button class="button button-ghost" id="logout-button" type="button">Sign Out</button>
-            </form>
+          <div class="auth-switch">
+            <button class="button button-primary auth-toggle" id="show-login" type="button">Sign In</button>
+            <button class="button button-secondary auth-toggle" id="show-register" type="button">Create Account</button>
           </div>
-          <pre id="auth-result" class="code-block">No account action yet.</pre>
+          <form id="auth-form" class="stack-form">
+            <label class="field" id="name-field">
+              <span>Full name</span>
+              <input type="text" id="auth-name" placeholder="Faculty Analyst" />
+            </label>
+            <label class="field">
+              <span>Email</span>
+              <input type="email" id="auth-email" placeholder="analyst@example.com" required />
+            </label>
+            <label class="field">
+              <span>Password</span>
+              <input type="password" id="auth-password" placeholder="Minimum 8 characters" required />
+            </label>
+            <button class="button button-primary" id="auth-submit" type="submit">Sign In</button>
+          </form>
+          <div id="auth-result" class="notice">No account action yet.</div>
         </section>
 
         <section class="panel panel-wide">
@@ -165,6 +155,7 @@
             </label>
             <button class="button button-primary" type="submit">Save Faculty Record</button>
           </form>
+          <div id="faculty-result" class="notice">No faculty record saved yet.</div>
         </section>
 
         <section class="panel panel-wide" id="upload-panels">
@@ -175,26 +166,6 @@
             </div>
           </div>
           <div id="upload-panel-grid" class="upload-panel-grid"></div>
-        </section>
-
-        <section class="panel">
-          <div class="panel-heading">
-            <div>
-              <p class="section-kicker">Reference Data</p>
-              <h2>TQE summary</h2>
-            </div>
-          </div>
-          <pre id="tqe-summary" class="code-block">Loading reference summary...</pre>
-        </section>
-
-        <section class="panel">
-          <div class="panel-heading">
-            <div>
-              <p class="section-kicker">Guidelines</p>
-              <h2>DBM-JC preview</h2>
-            </div>
-          </div>
-          <pre id="guideline-summary" class="code-block">Loading guideline reference...</pre>
         </section>
 
         <section class="panel">
@@ -230,26 +201,17 @@
             </label>
             <button class="button button-secondary" type="submit">Save Training Label</button>
           </form>
-          <pre id="training-result" class="code-block">No training example labeled yet.</pre>
+          <div id="training-result" class="notice">No training example labeled yet.</div>
         </section>
 
-        <section class="panel panel-wide">
+        <section class="panel">
           <div class="panel-heading">
             <div>
-              <p class="section-kicker">Collected Data</p>
-              <h2>Latest stored record and recent training examples</h2>
+              <p class="section-kicker">Status</p>
+              <h2>Data collection progress</h2>
             </div>
           </div>
-          <div class="reference-grid">
-            <article class="card">
-              <h3>Latest Faculty Record</h3>
-              <pre id="prediction-result" class="code-block">No faculty record saved yet.</pre>
-            </article>
-            <article class="card">
-              <h3>Recent Training Examples</h3>
-              <pre id="training-list" class="code-block">No training examples loaded yet.</pre>
-            </article>
-          </div>
+          <div id="training-list" class="notice">No collected-data summary yet.</div>
         </section>
       </main>
     </div>
