@@ -6,6 +6,7 @@ const authResult = document.getElementById("auth-result");
 const facultyResult = document.getElementById("faculty-result");
 const trainingResult = document.getElementById("training-result");
 const trainingList = document.getElementById("training-list");
+const databaseViewer = document.getElementById("database-viewer");
 const facultyForm = document.getElementById("faculty-form");
 const trainingForm = document.getElementById("training-form");
 const authForm = document.getElementById("auth-form");
@@ -54,7 +55,7 @@ authForm.addEventListener("submit", async (event) => {
     });
 
     await refreshSession();
-    await Promise.all([loadUploadPanels(), loadTrainingExamples()]);
+    await Promise.all([loadUploadPanels(), loadTrainingExamples(), loadDatabaseOverview()]);
     setNotice(authResult, `${authMode === "login" ? "Signed in" : "Account created"} for ${data.user.fullName}.`);
   } catch (error) {
     setNotice(authResult, toErrorMessage(error), true);
@@ -82,7 +83,7 @@ facultyForm.addEventListener("submit", async (event) => {
       facultyResult,
       `Faculty record saved. Profile ID: ${data.profileId}. Training example draft created and ready for uploads and labeling.`,
     );
-    await loadTrainingExamples();
+    await Promise.all([loadTrainingExamples(), loadDatabaseOverview()]);
   } catch (error) {
     setNotice(facultyResult, toErrorMessage(error), true);
   }
@@ -110,7 +111,7 @@ trainingForm.addEventListener("submit", async (event) => {
     });
 
     setNotice(trainingResult, `Training example updated. Status is now ${data.status}.`);
-    await loadTrainingExamples();
+    await Promise.all([loadTrainingExamples(), loadDatabaseOverview()]);
   } catch (error) {
     setNotice(trainingResult, toErrorMessage(error), true);
   }
@@ -122,7 +123,9 @@ async function bootstrap() {
   setAuthMode("login");
   await Promise.all([loadHealth(), refreshSession(), loadUploadPanels()]);
   if (sessionUser.textContent !== "Guest") {
-    await loadTrainingExamples();
+    await Promise.all([loadTrainingExamples(), loadDatabaseOverview()]);
+  } else {
+    resetDatabaseOverview();
   }
 }
 
@@ -132,6 +135,7 @@ async function refreshSession() {
     sessionUser.textContent = `${data.user.fullName} (${data.user.role})`;
   } catch {
     sessionUser.textContent = "Guest";
+    resetDatabaseOverview();
   }
 }
 
@@ -164,6 +168,22 @@ async function loadTrainingExamples() {
     setNotice(trainingList, `Collected training records available: ${count}. Latest records are stored in PostgreSQL.`);
   } catch (error) {
     setNotice(trainingList, toErrorMessage(error), true);
+  }
+}
+
+async function loadDatabaseOverview() {
+  if (sessionUser.textContent === "Guest") {
+    resetDatabaseOverview();
+    return;
+  }
+
+  databaseViewer.innerHTML = '<div class="notice">Loading database contents...</div>';
+
+  try {
+    const data = await apiFetch("/api/admin/database-overview", { method: "GET" });
+    renderDatabaseOverview(data);
+  } catch (error) {
+    databaseViewer.innerHTML = `<div class="notice notice-error">${escapeHtml(toErrorMessage(error))}</div>`;
   }
 }
 
@@ -243,6 +263,7 @@ function renderUploadPanels(panels, isAuthenticated) {
             : `${panel.title} upload stored successfully.`;
         setNotice(result, message);
         updateUploadedPreview(data, fileInput.files[0], fileView, textPreview);
+        await loadDatabaseOverview();
       } catch (error) {
         setNotice(result, toErrorMessage(error), true);
       }
@@ -316,6 +337,139 @@ function updateUploadedPreview(data, file, fileView, textPreview) {
   if (file) {
     textPreview.textContent = `${file.name} uploaded successfully.`;
   }
+}
+
+function resetDatabaseOverview() {
+  databaseViewer.innerHTML = '<div class="notice">Sign in to load the database contents.</div>';
+}
+
+function renderDatabaseOverview(data) {
+  const counts = [
+    { label: "Users", value: data.counts?.users ?? 0 },
+    { label: "Faculty Profiles", value: data.counts?.facultyProfiles ?? 0 },
+    { label: "Uploaded Documents", value: data.counts?.uploadedDocuments ?? 0 },
+    { label: "Training Examples", value: data.counts?.trainingExamples ?? 0 },
+    { label: "Predictions", value: data.counts?.predictions ?? 0 },
+  ];
+
+  const sections = [
+    {
+      title: "Recent Users",
+      rows: data.recent?.users ?? [],
+      columns: [
+        { key: "fullName", label: "Name" },
+        { key: "email", label: "Email" },
+        { key: "role", label: "Role" },
+      ],
+    },
+    {
+      title: "Recent Faculty Profiles",
+      rows: data.recent?.facultyProfiles ?? [],
+      columns: [
+        { key: "name", label: "Faculty" },
+        { key: "teacherId", label: "Teacher ID" },
+        { key: "semester", label: "Semester" },
+        { key: "createdAt", label: "Created" },
+      ],
+    },
+    {
+      title: "Recent Uploaded Documents",
+      rows: data.recent?.uploadedDocuments ?? [],
+      columns: [
+        { key: "originalName", label: "File" },
+        { key: "kind", label: "Kind" },
+        { key: "mimeType", label: "Type" },
+        { key: "createdAt", label: "Created" },
+      ],
+    },
+    {
+      title: "Recent Training Examples",
+      rows: data.recent?.trainingExamples ?? [],
+      columns: [
+        { key: "id", label: "ID" },
+        { key: "status", label: "Status" },
+        { key: "datasetSplit", label: "Split" },
+        { key: "labelPromoted", label: "Promoted" },
+        { key: "createdAt", label: "Created" },
+      ],
+    },
+  ];
+
+  databaseViewer.innerHTML = `
+    <div class="database-counts">
+      ${counts
+        .map(
+          (item) => `
+            <article class="database-count-card">
+              <span class="database-count-label">${escapeHtml(item.label)}</span>
+              <strong class="database-count-value">${escapeHtml(String(item.value))}</strong>
+            </article>
+          `,
+        )
+        .join("")}
+    </div>
+    <div class="database-sections">
+      ${sections
+        .map(
+          (section) => `
+            <article class="card database-table-card">
+              <h3>${escapeHtml(section.title)}</h3>
+              ${renderDatabaseTable(section.columns, section.rows)}
+            </article>
+          `,
+        )
+        .join("")}
+    </div>
+  `;
+}
+
+function renderDatabaseTable(columns, rows) {
+  if (!rows.length) {
+    return '<div class="notice">No records yet.</div>';
+  }
+
+  const header = columns.map((column) => `<th>${escapeHtml(column.label)}</th>`).join("");
+  const body = rows
+    .map(
+      (row) => `
+        <tr>
+          ${columns
+            .map((column) => `<td>${escapeHtml(formatDatabaseValue(row[column.key]))}</td>`)
+            .join("")}
+        </tr>
+      `,
+    )
+    .join("");
+
+  return `
+    <div class="database-table-wrap">
+      <table class="database-table">
+        <thead>
+          <tr>${header}</tr>
+        </thead>
+        <tbody>${body}</tbody>
+      </table>
+    </div>
+  `;
+}
+
+function formatDatabaseValue(value) {
+  if (value === null || value === undefined || value === "") {
+    return "-";
+  }
+
+  if (typeof value === "boolean") {
+    return value ? "Yes" : "No";
+  }
+
+  if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}T/.test(value)) {
+    const date = new Date(value);
+    if (!Number.isNaN(date.getTime())) {
+      return date.toLocaleString();
+    }
+  }
+
+  return String(value);
 }
 
 function buildFacultyPayload() {

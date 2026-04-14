@@ -262,6 +262,82 @@ select {
   overflow: auto;
 }
 
+.database-viewer {
+  display: grid;
+  gap: 18px;
+}
+
+.database-counts {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.database-count-card {
+  padding: 18px;
+  border-radius: 18px;
+  background: var(--surface-strong);
+  border: 1px solid var(--border);
+}
+
+.database-count-label {
+  display: block;
+  margin-bottom: 8px;
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+
+.database-count-value {
+  font-family: "Space Grotesk", sans-serif;
+  font-size: 1.9rem;
+  line-height: 1;
+}
+
+.database-sections {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.database-table-card {
+  display: grid;
+  gap: 14px;
+}
+
+.database-table-wrap {
+  overflow: auto;
+  border-radius: 16px;
+  border: 1px solid var(--border);
+  background: #fffdf9;
+}
+
+.database-table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 560px;
+}
+
+.database-table th,
+.database-table td {
+  padding: 12px 14px;
+  border-bottom: 1px solid rgba(23, 33, 31, 0.08);
+  text-align: left;
+  vertical-align: top;
+}
+
+.database-table th {
+  background: rgba(13, 107, 87, 0.06);
+  color: var(--accent-strong);
+  font-family: "Space Grotesk", sans-serif;
+  font-size: 0.88rem;
+  letter-spacing: 0.02em;
+}
+
+.database-table td {
+  color: var(--muted);
+  font-size: 0.94rem;
+}
+
 .notice {
   margin-top: 14px;
   padding: 14px 16px;
@@ -334,8 +410,13 @@ select {
   .reference-grid,
   .auth-grid,
   .upload-panel-grid,
+  .database-sections,
   .field-row {
     grid-template-columns: 1fr;
+  }
+
+  .database-counts {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .auth-switch {
@@ -348,5 +429,11 @@ select {
 
   .hero h1 {
     max-width: none;
+  }
+}
+
+@media (max-width: 640px) {
+  .database-counts {
+    grid-template-columns: 1fr;
   }
 }
