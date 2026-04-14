@@ -1,1 +1,4 @@
-# Git Push Steps for Faculty Promotion System&#10;&#10;- [ ] 1. git init&#10;- [ ] 2. git add .&#10;- [ ] 3. git commit -m "feat: initial faculty promotion system with Prisma models and Express server"&#10;- [ ] 4. git branch -M blackboxai/faculty-promotion-system&#10;- [ ] 5. git remote add origin https://github.com/GeloAnalytics/faculty-promotion.git&#10;- [ ] 6. git push -u origin blackboxai/faculty-promotion-system&#10;- [ ] 7. gh pr create --title "Add full-stack faculty promotion system" --body "Implements initial backend with Prisma (User, FacultyProfile, Prediction), Express server, PDF upload prep, TODO plan. Ready for ML/React."
+# Git Push Steps for Faculty Promotion System
+
+- [x] 1. git init
+- [x] 2
