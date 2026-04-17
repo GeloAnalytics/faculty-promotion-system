@@ -16,15 +16,16 @@
     <div class="page-shell">
       <header class="hero">
         <div class="hero-copy">
-          <p class="eyebrow">Evaluator Portal</p>
-          <h1>Review submissions, label training records, and inspect stored data.</h1>
+          <p class="eyebrow">Evaluator Workspace</p>
+          <h1>Check upload logs, review employee records, and apply final scoring.</h1>
           <p class="hero-text">
-            This workspace is for evaluators checking submitted records, monitoring stored evidence, and handling
-            review-side analysis.
+            Evaluators can inspect what each employee uploaded, review the draft point signals, and score the linked
+            training example from a single page.
           </p>
           <div class="hero-actions">
-            <button class="button button-primary" data-scroll-target="#auth-panel">Access Evaluator Portal</button>
-            <button class="button button-secondary" data-scroll-target="#database-panel">Open Database Viewer</button>
+            <button class="button button-primary" data-scroll-target="#review-queue-panel">Open Review Queue</button>
+            <button class="button button-secondary" data-scroll-target="#scoring-panel">Open Scoring Panel</button>
+            <button class="button button-ghost" data-action="logout" type="button">Log Out</button>
           </div>
         </div>
         <div class="hero-stats">
@@ -48,67 +49,30 @@
       </header>
 
       <main class="content-grid">
-        <section class="panel" id="auth-panel">
+        <section class="panel panel-wide" id="review-queue-panel">
           <div class="panel-heading">
             <div>
-              <p class="section-kicker">Account Access</p>
-              <h2>Create an evaluator account or sign in</h2>
+              <p class="section-kicker">Employee Logs</p>
+              <h2>Review queue grouped by employee profile</h2>
             </div>
           </div>
-          <div class="auth-switch">
-            <button class="button button-primary auth-toggle" id="show-login" type="button">Sign In</button>
-            <button class="button button-secondary auth-toggle" id="show-register" type="button">Create Account</button>
+          <div id="review-queue" class="database-viewer">
+            <div class="notice">Loading employee submission logs...</div>
           </div>
-          <form id="auth-form" class="stack-form">
-            <label class="field" id="name-field">
-              <span>Full name</span>
-              <input type="text" id="auth-name" placeholder="Faculty Evaluator" />
-            </label>
-            <label class="field" id="role-field">
-              <span>Account type</span>
-              <select id="auth-role">
-                <option value="EVALUATOR">Evaluator</option>
-                <option value="EMPLOYEE">Employee</option>
-              </select>
-            </label>
-            <label class="field">
-              <span>Email</span>
-              <input type="email" id="auth-email" placeholder="evaluator@example.com" required />
-            </label>
-            <label class="field">
-              <span>Password</span>
-              <input type="password" id="auth-password" placeholder="Minimum 8 characters" required />
-            </label>
-            <button class="button button-primary" id="auth-submit" type="submit">Sign In</button>
-          </form>
-          <div id="auth-result" class="notice">No account action yet.</div>
         </section>
 
-        <section class="panel">
+        <section class="panel panel-wide" id="scoring-panel">
           <div class="panel-heading">
             <div>
-              <p class="section-kicker">Portal Routing</p>
-              <h2>Employee workspace</h2>
-            </div>
-          </div>
-          <p class="card-copy">
-            Employees use the main portal to upload records, submit faculty information, and attach evidence files.
-          </p>
-          <a class="button button-secondary portal-link" href="/">Open Employee Portal</a>
-        </section>
-
-        <section class="panel panel-wide">
-          <div class="panel-heading">
-            <div>
-              <p class="section-kicker">Training Labels</p>
-              <h2>Review and label stored records</h2>
+              <p class="section-kicker">Actual Scoring</p>
+              <h2>Apply evaluator decision to the selected record</h2>
             </div>
           </div>
           <form id="training-form" class="stack-form">
             <div class="field-row">
               <label class="field">
                 <span>Training example ID</span>
-                <input type="text" id="training-example-id" placeholder="Select from the list below or paste an ID" />
+                <input type="text" id="training-example-id" placeholder="Use a record from the queue above" />
               </label>
               <label class="field">
                 <span>Promotion outcome</span>
@@ -134,32 +98,22 @@
             </div>
             <label class="field">
               <span>Notes</span>
-              <input type="text" id="training-notes" placeholder="Optional training annotation" />
+              <input type="text" id="training-notes" placeholder="Optional evaluator notes" />
             </label>
-            <button class="button button-secondary" type="submit">Save Training Label</button>
+            <button class="button button-secondary" type="submit">Save Evaluator Score</button>
           </form>
-          <div id="training-result" class="notice">No training example labeled yet.</div>
-        </section>
-
-        <section class="panel">
-          <div class="panel-heading">
-            <div>
-              <p class="section-kicker">Training Queue</p>
-              <h2>Recent records for review</h2>
-            </div>
-          </div>
-          <div id="training-list" class="notice">Sign in to load recent training examples.</div>
+          <div id="training-result" class="notice">Choose a record from the review queue to begin scoring.</div>
         </section>
 
         <section class="panel panel-wide" id="database-panel">
           <div class="panel-heading">
             <div>
               <p class="section-kicker">Database Viewer</p>
-              <h2>See what is stored in PostgreSQL</h2>
+              <h2>See the latest stored records and counts</h2>
             </div>
           </div>
           <div id="database-viewer" class="database-viewer">
-            <div class="notice">Sign in to load the database contents.</div>
+            <div class="notice">Loading database contents...</div>
           </div>
         </section>
       </main>

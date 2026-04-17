@@ -1,4 +1,4 @@
-const portal = document.body.dataset.portal || "employee";
+const portal = document.body.dataset.portal || "auth";
 const apiBaseUrl = normalizeApiBaseUrl(window.APP_CONFIG?.apiBaseUrl);
 
 const healthStatus = byId("health-status");
@@ -8,12 +8,15 @@ const sessionUser = byId("session-user");
 const authResult = byId("auth-result");
 const facultyResult = byId("faculty-result");
 const trainingResult = byId("training-result");
-const trainingList = byId("training-list");
-const databaseViewer = byId("database-viewer");
+const authForm = byId("auth-form");
 const facultyForm = byId("faculty-form");
 const trainingForm = byId("training-form");
-const authForm = byId("auth-form");
 const uploadPanelGrid = byId("upload-panel-grid");
+const employeePoints = byId("employee-points");
+const employeeLogs = byId("employee-logs");
+const employeeProfiles = byId("employee-profiles");
+const reviewQueue = byId("review-queue");
+const databaseViewer = byId("database-viewer");
 const showLoginButton = byId("show-login");
 const showRegisterButton = byId("show-register");
 const nameField = byId("name-field");
@@ -31,6 +34,10 @@ document.querySelectorAll("[data-scroll-target]").forEach((button) => {
       target.scrollIntoView({ behavior: "smooth", block: "start" });
     }
   });
+});
+
+document.querySelectorAll("[data-action='logout']").forEach((button) => {
+  button.addEventListener("click", logoutAndReturnHome);
 });
 
 showLoginButton?.addEventListener("click", () => setAuthMode("login"));
@@ -60,10 +67,8 @@ authForm?.addEventListener("submit", async (event) => {
       body: JSON.stringify(body),
     });
 
-    await refreshSession();
-    redirectIfOnWrongPortal(data.homePath || getHomePathForRole(currentUser?.role));
-    await loadPortalData();
     setNotice(authResult, `${authMode === "login" ? "Signed in" : "Account created"} for ${data.user.fullName}.`);
+    window.location.assign(data.homePath || getHomePathForRole(data.user?.role));
   } catch (error) {
     setNotice(authResult, toErrorMessage(error), true);
   }
@@ -82,14 +87,9 @@ facultyForm?.addEventListener("submit", async (event) => {
     latestRecordContext = data;
     setNotice(
       facultyResult,
-      `Faculty record saved. Profile ID: ${data.profileId}. You can now upload evidence files to the five panels.`,
+      `Faculty record saved. Profile ID: ${data.profileId}. You can now upload evidence files to the matching panels.`,
     );
-    if (trainingList) {
-      setNotice(
-        trainingList,
-        `Latest employee submission saved. Training example draft ID: ${data.trainingExampleId}. Evaluators can now review it in their portal.`,
-      );
-    }
+    await loadEmployeeWorkspace();
   } catch (error) {
     setNotice(facultyResult, toErrorMessage(error), true);
   }
@@ -100,11 +100,11 @@ trainingForm?.addEventListener("submit", async (event) => {
 
   const trainingExampleId = valueOf("training-example-id");
   if (!trainingExampleId) {
-    setNotice(trainingResult, "Select or enter a training example ID first.", true);
+    setNotice(trainingResult, "Select a training example from the review queue first.", true);
     return;
   }
 
-  setNotice(trainingResult, "Saving training label...");
+  setNotice(trainingResult, "Saving evaluator scoring...");
 
   try {
     const data = await apiFetch(buildApiUrl(`/api/training/examples/${trainingExampleId}/label`), {
@@ -117,8 +117,8 @@ trainingForm?.addEventListener("submit", async (event) => {
       }),
     });
 
-    setNotice(trainingResult, `Training example updated. Status is now ${data.status}.`);
-    await Promise.all([loadTrainingExamples(), loadDatabaseOverview()]);
+    setNotice(trainingResult, `Record scored successfully. Status is now ${data.status}.`);
+    await loadEvaluatorWorkspace();
   } catch (error) {
     setNotice(trainingResult, toErrorMessage(error), true);
   }
@@ -129,8 +129,33 @@ bootstrap();
 async function bootstrap() {
   setAuthMode("login");
   await Promise.all([loadHealth(), refreshSession()]);
-  redirectIfOnWrongPortal(getHomePathForRole(currentUser?.role));
-  await loadPortalData();
+
+  if (portal === "auth") {
+    if (currentUser) {
+      window.location.replace(getHomePathForRole(currentUser.role));
+    }
+    return;
+  }
+
+  if (!currentUser) {
+    window.location.replace("/");
+    return;
+  }
+
+  const expectedPath = getHomePathForRole(currentUser.role);
+  if (expectedPath !== normalizePortalPath(window.location.pathname)) {
+    window.location.replace(expectedPath);
+    return;
+  }
+
+  if (portal === "employee") {
+    await loadEmployeeWorkspace();
+    return;
+  }
+
+  if (portal === "evaluator") {
+    await loadEvaluatorWorkspace();
+  }
 }
 
 async function refreshSession() {
@@ -145,68 +170,15 @@ async function refreshSession() {
     if (sessionUser) {
       sessionUser.textContent = "Guest";
     }
-    resetDatabaseOverview();
   }
 }
 
-async function loadPortalData() {
-  if (portal === "employee") {
-    await loadUploadPanels();
-    if (currentUser?.role === "EMPLOYEE" || currentUser?.role === "ADMIN") {
-      if (trainingList) {
-        setNotice(
-          trainingList,
-          latestRecordContext
-            ? `Latest employee submission saved. Training example draft ID: ${latestRecordContext.trainingExampleId}.`
-            : "Employee portal ready. Save your faculty record, then upload evidence files.",
-        );
-      }
-    } else if (trainingList) {
-      setNotice(trainingList, "Sign in with an employee account to submit faculty records and uploads.");
-    }
-  }
-
-  if (portal === "evaluator") {
-    if (currentUser?.role === "EVALUATOR" || currentUser?.role === "ADMIN") {
-      await Promise.all([loadTrainingExamples(), loadDatabaseOverview()]);
-    } else {
-      if (trainingList) {
-        setNotice(trainingList, "Sign in with an evaluator account to review training examples.");
-      }
-      resetDatabaseOverview();
-    }
-  }
+async function loadEmployeeWorkspace() {
+  await Promise.all([loadUploadPanels(), loadEmployeeDashboard()]);
 }
 
-function redirectIfOnWrongPortal(homePath) {
-  if (!currentUser || !homePath) {
-    return;
-  }
-
-  const currentPath = window.location.pathname;
-  const normalizedCurrent =
-    currentPath === "/index.html" ? "/" : currentPath === "/evaluator.html" ? "/evaluator" : currentPath;
-
-  if (normalizedCurrent !== homePath) {
-    window.location.assign(homePath);
-  }
-}
-
-function getHomePathForRole(role) {
-  return role === "EVALUATOR" ? "/evaluator" : "/";
-}
-
-function prettyRole(role) {
-  if (role === "EMPLOYEE") {
-    return "Employee";
-  }
-  if (role === "EVALUATOR") {
-    return "Evaluator";
-  }
-  if (role === "ADMIN") {
-    return "Admin";
-  }
-  return role || "Guest";
+async function loadEvaluatorWorkspace() {
+  await Promise.all([loadReviewQueue(), loadDatabaseOverview()]);
 }
 
 async function loadHealth() {
@@ -241,34 +213,46 @@ async function loadUploadPanels() {
 
   try {
     const data = await apiFetch(buildApiUrl("/api/config/upload-panels"), { method: "GET" }, false);
-    const canUpload = currentUser?.role === "EMPLOYEE" || currentUser?.role === "ADMIN";
-    renderUploadPanels(data.panels, canUpload);
+    renderUploadPanels(data.panels);
   } catch (error) {
     uploadPanelGrid.innerHTML = `<div class="notice notice-error">${escapeHtml(toErrorMessage(error))}</div>`;
   }
 }
 
-async function loadTrainingExamples() {
-  if (!trainingList) {
+async function loadEmployeeDashboard() {
+  try {
+    const data = await apiFetch(buildApiUrl("/api/employee/dashboard"), { method: "GET" });
+    renderEmployeeDraftPoints(data.latestProfile?.draftPoints, data.summary);
+    renderEmployeeProfiles(data.profiles || []);
+    renderEmployeeUploads(data.uploads || []);
+
+    if (data.latestProfile?.id) {
+      latestRecordContext = { profileId: data.latestProfile.id };
+    }
+  } catch (error) {
+    renderEmployeeDraftPoints(null, null, toErrorMessage(error));
+    renderEmployeeProfiles([]);
+    renderEmployeeUploads([], toErrorMessage(error));
+  }
+}
+
+async function loadReviewQueue() {
+  if (!reviewQueue) {
     return;
   }
 
+  reviewQueue.innerHTML = '<div class="notice">Loading employee submission logs...</div>';
+
   try {
-    const data = await apiFetch(buildApiUrl("/api/training/examples"), { method: "GET" });
-    const items = Array.isArray(data.items) ? data.items : [];
-    renderTrainingExamples(items);
+    const data = await apiFetch(buildApiUrl("/api/evaluator/review-queue"), { method: "GET" });
+    renderReviewQueue(data.items || []);
   } catch (error) {
-    setNotice(trainingList, toErrorMessage(error), true);
+    reviewQueue.innerHTML = `<div class="notice notice-error">${escapeHtml(toErrorMessage(error))}</div>`;
   }
 }
 
 async function loadDatabaseOverview() {
   if (!databaseViewer) {
-    return;
-  }
-
-  if (!(currentUser?.role === "EVALUATOR" || currentUser?.role === "ADMIN")) {
-    resetDatabaseOverview();
     return;
   }
 
@@ -282,7 +266,18 @@ async function loadDatabaseOverview() {
   }
 }
 
-function renderUploadPanels(panels, canUpload) {
+async function logoutAndReturnHome() {
+  try {
+    await fetch(buildApiUrl("/api/auth/logout"), {
+      method: "POST",
+      credentials: "include",
+    });
+  } finally {
+    window.location.assign("/");
+  }
+}
+
+function renderUploadPanels(panels) {
   if (!uploadPanelGrid) {
     return;
   }
@@ -293,18 +288,17 @@ function renderUploadPanels(panels, canUpload) {
     const article = document.createElement("article");
     article.className = "card upload-card";
     article.innerHTML = `
-      <h3>${panel.title}</h3>
-      <p class="card-copy">${panel.description}</p>
-      <p class="card-copy">Accepted: ${panel.acceptedFormats.join(", ")}</p>
-      <p class="card-copy">${canUpload ? "Ready for upload." : "Sign in with an employee account to upload files into this panel."}</p>
-      <form class="stack-form upload-panel-form" data-panel-key="${panel.key}">
+      <h3>${escapeHtml(panel.title)}</h3>
+      <p class="card-copy">${escapeHtml(panel.description)}</p>
+      <p class="card-copy">Accepted: ${escapeHtml(panel.acceptedFormats.join(", "))}</p>
+      <form class="stack-form upload-panel-form" data-panel-key="${escapeHtml(panel.key)}">
         <label class="field">
           <span>Select file</span>
-          <input type="file" name="document" ${canUpload ? "" : "disabled"} required />
+          <input type="file" name="document" required />
         </label>
-        <button class="button button-primary" type="submit" ${canUpload ? "" : "disabled"}>Upload to Panel</button>
+        <button class="button button-primary" type="submit">Upload to Panel</button>
       </form>
-      <div class="notice panel-result">${canUpload ? "No file uploaded yet." : "Panel visible. Employee access is required before upload."}</div>
+      <div class="notice panel-result">No file uploaded yet.</div>
       <div class="upload-preview">
         <div class="upload-preview-label">Uploaded file preview</div>
         <div class="upload-file-name">No file selected.</div>
@@ -362,6 +356,7 @@ function renderUploadPanels(panels, canUpload) {
             : `${panel.title} upload stored successfully.`;
         setNotice(result, message);
         updateUploadedPreview(data, fileInput.files[0], fileView, textPreview);
+        await loadEmployeeDashboard();
       } catch (error) {
         setNotice(result, toErrorMessage(error), true);
       }
@@ -371,133 +366,200 @@ function renderUploadPanels(panels, canUpload) {
   });
 }
 
-function renderTrainingExamples(items) {
-  if (!trainingList) {
+function renderEmployeeDraftPoints(draftPoints, summary, errorMessage) {
+  if (!employeePoints) {
     return;
   }
 
-  if (!items.length) {
-    trainingList.innerHTML = '<div class="notice">No training examples yet.</div>';
+  if (errorMessage) {
+    employeePoints.innerHTML = `<div class="notice notice-error">${escapeHtml(errorMessage)}</div>`;
     return;
   }
 
-  trainingList.innerHTML = `
-    <div class="training-example-list">
-      ${items
+  if (!draftPoints) {
+    employeePoints.innerHTML = `
+      <div class="notice">
+        Save your base faculty record first. After uploads are processed, this page will show a draft score summary and coverage status.
+      </div>
+    `;
+    return;
+  }
+
+  const cards = [
+    { label: "Instruction", value: draftPoints.categories?.instruction ?? 0 },
+    { label: "Research", value: draftPoints.categories?.research ?? 0 },
+    { label: "Extension", value: draftPoints.categories?.extension ?? 0 },
+    { label: "Prof. Dev.", value: draftPoints.categories?.professionalDevelopment ?? 0 },
+    { label: "IPCR Avg.", value: draftPoints.categories?.ipcrAverage ?? 0 },
+    { label: "Draft Total", value: draftPoints.overallEstimate ?? 0 },
+  ];
+
+  employeePoints.innerHTML = `
+    <div class="database-counts compact-counts">
+      ${cards
         .map(
           (item) => `
+            <article class="database-count-card">
+              <span class="database-count-label">${escapeHtml(item.label)}</span>
+              <strong class="database-count-value">${escapeHtml(String(item.value))}</strong>
+            </article>
+          `,
+        )
+        .join("")}
+    </div>
+    <div class="card workspace-summary-card">
+      <p class="card-copy">${escapeHtml(draftPoints.note || "")}</p>
+      <p class="card-copy">Uploaded panels: ${escapeHtml(String(draftPoints.evidenceCoverage?.uploadedPanelCount ?? 0))} / ${escapeHtml(String(draftPoints.evidenceCoverage?.expectedPanelCount ?? 0))}</p>
+      <p class="card-copy">Workflow coverage: ${escapeHtml(String(draftPoints.evidenceCoverage?.workflowCoveragePercent ?? 0))}%</p>
+      <p class="card-copy">Average document completeness: ${escapeHtml(String(draftPoints.evidenceCoverage?.documentCompletenessAverage ?? 0))}%</p>
+      <p class="card-copy">Profiles saved: ${escapeHtml(String(summary?.profileCount ?? 0))}. Uploads saved: ${escapeHtml(String(summary?.uploadCount ?? 0))}.</p>
+    </div>
+  `;
+}
+
+function renderEmployeeProfiles(profiles) {
+  if (!employeeProfiles) {
+    return;
+  }
+
+  if (!profiles.length) {
+    employeeProfiles.innerHTML = '<div class="notice">No employee records saved yet.</div>';
+    return;
+  }
+
+  employeeProfiles.innerHTML = `
+    <div class="training-example-list">
+      ${profiles
+        .map(
+          (profile) => `
             <article class="training-example-card">
               <div class="training-example-header">
-                <strong>${escapeHtml(item.profile?.name ?? "Unlinked record")}</strong>
-                <span class="training-example-status">${escapeHtml(item.status ?? "DRAFT")}</span>
+                <strong>${escapeHtml(profile.name)}</strong>
+                <span class="training-example-status">${escapeHtml(profile.employeeId || "No Employee ID")}</span>
               </div>
-              <p class="card-copy">Example ID: ${escapeHtml(item.id)}</p>
-              <p class="card-copy">Employee ID: ${escapeHtml(item.profile?.employeeId ?? "-")}</p>
-              <p class="card-copy">Created: ${escapeHtml(formatDatabaseValue(item.createdAt))}</p>
-              <button class="button button-secondary training-select-button" type="button" data-training-id="${escapeHtml(item.id)}">
-                Use This Record
-              </button>
+              <p class="card-copy">Semester: ${escapeHtml(profile.semester || "-")}</p>
+              <p class="card-copy">Documents linked: ${escapeHtml(String(profile.documentCount || 0))}</p>
+              <p class="card-copy">Draft total: ${escapeHtml(String(profile.draftPoints?.overallEstimate ?? 0))}</p>
             </article>
           `,
         )
         .join("")}
     </div>
   `;
+}
 
-  trainingList.querySelectorAll(".training-select-button").forEach((button) => {
+function renderEmployeeUploads(uploads, errorMessage) {
+  if (!employeeLogs) {
+    return;
+  }
+
+  if (errorMessage) {
+    employeeLogs.innerHTML = `<div class="notice notice-error">${escapeHtml(errorMessage)}</div>`;
+    return;
+  }
+
+  if (!uploads.length) {
+    employeeLogs.innerHTML = '<div class="notice">No upload logs yet. Files will appear here after submission.</div>';
+    return;
+  }
+
+  employeeLogs.innerHTML = `
+    <div class="database-table-wrap">
+      <table class="database-table">
+        <thead>
+          <tr>
+            <th>File</th>
+            <th>Panel</th>
+            <th>Summary</th>
+            <th>Linked</th>
+            <th>Created</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${uploads
+            .map(
+              (item) => `
+                <tr>
+                  <td>${escapeHtml(item.originalName)}</td>
+                  <td>${escapeHtml(item.metadata?.panelKey || "-")}</td>
+                  <td>${escapeHtml(item.metadata?.analysisSummary || "Stored with no extracted summary yet.")}</td>
+                  <td>${escapeHtml(item.metadata?.linkage || (item.profileId ? "profile-linked" : "pending"))}</td>
+                  <td>${escapeHtml(formatDatabaseValue(item.createdAt))}</td>
+                </tr>
+              `,
+            )
+            .join("")}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+function renderReviewQueue(items) {
+  if (!reviewQueue) {
+    return;
+  }
+
+  if (!items.length) {
+    reviewQueue.innerHTML = '<div class="notice">No employee submissions are waiting in the evaluator queue.</div>';
+    return;
+  }
+
+  reviewQueue.innerHTML = `
+    <div class="review-queue">
+      ${items
+        .map((item) => {
+          const uploads = Array.isArray(item.uploadLogs) ? item.uploadLogs : [];
+          const latestTrainingId = item.latestTrainingExampleId || "";
+          return `
+            <article class="card review-card">
+              <div class="training-example-header">
+                <strong>${escapeHtml(item.name || "Unnamed employee")}</strong>
+                <span class="training-example-status">${escapeHtml(item.employeeId || "No Employee ID")}</span>
+              </div>
+              <p class="card-copy">Submitted by: ${escapeHtml(item.createdBy?.fullName || "-")} (${escapeHtml(item.createdBy?.email || "-")})</p>
+              <p class="card-copy">Semester: ${escapeHtml(item.semester || "-")}</p>
+              <p class="card-copy">Draft total from uploaded data: ${escapeHtml(String(item.draftPoints?.overallEstimate ?? 0))}</p>
+              <p class="card-copy">Coverage: ${escapeHtml(String(item.draftPoints?.evidenceCoverage?.uploadedPanelCount ?? 0))} / ${escapeHtml(String(item.draftPoints?.evidenceCoverage?.expectedPanelCount ?? 0))} panels</p>
+              <div class="review-log-list">
+                ${uploads.length ? uploads.map(renderUploadLogChip).join("") : '<div class="notice">No uploads linked yet.</div>'}
+              </div>
+              <div class="review-card-actions">
+                <button class="button button-secondary queue-score-button" type="button" data-training-id="${escapeHtml(latestTrainingId)}" ${latestTrainingId ? "" : "disabled"}>
+                  Score Latest Record
+                </button>
+              </div>
+            </article>
+          `;
+        })
+        .join("")}
+    </div>
+  `;
+
+  reviewQueue.querySelectorAll(".queue-score-button").forEach((button) => {
     button.addEventListener("click", () => {
-      const input = byId("training-example-id");
-      if (input) {
-        input.value = button.dataset.trainingId || "";
+      const trainingId = button.dataset.trainingId || "";
+      const target = byId("training-example-id");
+      if (target) {
+        target.value = trainingId;
       }
       if (trainingResult) {
-        setNotice(trainingResult, `Training example ${button.dataset.trainingId} selected for labeling.`);
+        setNotice(trainingResult, `Training example ${trainingId} selected for evaluator scoring.`);
       }
+      trainingForm?.scrollIntoView({ behavior: "smooth", block: "start" });
     });
   });
 }
 
-function setAuthMode(mode) {
-  authMode = mode;
-  const isRegister = mode === "register";
-  if (nameField) {
-    nameField.style.display = isRegister ? "grid" : "none";
-  }
-  if (roleField) {
-    roleField.style.display = isRegister ? "grid" : "none";
-  }
-  if (authSubmit) {
-    authSubmit.textContent = isRegister ? "Create Account" : "Sign In";
-  }
-  showLoginButton?.classList.toggle("button-primary", !isRegister);
-  showLoginButton?.classList.toggle("button-secondary", isRegister);
-  showRegisterButton?.classList.toggle("button-primary", isRegister);
-  showRegisterButton?.classList.toggle("button-secondary", !isRegister);
-}
-
-function setNotice(element, message, isError = false) {
-  if (!element) {
-    return;
-  }
-  element.textContent = message;
-  element.classList.toggle("notice-error", isError);
-}
-
-function renderClientPreview(file, fileView, textPreview) {
-  fileView.innerHTML = "";
-
-  if (file.type.startsWith("image/")) {
-    const img = document.createElement("img");
-    img.className = "upload-image-preview";
-    img.alt = file.name;
-    img.src = URL.createObjectURL(file);
-    fileView.appendChild(img);
-    textPreview.textContent = "Waiting for OCR after upload.";
-    return;
-  }
-
-  if (file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf")) {
-    const tag = document.createElement("div");
-    tag.className = "upload-file-tag";
-    tag.textContent = "PDF selected. Extracted text preview will appear after upload.";
-    fileView.appendChild(tag);
-    textPreview.textContent = "Waiting for PDF extraction after upload.";
-    return;
-  }
-
-  if (/\.(csv|xls|xlsx)$/i.test(file.name)) {
-    const tag = document.createElement("div");
-    tag.className = "upload-file-tag";
-    tag.textContent = "Spreadsheet selected. Parsed preview will appear when available.";
-    fileView.appendChild(tag);
-    textPreview.textContent = "Waiting for file analysis after upload.";
-    return;
-  }
-
-  textPreview.textContent = "Preview not available for this file type.";
-}
-
-function updateUploadedPreview(data, file, fileView, textPreview) {
-  if (data.textPreview) {
-    textPreview.textContent = `Extracted text preview:\n\n${data.textPreview}`;
-    return;
-  }
-
-  if (data.analysis?.summary) {
-    textPreview.textContent = data.analysis.summary;
-    return;
-  }
-
-  if (file) {
-    textPreview.textContent = `${file.name} uploaded successfully.`;
-  }
-}
-
-function resetDatabaseOverview() {
-  if (!databaseViewer) {
-    return;
-  }
-  databaseViewer.innerHTML = '<div class="notice">Sign in with an evaluator account to load the database contents.</div>';
+function renderUploadLogChip(log) {
+  return `
+    <article class="upload-log-chip">
+      <strong>${escapeHtml(log.originalName)}</strong>
+      <span>${escapeHtml(log.metadata?.panelKey || "unassigned panel")}</span>
+      <p>${escapeHtml(log.metadata?.analysisSummary || "Stored without extracted summary.")}</p>
+      <small>${escapeHtml(formatDatabaseValue(log.createdAt))}</small>
+    </article>
+  `;
 }
 
 function renderDatabaseOverview(data) {
@@ -635,6 +697,113 @@ function buildFacultyPayload() {
     promotionHistory: [],
     notes: valueOf("analysis-notes"),
   };
+}
+
+function renderClientPreview(file, fileView, textPreview) {
+  fileView.innerHTML = "";
+
+  if (file.type.startsWith("image/")) {
+    const img = document.createElement("img");
+    img.className = "upload-image-preview";
+    img.alt = file.name;
+    img.src = URL.createObjectURL(file);
+    fileView.appendChild(img);
+    textPreview.textContent = "Waiting for OCR after upload.";
+    return;
+  }
+
+  if (file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf")) {
+    const tag = document.createElement("div");
+    tag.className = "upload-file-tag";
+    tag.textContent = "PDF selected. Extracted text preview will appear after upload.";
+    fileView.appendChild(tag);
+    textPreview.textContent = "Waiting for PDF extraction after upload.";
+    return;
+  }
+
+  if (/\.(csv|xls|xlsx)$/i.test(file.name)) {
+    const tag = document.createElement("div");
+    tag.className = "upload-file-tag";
+    tag.textContent = "Spreadsheet selected. Parsed preview will appear when available.";
+    fileView.appendChild(tag);
+    textPreview.textContent = "Waiting for file analysis after upload.";
+    return;
+  }
+
+  textPreview.textContent = "Preview not available for this file type.";
+}
+
+function updateUploadedPreview(data, file, fileView, textPreview) {
+  if (data.textPreview) {
+    textPreview.textContent = `Extracted text preview:\n\n${data.textPreview}`;
+    return;
+  }
+
+  if (data.analysis?.summary) {
+    textPreview.textContent = data.analysis.summary;
+    return;
+  }
+
+  if (file) {
+    textPreview.textContent = `${file.name} uploaded successfully.`;
+  }
+}
+
+function setAuthMode(mode) {
+  authMode = mode;
+  const isRegister = mode === "register";
+
+  if (nameField) {
+    nameField.style.display = isRegister ? "grid" : "none";
+  }
+  if (roleField) {
+    roleField.style.display = isRegister ? "grid" : "none";
+  }
+  if (authSubmit) {
+    authSubmit.textContent = isRegister ? "Create Account" : "Sign In";
+  }
+  showLoginButton?.classList.toggle("button-primary", !isRegister);
+  showLoginButton?.classList.toggle("button-secondary", isRegister);
+  showRegisterButton?.classList.toggle("button-primary", isRegister);
+  showRegisterButton?.classList.toggle("button-secondary", !isRegister);
+}
+
+function getHomePathForRole(role) {
+  return role === "EVALUATOR" ? "/evaluator" : "/employee";
+}
+
+function normalizePortalPath(pathname) {
+  if (pathname === "/employee.html") {
+    return "/employee";
+  }
+  if (pathname === "/evaluator.html") {
+    return "/evaluator";
+  }
+  if (pathname === "/index.html") {
+    return "/";
+  }
+  return pathname;
+}
+
+function prettyRole(role) {
+  if (role === "EMPLOYEE") {
+    return "Employee";
+  }
+  if (role === "EVALUATOR") {
+    return "Evaluator";
+  }
+  if (role === "ADMIN") {
+    return "Admin";
+  }
+  return role || "Guest";
+}
+
+function setNotice(element, message, isError = false) {
+  if (!element) {
+    return;
+  }
+  element.textContent = message;
+  element.classList.toggle("notice-error", isError);
 }
 
 function buildApiUrl(path) {

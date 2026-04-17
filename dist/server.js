@@ -200,6 +200,9 @@ app.use((0, cors_1.default)({
 app.use(express_1.default.json({ limit: '2mb' }));
 app.use(express_1.default.urlencoded({ extended: true, limit: '2mb' }));
 app.use(attachSessionUser);
+app.get('/employee', (_req, res) => {
+    res.sendFile(node_path_1.default.join(publicDir, 'employee.html'));
+});
 app.get('/evaluator', (_req, res) => {
     res.sendFile(node_path_1.default.join(publicDir, 'evaluator.html'));
 });
@@ -672,6 +675,116 @@ app.get('/api/admin/database-overview', requireRole(client_1.UserRole.EVALUATOR,
         return handleRequestError(res, error);
     }
 });
+app.get('/api/employee/dashboard', requireRole(client_1.UserRole.EMPLOYEE, client_1.UserRole.ADMIN), async (req, res) => {
+    try {
+        const [profiles, documents, trainingExamples] = await Promise.all([
+            prisma.facultyProfile.findMany({
+                where: { createdByUserId: req.user.id },
+                orderBy: { createdAt: 'desc' },
+                include: {
+                    documents: {
+                        orderBy: { createdAt: 'desc' },
+                        select: {
+                            id: true,
+                            originalName: true,
+                            mimeType: true,
+                            kind: true,
+                            createdAt: true,
+                            extractionMetadata: true,
+                        },
+                    },
+                    trainingItems: {
+                        orderBy: { createdAt: 'desc' },
+                        select: {
+                            id: true,
+                            status: true,
+                            labelPromoted: true,
+                            datasetSplit: true,
+                            createdAt: true,
+                            updatedAt: true,
+                        },
+                    },
+                },
+            }),
+            prisma.uploadedDocument.findMany({
+                where: { ownerUserId: req.user.id },
+                orderBy: { createdAt: 'desc' },
+                select: {
+                    id: true,
+                    originalName: true,
+                    mimeType: true,
+                    kind: true,
+                    createdAt: true,
+                    profileId: true,
+                    extractionMetadata: true,
+                },
+            }),
+            prisma.trainingExample.findMany({
+                where: { createdByUserId: req.user.id },
+                orderBy: { createdAt: 'desc' },
+                select: {
+                    id: true,
+                    profileId: true,
+                    status: true,
+                    labelPromoted: true,
+                    datasetSplit: true,
+                    createdAt: true,
+                    updatedAt: true,
+                },
+            }),
+        ]);
+        const latestProfile = profiles[0] ?? null;
+        const draftPoints = buildDraftPointSummary(latestProfile
+            ? {
+                features: latestProfile.features,
+                semester: latestProfile.semester,
+            }
+            : null, latestProfile?.documents ?? documents.filter((document) => document.profileId === latestProfile?.id));
+        return res.json({
+            summary: {
+                profileCount: profiles.length,
+                uploadCount: documents.length,
+                trainingDraftCount: trainingExamples.length,
+            },
+            latestProfile: latestProfile
+                ? {
+                    id: latestProfile.id,
+                    name: latestProfile.name,
+                    employeeId: latestProfile.employeeId,
+                    semester: latestProfile.semester,
+                    createdAt: latestProfile.createdAt,
+                    draftPoints,
+                }
+                : null,
+            profiles: profiles.map((profile) => ({
+                id: profile.id,
+                name: profile.name,
+                employeeId: profile.employeeId,
+                semester: profile.semester,
+                createdAt: profile.createdAt,
+                documentCount: profile.documents.length,
+                trainingExampleCount: profile.trainingItems.length,
+                draftPoints: buildDraftPointSummary({
+                    features: profile.features,
+                    semester: profile.semester,
+                }, profile.documents),
+            })),
+            uploads: documents.map((document) => ({
+                id: document.id,
+                profileId: document.profileId,
+                originalName: document.originalName,
+                mimeType: document.mimeType,
+                kind: document.kind,
+                createdAt: document.createdAt,
+                metadata: summarizeDocumentMetadata(document.extractionMetadata),
+            })),
+            trainingExamples,
+        });
+    }
+    catch (error) {
+        return handleRequestError(res, error);
+    }
+});
 app.get('/api/dashboard/:profileId', requireRole(client_1.UserRole.EVALUATOR, client_1.UserRole.ADMIN), async (req, res) => {
     try {
         const profile = await prisma.facultyProfile.findUnique({
@@ -687,6 +800,74 @@ app.get('/api/dashboard/:profileId', requireRole(client_1.UserRole.EVALUATOR, cl
             return res.status(404).json({ error: 'Faculty profile not found' });
         }
         return res.json(profile);
+    }
+    catch (error) {
+        return handleRequestError(res, error);
+    }
+});
+app.get('/api/evaluator/review-queue', requireRole(client_1.UserRole.EVALUATOR, client_1.UserRole.ADMIN), async (_req, res) => {
+    try {
+        const profiles = await prisma.facultyProfile.findMany({
+            take: 30,
+            orderBy: { createdAt: 'desc' },
+            include: {
+                createdBy: {
+                    select: {
+                        id: true,
+                        fullName: true,
+                        email: true,
+                        role: true,
+                    },
+                },
+                documents: {
+                    orderBy: { createdAt: 'desc' },
+                    select: {
+                        id: true,
+                        originalName: true,
+                        mimeType: true,
+                        kind: true,
+                        createdAt: true,
+                        extractionMetadata: true,
+                    },
+                },
+                trainingItems: {
+                    orderBy: { updatedAt: 'desc' },
+                    select: {
+                        id: true,
+                        status: true,
+                        labelPromoted: true,
+                        datasetSplit: true,
+                        notes: true,
+                        createdAt: true,
+                        updatedAt: true,
+                    },
+                },
+            },
+        });
+        return res.json({
+            items: profiles.map((profile) => ({
+                id: profile.id,
+                name: profile.name,
+                employeeId: profile.employeeId,
+                semester: profile.semester,
+                createdAt: profile.createdAt,
+                createdBy: profile.createdBy,
+                draftPoints: buildDraftPointSummary({
+                    features: profile.features,
+                    semester: profile.semester,
+                }, profile.documents),
+                uploadLogs: profile.documents.map((document) => ({
+                    id: document.id,
+                    originalName: document.originalName,
+                    mimeType: document.mimeType,
+                    kind: document.kind,
+                    createdAt: document.createdAt,
+                    metadata: summarizeDocumentMetadata(document.extractionMetadata),
+                })),
+                trainingItems: profile.trainingItems,
+                latestTrainingExampleId: profile.trainingItems[0]?.id ?? null,
+            })),
+        });
     }
     catch (error) {
         return handleRequestError(res, error);
@@ -891,7 +1072,97 @@ function toSessionUser(user) {
     };
 }
 function getHomePathForRole(role) {
-    return role === client_1.UserRole.EVALUATOR ? '/evaluator' : '/';
+    return role === client_1.UserRole.EVALUATOR ? '/evaluator' : '/employee';
+}
+function summarizeDocumentMetadata(value) {
+    const metadata = readJsonObject(value);
+    const analysis = readJsonObject(metadata.analysis);
+    const extractedScores = readNumberRecord(analysis.extractedScores);
+    const linkage = readJsonObject(metadata.linkage);
+    return {
+        panelKey: typeof metadata.panelKey === 'string' ? metadata.panelKey : null,
+        analysisSummary: typeof analysis.summary === 'string' ? analysis.summary : null,
+        extractedScores,
+        completenessScore: readOptionalNumber(analysis.completenessScore),
+        qualityScore: readOptionalNumber(analysis.qualityScore),
+        linkage: typeof linkage.matchedBy === 'string'
+            ? `${linkage.matchedBy}${typeof linkage.matchedName === 'string' ? `: ${linkage.matchedName}` : ''}`
+            : null,
+    };
+}
+function buildDraftPointSummary(profile, documents) {
+    const featureEnvelope = readJsonObject(profile?.features);
+    const rawInput = readJsonObject(featureEnvelope.rawInput);
+    const personalData = readJsonObject(rawInput.personalData);
+    const performanceReview = readJsonObject(rawInput.performanceReview);
+    const uploadedPanels = new Set();
+    let instruction = readOptionalNumber(performanceReview.teachingEffectiveness) ?? 0;
+    let research = readOptionalNumber(performanceReview.researchOutputs) ?? 0;
+    let extension = readOptionalNumber(performanceReview.extensionServices) ?? 0;
+    let professionalDevelopment = readOptionalNumber(performanceReview.professionalDevelopmentHours) ?? 0;
+    let ipcrAverage = readOptionalNumber(performanceReview.ipcrAverage) ?? 0;
+    let completenessTotal = 0;
+    let completenessSamples = 0;
+    for (const document of documents) {
+        const metadata = summarizeDocumentMetadata(document.extractionMetadata);
+        if (metadata.panelKey) {
+            uploadedPanels.add(metadata.panelKey);
+        }
+        if (metadata.completenessScore !== null) {
+            completenessTotal += metadata.completenessScore;
+            completenessSamples += 1;
+        }
+        instruction = Math.max(instruction, metadata.extractedScores.teachingEffectiveness ?? 0);
+        research = Math.max(research, metadata.extractedScores.researchOutputs ?? 0);
+        extension = Math.max(extension, metadata.extractedScores.extensionServices ?? 0);
+        professionalDevelopment = Math.max(professionalDevelopment, metadata.extractedScores.professionalDevelopmentHours ?? 0);
+        ipcrAverage = Math.max(ipcrAverage, metadata.extractedScores.ipcrAverage ?? 0);
+    }
+    const coverage = uploadPanels.length ? uploadedPanels.size / uploadPanels.length : 0;
+    const averagedCompleteness = completenessSamples ? completenessTotal / completenessSamples : 0;
+    const overallEstimate = instruction + research + extension + professionalDevelopment + ipcrAverage;
+    return {
+        note: 'Draft estimate only. Evaluator review is still required for the official score.',
+        facultyName: typeof personalData.fullName === 'string' ? personalData.fullName : null,
+        semester: profile?.semester ?? null,
+        categories: {
+            instruction: roundScore(instruction),
+            research: roundScore(research),
+            extension: roundScore(extension),
+            professionalDevelopment: roundScore(professionalDevelopment),
+            ipcrAverage: roundScore(ipcrAverage),
+        },
+        overallEstimate: roundScore(overallEstimate),
+        evidenceCoverage: {
+            uploadedPanels: Array.from(uploadedPanels),
+            uploadedPanelCount: uploadedPanels.size,
+            expectedPanelCount: uploadPanels.length,
+            documentCompletenessAverage: roundScore(averagedCompleteness * 100),
+            workflowCoveragePercent: roundScore(coverage * 100),
+        },
+    };
+}
+function readJsonObject(value) {
+    if (value && typeof value === 'object' && !Array.isArray(value)) {
+        return value;
+    }
+    return {};
+}
+function readNumberRecord(value) {
+    const record = readJsonObject(value);
+    return Object.entries(record).reduce((numbers, [key, entry]) => {
+        const parsed = readOptionalNumber(entry);
+        if (parsed !== null) {
+            numbers[key] = parsed;
+        }
+        return numbers;
+    }, {});
+}
+function readOptionalNumber(value) {
+    return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+function roundScore(value) {
+    return Math.round(value * 100) / 100;
 }
 function setSessionCookie(res, user) {
     const payload = Buffer.from(JSON.stringify({

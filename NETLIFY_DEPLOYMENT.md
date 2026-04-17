@@ -138,7 +138,11 @@ Added:
 
 - [netlify.toml](/c:/Users/PC/faculty-promotion-system/netlify.toml)
 
-This publishes the `public` folder and maps `/evaluator` to `evaluator.html`.
+This publishes the `public` folder and maps:
+
+- `/` to `index.html`
+- `/employee` to `employee.html`
+- `/evaluator` to `evaluator.html`
 
 ### Frontend API base URL config
 
@@ -215,3 +219,13 @@ Use this split:
 3. Hosted PostgreSQL for data
 
 That is the cleanest path with the least rework.
+
+## Current Frontend Page Structure
+
+The frontend is now intentionally split into three pages:
+
+1. `index.html` for sign in and account creation
+2. `employee.html` for employee uploads, draft points, and upload logs
+3. `evaluator.html` for evaluator review logs and actual scoring
+
+This is better for Netlify than the old combined page because the role-specific pages can be routed cleanly as static assets while still calling the same hosted backend API.
