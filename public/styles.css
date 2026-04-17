@@ -41,6 +41,7 @@ select {
 
 .hero {
   display: block;
+  width: min(100%, calc((100% - 20px) / 2));
   margin-bottom: 22px;
 }
 
@@ -55,9 +56,9 @@ select {
 
 .hero-copy {
   border-radius: 24px;
-  padding: 26px 30px;
+  padding: 24px 28px;
   display: grid;
-  gap: 14px;
+  gap: 12px;
   position: relative;
   overflow: hidden;
 }
@@ -623,6 +624,10 @@ select {
   .review-log-list,
   .compact-counts {
     grid-template-columns: 1fr;
+  }
+
+  .hero {
+    width: 100%;
   }
 
   .database-counts {
