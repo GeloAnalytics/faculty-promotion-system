@@ -200,7 +200,7 @@ select {
 
 .panel {
   border-radius: 22px;
-  padding: 22px;
+  padding: 20px;
 }
 
 .panel-wide {
@@ -212,7 +212,7 @@ select {
 }
 
 .panel-heading {
-  margin-bottom: 16px;
+  margin-bottom: 14px;
 }
 
 .reference-grid {
@@ -260,7 +260,7 @@ select {
   background: var(--surface-strong);
   border: 1px solid var(--border);
   border-radius: 18px;
-  padding: 18px;
+  padding: 16px;
 }
 
 .card-copy {
@@ -355,13 +355,13 @@ select {
 
 .database-viewer {
   display: grid;
-  gap: 18px;
+  gap: 16px;
 }
 
 .database-counts {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 14px;
+  gap: 12px;
 }
 
 .compact-counts {
@@ -369,7 +369,7 @@ select {
 }
 
 .database-count-card {
-  padding: 16px;
+  padding: 14px;
   border-radius: 16px;
   background: var(--surface-strong);
   border: 1px solid var(--border);
@@ -377,26 +377,26 @@ select {
 
 .database-count-label {
   display: block;
-  margin-bottom: 8px;
+  margin-bottom: 6px;
   color: var(--muted);
-  font-size: 0.88rem;
+  font-size: 0.84rem;
 }
 
 .database-count-value {
   font-family: "Space Grotesk", sans-serif;
-  font-size: 1.9rem;
+  font-size: 1.7rem;
   line-height: 1;
 }
 
 .database-sections {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 18px;
+  gap: 16px;
 }
 
 .database-table-card {
   display: grid;
-  gap: 14px;
+  gap: 12px;
 }
 
 .database-table-wrap {
@@ -414,7 +414,7 @@ select {
 
 .database-table th,
 .database-table td {
-  padding: 12px 14px;
+  padding: 10px 12px;
   border-bottom: 1px solid rgba(23, 33, 31, 0.08);
   text-align: left;
   vertical-align: top;
@@ -430,16 +430,16 @@ select {
 
 .database-table td {
   color: var(--muted);
-  font-size: 0.94rem;
+  font-size: 0.9rem;
 }
 
 .training-example-list {
   display: grid;
-  gap: 14px;
+  gap: 12px;
 }
 
 .training-example-card {
-  padding: 16px 18px;
+  padding: 14px 16px;
   border-radius: 18px;
   background: var(--surface-strong);
   border: 1px solid var(--border);
@@ -472,24 +472,24 @@ select {
 .workspace-summary-card,
 .review-card {
   display: grid;
-  gap: 10px;
+  gap: 8px;
 }
 
 .review-queue {
   display: grid;
-  gap: 18px;
+  gap: 16px;
 }
 
 .review-log-list {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
+  gap: 10px;
 }
 
 .upload-log-chip {
   display: grid;
   gap: 6px;
-  padding: 14px;
+  padding: 12px;
   border-radius: 16px;
   border: 1px solid var(--border);
   background: #fffdf9;
@@ -508,19 +508,19 @@ select {
 }
 
 .panel-inner {
-  padding: 18px;
+  padding: 16px;
   margin: 4px 0;
 }
 
 .criteria-layout {
   display: grid;
-  gap: 18px;
+  gap: 16px;
 }
 
 .criteria-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 14px;
+  gap: 12px;
 }
 
 .score-field {
@@ -534,7 +534,7 @@ select {
 
 .score-total-card {
   min-width: 140px;
-  padding: 14px 16px;
+  padding: 12px 14px;
   border-radius: 18px;
   background: var(--surface-strong);
   border: 1px solid var(--border);
@@ -542,13 +542,13 @@ select {
 
 .score-total-card strong {
   font-family: "Space Grotesk", sans-serif;
-  font-size: 2rem;
+  font-size: 1.8rem;
   line-height: 1;
 }
 
 .notice {
   margin-top: 12px;
-  padding: 14px 16px;
+  padding: 12px 14px;
   border-radius: 16px;
   background: var(--surface-strong);
   border: 1px solid var(--border);
@@ -564,22 +564,22 @@ select {
 
 .stack-form {
   display: grid;
-  gap: 12px;
+  gap: 10px;
 }
 
 .field-row {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 14px;
+  gap: 12px;
 }
 
 .field {
   display: grid;
-  gap: 8px;
+  gap: 6px;
 }
 
 .field span {
-  font-size: 0.92rem;
+  font-size: 0.88rem;
   color: var(--muted);
 }
 
@@ -588,7 +588,7 @@ select {
   width: 100%;
   border: 1px solid rgba(23, 33, 31, 0.12);
   border-radius: 14px;
-  padding: 11px 13px;
+  padding: 10px 12px;
   background: #fffdf9;
   color: var(--text);
 }
