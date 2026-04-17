@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Faculty Promotion Evaluator Portal</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;700;800&family=Space+Grotesk:wght@500;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body data-portal="evaluator">
+    <div class="page-shell">
+      <header class="hero">
+        <div class="hero-copy">
+          <p class="eyebrow">Evaluator Portal</p>
+          <h1>Review submissions, label training records, and inspect stored data.</h1>
+          <p class="hero-text">
+            This workspace is for evaluators checking submitted records, monitoring stored evidence, and handling
+            review-side analysis.
+          </p>
+          <div class="hero-actions">
+            <button class="button button-primary" data-scroll-target="#auth-panel">Access Evaluator Portal</button>
+            <button class="button button-secondary" data-scroll-target="#database-panel">Open Database Viewer</button>
+          </div>
+        </div>
+        <div class="hero-stats">
+          <div class="stat-card">
+            <span class="stat-label">System Status</span>
+            <strong id="health-status">Loading...</strong>
+          </div>
+          <div class="stat-card">
+            <span class="stat-label">Model Status</span>
+            <strong id="model-status">Loading...</strong>
+          </div>
+          <div class="stat-card">
+            <span class="stat-label">Guideline PDF</span>
+            <strong id="health-guideline">Loading...</strong>
+          </div>
+          <div class="stat-card">
+            <span class="stat-label">Signed In User</span>
+            <strong id="session-user">Guest</strong>
+          </div>
+        </div>
+      </header>
+
+      <main class="content-grid">
+        <section class="panel" id="auth-panel">
+          <div class="panel-heading">
+            <div>
+              <p class="section-kicker">Account Access</p>
+              <h2>Create an evaluator account or sign in</h2>
+            </div>
+          </div>
+          <div class="auth-switch">
+            <button class="button button-primary auth-toggle" id="show-login" type="button">Sign In</button>
+            <button class="button button-secondary auth-toggle" id="show-register" type="button">Create Account</button>
+          </div>
+          <form id="auth-form" class="stack-form">
+            <label class="field" id="name-field">
+              <span>Full name</span>
+              <input type="text" id="auth-name" placeholder="Faculty Evaluator" />
+            </label>
+            <label class="field" id="role-field">
+              <span>Account type</span>
+              <select id="auth-role">
+                <option value="EVALUATOR">Evaluator</option>
+                <option value="EMPLOYEE">Employee</option>
+              </select>
+            </label>
+            <label class="field">
+              <span>Email</span>
+              <input type="email" id="auth-email" placeholder="evaluator@example.com" required />
+            </label>
+            <label class="field">
+              <span>Password</span>
+              <input type="password" id="auth-password" placeholder="Minimum 8 characters" required />
+            </label>
+            <button class="button button-primary" id="auth-submit" type="submit">Sign In</button>
+          </form>
+          <div id="auth-result" class="notice">No account action yet.</div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-heading">
+            <div>
+              <p class="section-kicker">Portal Routing</p>
+              <h2>Employee workspace</h2>
+            </div>
+          </div>
+          <p class="card-copy">
+            Employees use the main portal to upload records, submit faculty information, and attach evidence files.
+          </p>
+          <a class="button button-secondary portal-link" href="/">Open Employee Portal</a>
+        </section>
+
+        <section class="panel panel-wide">
+          <div class="panel-heading">
+            <div>
+              <p class="section-kicker">Training Labels</p>
+              <h2>Review and label stored records</h2>
+            </div>
+          </div>
+          <form id="training-form" class="stack-form">
+            <div class="field-row">
+              <label class="field">
+                <span>Training example ID</span>
+                <input type="text" id="training-example-id" placeholder="Select from the list below or paste an ID" />
+              </label>
+              <label class="field">
+                <span>Promotion outcome</span>
+                <select id="training-label">
+                  <option value="true">Promoted</option>
+                  <option value="false">Not Promoted</option>
+                </select>
+              </label>
+            </div>
+            <div class="field-row">
+              <label class="field">
+                <span>Label source</span>
+                <input type="text" id="training-source" value="Committee decision" />
+              </label>
+              <label class="field">
+                <span>Dataset split</span>
+                <select id="training-split">
+                  <option value="train">Train</option>
+                  <option value="validation">Validation</option>
+                  <option value="test">Test</option>
+                </select>
+              </label>
+            </div>
+            <label class="field">
+              <span>Notes</span>
+              <input type="text" id="training-notes" placeholder="Optional training annotation" />
+            </label>
+            <button class="button button-secondary" type="submit">Save Training Label</button>
+          </form>
+          <div id="training-result" class="notice">No training example labeled yet.</div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-heading">
+            <div>
+              <p class="section-kicker">Training Queue</p>
+              <h2>Recent records for review</h2>
+            </div>
+          </div>
+          <div id="training-list" class="notice">Sign in to load recent training examples.</div>
+        </section>
+
+        <section class="panel panel-wide" id="database-panel">
+          <div class="panel-heading">
+            <div>
+              <p class="section-kicker">Database Viewer</p>
+              <h2>See what is stored in PostgreSQL</h2>
+            </div>
+          </div>
+          <div id="database-viewer" class="database-viewer">
+            <div class="notice">Sign in to load the database contents.</div>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <script src="/config.js"></script>
+    <script src="/app.js"></script>
+  </body>
+</html>

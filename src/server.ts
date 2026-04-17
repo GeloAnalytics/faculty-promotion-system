@@ -1,9 +1,6 @@
 import crypto from 'node:crypto';
-import { execFile } from 'node:child_process';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
-import { promisify } from 'node:util';
 import express, { NextFunction, Request, Response } from 'express';
 import cors from 'cors';
 import multer from 'multer';
@@ -27,6 +24,7 @@ import {
   runThesisWorkflow,
   summarizeTqeReferenceData,
 } from './utils';
+import { extractImageTextWithOcr, isOcrReady, type OcrConfig, type OcrProvider } from './ocr';
 import type {
   FacultyIngestionPayload,
   SessionUser,
@@ -50,6 +48,12 @@ const envSchema = z.object({
   AUTH_SECRET: z.string().min(32).default('development-auth-secret-change-me-123456'),
   CORS_ORIGIN: z.string().default('http://localhost:3000'),
   TRUST_PROXY: z.coerce.number().int().nonnegative().default(1),
+  OCR_PROVIDER: z.enum(['windows', 'http', 'ocrspace', 'disabled']).default('windows'),
+  OCR_API_URL: z.string().trim().optional(),
+  OCR_API_KEY: z.string().trim().optional(),
+  OCR_API_KEY_HEADER: z.string().trim().default('Authorization'),
+  OCR_FILE_FIELD_NAME: z.string().trim().default('file'),
+  OCR_TIMEOUT_MS: z.coerce.number().int().positive().default(30000),
 });
 
 const env = envSchema.parse(process.env);
@@ -68,7 +72,15 @@ const tqeReferenceSummary = summarizeTqeReferenceData(tqeReferenceRecords);
 const publicDir = path.join(repoRoot, 'public');
 const ocrScriptPath = path.join(repoRoot, 'scripts', 'ocr-image.ps1');
 const sessionCookieName = 'fps_session';
-const execFileAsync = promisify(execFile);
+const ocrConfig: OcrConfig = {
+  provider: env.OCR_PROVIDER as OcrProvider,
+  scriptPath: ocrScriptPath,
+  apiUrl: env.OCR_API_URL,
+  apiKey: env.OCR_API_KEY,
+  apiKeyHeader: env.OCR_API_KEY_HEADER,
+  fileFieldName: env.OCR_FILE_FIELD_NAME,
+  timeoutMs: env.OCR_TIMEOUT_MS,
+};
 const uploadPanels: UploadPanelDefinition[] = [
   {
     key: 'kra_instruction',
@@ -103,7 +115,7 @@ const uploadPanels: UploadPanelDefinition[] = [
 ];
 
 const personalDataSchema = z.object({
-  teacherId: z.string().trim().optional(),
+  employeeId: z.string().trim().optional(),
   fullName: z.string().trim().min(1),
   age: z.number().nonnegative().optional(),
   sex: z.string().trim().optional(),
@@ -152,6 +164,9 @@ const registerSchema = z.object({
   fullName: z.string().trim().min(2),
   email: z.string().trim().email(),
   password: z.string().min(8),
+  role: z.nativeEnum(UserRole).refine((value) => value === UserRole.EMPLOYEE || value === UserRole.EVALUATOR, {
+    message: 'Registration role must be Employee or Evaluator',
+  }),
 });
 
 const loginSchema = z.object({
@@ -230,6 +245,9 @@ app.use(
 app.use(express.json({ limit: '2mb' }));
 app.use(express.urlencoded({ extended: true, limit: '2mb' }));
 app.use(attachSessionUser);
+app.get('/evaluator', (_req: Request, res: Response) => {
+  res.sendFile(path.join(publicDir, 'evaluator.html'));
+});
 app.use(express.static(publicDir, { extensions: ['html'], maxAge: isProduction ? '1h' : 0 }));
 
 app.get('/api/health', (_req: Request, res: Response) => {
@@ -248,7 +266,8 @@ app.get('/api/health', (_req: Request, res: Response) => {
       tqeRows: tqeReferenceRecords.length,
       guidelinePdfLoaded: guidelinePdfPath !== null,
       guidelinePdfFileName: guidelinePdfPath ? path.basename(guidelinePdfPath) : null,
-      imageOcrReady: false,
+      imageOcrReady: isOcrReady(ocrConfig),
+      imageOcrProvider: ocrConfig.provider,
     },
     model: {
       status: 'inactive',
@@ -275,13 +294,13 @@ app.post('/api/auth/register', async (req: Request, res: Response) => {
         email: payload.email.toLowerCase(),
         passwordHash,
         passwordSalt,
-        role: UserRole.STAFF,
+        role: payload.role,
       },
     });
 
     const sessionUser = toSessionUser(user);
     setSessionCookie(res, sessionUser);
-    return res.status(201).json({ user: sessionUser });
+    return res.status(201).json({ user: sessionUser, homePath: getHomePathForRole(sessionUser.role) });
   } catch (error) {
     return handleRequestError(res, error);
   }
@@ -298,7 +317,7 @@ app.post('/api/auth/login', async (req: Request, res: Response) => {
 
     const sessionUser = toSessionUser(user);
     setSessionCookie(res, sessionUser);
-    return res.json({ user: sessionUser });
+    return res.json({ user: sessionUser, homePath: getHomePathForRole(sessionUser.role) });
   } catch (error) {
     return handleRequestError(res, error);
   }
@@ -310,7 +329,10 @@ app.post('/api/auth/logout', (_req: Request, res: Response) => {
 });
 
 app.get('/api/auth/me', requireAuth, (req: Request, res: Response) => {
-  res.json({ user: req.user });
+  res.json({
+    user: req.user,
+    homePath: getHomePathForRole(req.user!.role),
+  });
 });
 
 app.get('/api/reference/tqe-summary', (_req: Request, res: Response) => {
@@ -347,102 +369,102 @@ app.get('/api/reference/guidelines', async (_req: Request, res: Response) => {
   }
 });
 
-app.post('/api/documents/extract', requireAuth, upload.single('document'), async (req: Request, res: Response) => {
-  if (!req.file) {
-    return res.status(400).json({ error: 'No document uploaded' });
-  }
-
-  try {
-    const kind = parseDocumentKind(req.body.kind);
-    const panelKey = parseUploadPanelKey(req.body.panelKey);
-    const profileId = typeof req.body.profileId === 'string' && req.body.profileId.trim() ? req.body.profileId : null;
-    const mimeType = req.file.mimetype.toLowerCase();
-    const fileName = req.file.originalname;
-    const isCsv = /\.csv$/i.test(fileName);
-    const isSpreadsheet = /\.(xlsx|xls)$/i.test(fileName);
-
-    if (panelKey === 'tallied_points' && !isSpreadsheet && !isCsv) {
-      return res.status(400).json({
-        error: 'Tallied Points panel only accepts Excel or CSV files',
-      });
+app.post(
+  '/api/documents/extract',
+  requireRole(UserRole.EMPLOYEE, UserRole.ADMIN),
+  upload.single('document'),
+  async (req: Request, res: Response) => {
+    if (!req.file) {
+      return res.status(400).json({ error: 'No document uploaded' });
     }
 
-    if (panelKey !== 'tallied_points' && (isSpreadsheet || isCsv)) {
-      return res.status(400).json({
-        error: 'Spreadsheet files are only accepted in the Tallied Points panel',
-      });
-    }
+    try {
+      const kind = parseDocumentKind(req.body.kind);
+      const panelKey = parseUploadPanelKey(req.body.panelKey);
+      const requestedProfileId =
+        typeof req.body.profileId === 'string' && req.body.profileId.trim() ? req.body.profileId : null;
+      const mimeType = req.file.mimetype.toLowerCase();
+      const fileName = req.file.originalname;
+      const isCsv = /\.csv$/i.test(fileName);
+      const isSpreadsheet = /\.(xlsx|xls)$/i.test(fileName);
+      const linkage = await resolveUploadProfileLink(req.user!.id, fileName, requestedProfileId);
+      const profileId = linkage.profileId;
 
-    if (isSpreadsheet) {
-      const savedDocument = await prisma.uploadedDocument.create({
-        data: {
-          ownerUserId: req.user!.id,
+      if (panelKey === 'tallied_points' && !isSpreadsheet && !isCsv) {
+        return res.status(400).json({
+          error: 'Tallied Points panel only accepts Excel or CSV files',
+        });
+      }
+
+      if (panelKey !== 'tallied_points' && (isSpreadsheet || isCsv)) {
+        return res.status(400).json({
+          error: 'Spreadsheet files are only accepted in the Tallied Points panel',
+        });
+      }
+
+      if (isSpreadsheet) {
+        const savedDocument = await prisma.uploadedDocument.create({
+          data: {
+            ownerUserId: req.user!.id,
+            profileId,
+            kind,
+            originalName: fileName,
+            mimeType: req.file.mimetype,
+            extractionMetadata: toPrismaJson({
+              panelKey,
+              storedForTraining: true,
+              extractionMode: 'spreadsheet-reference',
+              sizeBytes: req.file.size,
+              linkage,
+            }),
+          },
+        });
+
+        return res.json({
+          fileType: 'spreadsheet',
+          documentId: savedDocument.id,
+          panelKey,
           profileId,
-          kind,
-          originalName: fileName,
-          mimeType: req.file.mimetype,
-          extractionMetadata: toPrismaJson({
-            panelKey,
-            storedForTraining: true,
-            extractionMode: 'spreadsheet-reference',
-            sizeBytes: req.file.size,
-          }),
-        },
-      });
+          linkage,
+          message: 'Spreadsheet stored for training-data preparation.',
+        });
+      }
 
-      return res.json({
-        fileType: 'spreadsheet',
-        documentId: savedDocument.id,
-        panelKey,
-        message: 'Spreadsheet stored for training-data preparation.',
-      });
-    }
+      if (mimeType === 'application/pdf' || fileName.toLowerCase().endsWith('.pdf')) {
+        const data = await pdf(req.file.buffer);
+        const analysis = analyzeDocumentContent(data.text, panelKey, 'pdf');
 
-    if (mimeType === 'application/pdf' || fileName.toLowerCase().endsWith('.pdf')) {
-      const data = await pdf(req.file.buffer);
-      const analysis = analyzeDocumentContent(data.text, panelKey, 'pdf');
+        const savedDocument = await prisma.uploadedDocument.create({
+          data: {
+            ownerUserId: req.user!.id,
+            profileId,
+            kind,
+            originalName: fileName,
+            mimeType: req.file.mimetype,
+            extractedText: data.text,
+            extractionMetadata: toPrismaJson({
+              panelKey,
+              storedForTraining: true,
+              analysis,
+              linkage,
+            }),
+          },
+        });
 
-      const savedDocument = await prisma.uploadedDocument.create({
-        data: {
-          ownerUserId: req.user!.id,
+        return res.json({
+          fileType: 'pdf',
+          documentId: savedDocument.id,
+          panelKey,
           profileId,
-          kind,
-          originalName: fileName,
-          mimeType: req.file.mimetype,
-          extractedText: data.text,
-          extractionMetadata: toPrismaJson({
-            panelKey,
-            storedForTraining: true,
-            analysis,
-          }),
-        },
-      });
+          linkage,
+          textPreview: data.text.slice(0, 1000),
+          analysis,
+        });
+      }
 
-      return res.json({
-        fileType: 'pdf',
-        documentId: savedDocument.id,
-        panelKey,
-        textPreview: data.text.slice(0, 1000),
-        analysis,
-      });
-    }
-
-    if (mimeType.startsWith('image/') || /\.(png|jpg|jpeg|bmp|tif|tiff)$/i.test(fileName)) {
-      const tempImagePath = path.join(
-        os.tmpdir(),
-        `fps-ocr-${crypto.randomUUID()}${path.extname(fileName) || '.png'}`,
-      );
-
-      try {
-        fs.writeFileSync(tempImagePath, req.file.buffer);
-        const { stdout } = await execFileAsync(
-          'powershell',
-          ['-ExecutionPolicy', 'Bypass', '-File', ocrScriptPath, '-ImagePath', tempImagePath],
-          { windowsHide: true, maxBuffer: 5 * 1024 * 1024 },
-        );
-
-        const ocrPayload = JSON.parse(stdout) as { text?: string; lineCount?: number };
-        const extractedText = (ocrPayload.text ?? '').trim();
+      if (mimeType.startsWith('image/') || /\.(png|jpg|jpeg|bmp|tif|tiff)$/i.test(fileName)) {
+        const ocrResult = await extractImageTextWithOcr(req.file.buffer, fileName, ocrConfig);
+        const extractedText = ocrResult.text.trim();
         const analysis = analyzeDocumentContent(extractedText, panelKey, 'image');
 
         const savedDocument = await prisma.uploadedDocument.create({
@@ -457,9 +479,11 @@ app.post('/api/documents/extract', requireAuth, upload.single('document'), async
               panelKey,
               storedForTraining: true,
               ocr: {
-                lineCount: ocrPayload.lineCount ?? 0,
+                provider: ocrResult.provider,
+                lineCount: ocrResult.lineCount,
               },
               analysis,
+              linkage,
             }),
           },
         });
@@ -468,55 +492,56 @@ app.post('/api/documents/extract', requireAuth, upload.single('document'), async
           fileType: 'image',
           documentId: savedDocument.id,
           panelKey,
+          profileId,
+          linkage,
           textPreview: extractedText.slice(0, 1000),
           analysis,
         });
-      } finally {
-        if (fs.existsSync(tempImagePath)) {
-          fs.unlinkSync(tempImagePath);
-        }
       }
-    }
 
-    if (isCsv) {
-      const csvText = req.file.buffer.toString('utf8');
-      const analysis = analyzeDocumentContent(csvText, panelKey, 'csv');
+      if (isCsv) {
+        const csvText = req.file.buffer.toString('utf8');
+        const analysis = analyzeDocumentContent(csvText, panelKey, 'csv');
 
-      const savedDocument = await prisma.uploadedDocument.create({
-        data: {
-          ownerUserId: req.user!.id,
+        const savedDocument = await prisma.uploadedDocument.create({
+          data: {
+            ownerUserId: req.user!.id,
+            profileId,
+            kind,
+            originalName: fileName,
+            mimeType: req.file.mimetype,
+            extractedText: csvText,
+            extractionMetadata: toPrismaJson({
+              panelKey,
+              storedForTraining: true,
+              analysis,
+              linkage,
+              csv: {
+                rowCount: csvText.split(/\r?\n/).filter(Boolean).length,
+              },
+            }),
+          },
+        });
+
+        return res.json({
+          fileType: 'csv',
+          documentId: savedDocument.id,
+          panelKey,
           profileId,
-          kind,
-          originalName: fileName,
-          mimeType: req.file.mimetype,
-          extractedText: csvText,
-          extractionMetadata: toPrismaJson({
-            panelKey,
-            storedForTraining: true,
-            analysis,
-            csv: {
-              rowCount: csvText.split(/\r?\n/).filter(Boolean).length,
-            },
-          }),
-        },
-      });
+          linkage,
+          textPreview: csvText.slice(0, 1000),
+          analysis,
+        });
+      }
 
-      return res.json({
-        fileType: 'csv',
-        documentId: savedDocument.id,
-        panelKey,
-        textPreview: csvText.slice(0, 1000),
-        analysis,
-      });
+      return res.status(400).json({ error: 'Unsupported document type' });
+    } catch (error) {
+      return handleRequestError(res, error);
     }
+  },
+);
 
-    return res.status(400).json({ error: 'Unsupported document type' });
-  } catch (error) {
-    return handleRequestError(res, error);
-  }
-});
-
-app.post('/api/faculty/ingest', requireAuth, async (req: Request, res: Response) => {
+app.post('/api/faculty/ingest', requireRole(UserRole.EMPLOYEE, UserRole.ADMIN), async (req: Request, res: Response) => {
   try {
     const payload = facultyIngestionSchema.parse(req.body);
     const features = buildFeatureVector(payload);
@@ -524,7 +549,7 @@ app.post('/api/faculty/ingest', requireAuth, async (req: Request, res: Response)
 
     const profile = await prisma.facultyProfile.create({
       data: {
-        teacherId: payload.personalData.teacherId,
+        employeeId: payload.personalData.employeeId,
         name: payload.personalData.fullName,
         semester: payload.performanceReview.reviewPeriod,
         teachingQuality: payload.personalData.academicRank,
@@ -549,9 +574,15 @@ app.post('/api/faculty/ingest', requireAuth, async (req: Request, res: Response)
       },
     });
 
+    const linkedDocuments = await attachExistingDocumentsToProfile(req.user!.id, profile.id, {
+      fullName: payload.personalData.fullName,
+      employeeId: payload.personalData.employeeId,
+    });
+
     return res.status(201).json({
       profileId: profile.id,
       trainingExampleId: trainingDraft.id,
+      linkedDocuments,
       features,
       model: {
         status: 'inactive',
@@ -585,7 +616,7 @@ app.post('/api/predictions/generate', requireAuth, async (req: Request, res: Res
   });
 });
 
-app.post('/api/training/examples', requireAuth, async (req: Request, res: Response) => {
+app.post('/api/training/examples', requireRole(UserRole.EVALUATOR, UserRole.ADMIN), async (req: Request, res: Response) => {
   try {
     const payload = trainingSubmissionSchema.parse(req.body) as TrainingExampleSubmission;
     const trainingExample = await prisma.trainingExample.create({
@@ -609,53 +640,61 @@ app.post('/api/training/examples', requireAuth, async (req: Request, res: Respon
   }
 });
 
-app.patch('/api/training/examples/:id/label', requireAuth, async (req: Request, res: Response) => {
-  try {
-    const payload = z
-      .object({
-        labelPromoted: z.boolean(),
-        labelSource: z.string().trim().optional(),
-        datasetSplit: z.string().trim().optional(),
-        notes: z.string().trim().optional(),
-        validated: z.boolean().optional(),
-      })
-      .parse(req.body);
+app.patch(
+  '/api/training/examples/:id/label',
+  requireRole(UserRole.EVALUATOR, UserRole.ADMIN),
+  async (req: Request, res: Response) => {
+    try {
+      const payload = z
+        .object({
+          labelPromoted: z.boolean(),
+          labelSource: z.string().trim().optional(),
+          datasetSplit: z.string().trim().optional(),
+          notes: z.string().trim().optional(),
+          validated: z.boolean().optional(),
+        })
+        .parse(req.body);
 
-    const trainingExample = await prisma.trainingExample.update({
-      where: { id: req.params.id },
-      data: {
-        labelPromoted: payload.labelPromoted,
-        labelSource: payload.labelSource,
-        datasetSplit: payload.datasetSplit,
-        notes: payload.notes,
-        status: payload.validated ? TrainingExampleStatus.VALIDATED : TrainingExampleStatus.LABELED,
-      },
-    });
+      const trainingExample = await prisma.trainingExample.update({
+        where: { id: req.params.id },
+        data: {
+          labelPromoted: payload.labelPromoted,
+          labelSource: payload.labelSource,
+          datasetSplit: payload.datasetSplit,
+          notes: payload.notes,
+          status: payload.validated ? TrainingExampleStatus.VALIDATED : TrainingExampleStatus.LABELED,
+        },
+      });
 
-    return res.json(trainingExample);
-  } catch (error) {
-    return handleRequestError(res, error);
-  }
-});
+      return res.json(trainingExample);
+    } catch (error) {
+      return handleRequestError(res, error);
+    }
+  },
+);
 
-app.get('/api/training/examples', requireAuth, async (_req: Request, res: Response) => {
-  try {
-    const trainingExamples = await prisma.trainingExample.findMany({
-      take: 50,
-      orderBy: { createdAt: 'desc' },
-      include: {
-        createdBy: { select: { id: true, fullName: true, email: true, role: true } },
-        profile: { select: { id: true, name: true, teacherId: true } },
-      },
-    });
+app.get(
+  '/api/training/examples',
+  requireRole(UserRole.EVALUATOR, UserRole.ADMIN),
+  async (_req: Request, res: Response) => {
+    try {
+      const trainingExamples = await prisma.trainingExample.findMany({
+        take: 50,
+        orderBy: { createdAt: 'desc' },
+        include: {
+          createdBy: { select: { id: true, fullName: true, email: true, role: true } },
+          profile: { select: { id: true, name: true, employeeId: true } },
+        },
+      });
 
-    return res.json({ items: trainingExamples });
-  } catch (error) {
-    return handleRequestError(res, error);
-  }
-});
+      return res.json({ items: trainingExamples });
+    } catch (error) {
+      return handleRequestError(res, error);
+    }
+  },
+);
 
-app.get('/api/admin/database-overview', requireAuth, async (_req: Request, res: Response) => {
+app.get('/api/admin/database-overview', requireRole(UserRole.EVALUATOR, UserRole.ADMIN), async (_req: Request, res: Response) => {
   try {
     const [userCount, profileCount, documentCount, trainingCount, predictionCount] = await Promise.all([
       prisma.user.count(),
@@ -682,7 +721,7 @@ app.get('/api/admin/database-overview', requireAuth, async (_req: Request, res: 
         orderBy: { createdAt: 'desc' },
         select: {
           id: true,
-          teacherId: true,
+          employeeId: true,
           name: true,
           semester: true,
           createdAt: true,
@@ -734,7 +773,7 @@ app.get('/api/admin/database-overview', requireAuth, async (_req: Request, res: 
   }
 });
 
-app.get('/api/dashboard/:profileId', requireAuth, async (req: Request, res: Response) => {
+app.get('/api/dashboard/:profileId', requireRole(UserRole.EVALUATOR, UserRole.ADMIN), async (req: Request, res: Response) => {
   try {
     const profile = await prisma.facultyProfile.findUnique({
       where: { id: req.params.profileId },
@@ -788,6 +827,195 @@ function requireAuth(req: Request, res: Response, next: NextFunction) {
   return next();
 }
 
+function requireRole(...allowedRoles: UserRole[]) {
+  return (req: Request, res: Response, next: NextFunction) => {
+    if (!req.user) {
+      return res.status(401).json({ error: 'Authentication required' });
+    }
+
+    if (!allowedRoles.includes(req.user.role as UserRole)) {
+      return res.status(403).json({ error: 'You do not have access to this workspace' });
+    }
+
+    return next();
+  };
+}
+
+type ProfileLinkCandidate = {
+  id: string;
+  name: string;
+  employeeId: string | null;
+};
+
+type ProfileLinkResult = {
+  profileId: string | null;
+  matchedBy: 'explicit' | 'filename' | 'unmatched';
+  matchedName: string | null;
+  matchedEmployeeId: string | null;
+};
+
+async function resolveUploadProfileLink(
+  ownerUserId: string,
+  originalName: string,
+  requestedProfileId: string | null,
+): Promise<ProfileLinkResult> {
+  if (requestedProfileId) {
+    const explicitProfile = await prisma.facultyProfile.findFirst({
+      where: {
+        id: requestedProfileId,
+        createdByUserId: ownerUserId,
+      },
+      select: {
+        id: true,
+        name: true,
+        employeeId: true,
+      },
+    });
+
+    if (explicitProfile) {
+      return {
+        profileId: explicitProfile.id,
+        matchedBy: 'explicit',
+        matchedName: explicitProfile.name,
+        matchedEmployeeId: explicitProfile.employeeId ?? null,
+      };
+    }
+  }
+
+  const profiles = await prisma.facultyProfile.findMany({
+    where: {
+      createdByUserId: ownerUserId,
+    },
+    select: {
+      id: true,
+      name: true,
+      employeeId: true,
+    },
+    orderBy: { createdAt: 'desc' },
+  });
+
+  const matchedProfile = findBestMatchingProfile(profiles, originalName);
+  if (!matchedProfile) {
+    return {
+      profileId: null,
+      matchedBy: 'unmatched',
+      matchedName: null,
+      matchedEmployeeId: null,
+    };
+  }
+
+  return {
+    profileId: matchedProfile.id,
+    matchedBy: 'filename',
+    matchedName: matchedProfile.name,
+    matchedEmployeeId: matchedProfile.employeeId ?? null,
+  };
+}
+
+async function attachExistingDocumentsToProfile(
+  ownerUserId: string,
+  profileId: string,
+  profileData: { fullName: string; employeeId?: string },
+) {
+  const pendingDocuments = await prisma.uploadedDocument.findMany({
+    where: {
+      ownerUserId,
+      profileId: null,
+    },
+    select: {
+      id: true,
+      originalName: true,
+    },
+  });
+
+  const matchedDocuments = pendingDocuments.filter(
+    (document) => scoreProfileFilename(profileData.fullName, profileData.employeeId, document.originalName) > 0,
+  );
+
+  if (!matchedDocuments.length) {
+    return {
+      count: 0,
+      documentIds: [],
+      matchedFileNames: [],
+    };
+  }
+
+  await prisma.uploadedDocument.updateMany({
+    where: {
+      id: {
+        in: matchedDocuments.map((document) => document.id),
+      },
+    },
+    data: {
+      profileId,
+    },
+  });
+
+  return {
+    count: matchedDocuments.length,
+    documentIds: matchedDocuments.map((document) => document.id),
+    matchedFileNames: matchedDocuments.map((document) => document.originalName),
+  };
+}
+
+function findBestMatchingProfile(profiles: ProfileLinkCandidate[], originalName: string) {
+  let bestMatch: ProfileLinkCandidate | null = null;
+  let bestScore = 0;
+
+  for (const profile of profiles) {
+    const score = scoreProfileFilename(profile.name, profile.employeeId ?? undefined, originalName);
+    if (score > bestScore) {
+      bestScore = score;
+      bestMatch = profile;
+    }
+  }
+
+  return bestScore > 0 ? bestMatch : null;
+}
+
+function scoreProfileFilename(fullName: string, employeeId: string | undefined, originalName: string) {
+  const normalizedFileName = normalizeForMatch(path.parse(originalName).name);
+  const fileTokens = new Set(tokenizeForMatch(originalName));
+  const nameTokens = tokenizeForMatch(fullName);
+
+  let score = 0;
+
+  if (employeeId) {
+    const normalizedEmployeeId = normalizeForMatch(employeeId);
+    if (normalizedEmployeeId && normalizedFileName.includes(normalizedEmployeeId)) {
+      score += 100;
+    }
+  }
+
+  if (!nameTokens.length) {
+    return score;
+  }
+
+  const matchedNameTokenCount = nameTokens.filter((token) => fileTokens.has(token)).length;
+  if (matchedNameTokenCount === nameTokens.length) {
+    score += 50 + matchedNameTokenCount;
+  } else if (matchedNameTokenCount >= Math.max(2, nameTokens.length - 1)) {
+    score += 15 + matchedNameTokenCount;
+  }
+
+  return score;
+}
+
+function tokenizeForMatch(value: string) {
+  return normalizeForMatch(value)
+    .split(' ')
+    .filter((token) => token.length >= 2);
+}
+
+function normalizeForMatch(value: string) {
+  return value
+    .toLowerCase()
+    .normalize('NFKD')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 function parseDocumentKind(input: unknown): DocumentKind {
   const normalized = typeof input === 'string' ? input.toUpperCase() : 'REQUIREMENT';
   if (normalized === 'GUIDELINE') {
@@ -821,6 +1049,10 @@ function toSessionUser(user: { id: string; email: string; fullName: string; role
     fullName: user.fullName,
     role: user.role,
   };
+}
+
+function getHomePathForRole(role: UserRole | SessionUser['role']) {
+  return role === UserRole.EVALUATOR ? '/evaluator' : '/';
 }
 
 function setSessionCookie(res: Response, user: SessionUser) {

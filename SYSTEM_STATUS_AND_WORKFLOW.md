@@ -12,11 +12,13 @@ Current runtime status:
 - Faculty record intake is active.
 - Training-example draft creation is active.
 - File upload and storage is active.
+- PostgreSQL-backed persistence is active in local development.
 - PDF text extraction is active.
 - Image OCR is active.
 - PDF/image analysis is active.
 - Guideline PDF parsing is active.
 - TQE.csv reference loading is active.
+- Database viewer UI is active.
 - Model prediction is inactive.
 - Model comparison is inactive.
 - Feature-selection endpoint is inactive.
@@ -39,6 +41,7 @@ It can currently:
 - save OCR text from image uploads
 - save manual labels for promotion outcome
 - organize uploads by the five required upload panels
+- display database counts and recent records in the UI after sign-in
 
 ### Can it properly read and organize contents from file uploads?
 
@@ -142,6 +145,15 @@ Implemented in:
 
 - [public/index.html](/c:/Users/PC/faculty-promotion-system/public/index.html:16)
 - [public/app.js](/c:/Users/PC/faculty-promotion-system/public/app.js:1)
+
+### Database viewer
+
+Implemented in:
+
+- [src/server.ts](/c:/Users/PC/faculty-promotion-system/src/server.ts:658)
+- [public/index.html](/c:/Users/PC/faculty-promotion-system/public/index.html:204)
+- [public/app.js](/c:/Users/PC/faculty-promotion-system/public/app.js:125)
+- [public/styles.css](/c:/Users/PC/faculty-promotion-system/public/styles.css:184)
 
 ## Detailed System Workflow
 
@@ -344,6 +356,34 @@ How it works:
 
 This is the strongest part of the current system for future machine learning readiness.
 
+### 10. Database viewer behavior
+
+After signing in, the UI now exposes a simple database viewer.
+
+Backend route:
+
+- `GET /api/admin/database-overview`
+
+What it currently shows:
+
+- total users
+- total faculty profiles
+- total uploaded documents
+- total training examples
+- total predictions
+- recent users
+- recent faculty profiles
+- recent uploaded documents
+- recent training examples
+
+How it works:
+
+- the route is protected by authentication
+- the frontend loads it after sign-in and after key write actions
+- the UI renders table views instead of raw JSON dumps
+
+This makes it easier to verify that uploads, faculty records, and labels are actually being written to PostgreSQL.
+
 ## Database Storage Design
 
 The current schema supports collection and traceability well.
@@ -533,7 +573,24 @@ Impact:
 
 - deployment architecture still needs a real file-storage design
 
-### 5. Session model is simple
+### 5. Database viewer is operational but basic
+
+The database viewer is useful for validation, but it is still a lightweight operational view.
+
+Current limitation:
+
+- no search
+- no filters
+- no pagination
+- no per-record drill-down
+- no export tools
+
+Impact:
+
+- useful for debugging and demos
+- not yet a full admin data-management interface
+
+### 6. Session model is simple
 
 The current cookie session is signed and useful, but it is still a lightweight custom approach.
 
@@ -558,7 +615,7 @@ Deploy and validate the database.
 
 Why:
 
-- the schema is ready, but real persistence must be verified in a live PostgreSQL environment
+- local PostgreSQL validation is done, but deployment persistence still needs to be verified in the real hosted environment
 
 ### Priority 3
 
@@ -598,16 +655,31 @@ Only after enough labeled data exists, reactivate:
 
 The following work is still needed after this PR:
 
-- provision and connect a real PostgreSQL database
+- provision and connect the hosted PostgreSQL database
 - run `prisma migrate deploy` in the target environment
-- validate user registration/login against the live database
-- validate faculty intake, uploads, and training labels against the live database
+- validate user registration/login against the hosted database
+- validate faculty intake, uploads, and training labels against the hosted database
 - implement `.xls/.xlsx` parsing for the `Tallied Points` panel
 - normalize CSV tallied-point data into structured database records
 - map parsed uploads to exact NBC 461 annex categories and scoring rules
 - define a production file-storage strategy for uploaded source files
 - decide whether to keep custom cookie sessions or replace them with a fuller auth/session solution
 - reactivate model endpoints only after enough labeled data exists
+
+## Local Validation Completed
+
+The following has already been validated in local development using a working PostgreSQL instance:
+
+- Prisma migration applied successfully
+- tables created successfully
+- user registration persisted
+- faculty record intake persisted
+- OCR/image upload persisted
+- training-label update persisted
+- training example retrieval worked
+- database overview route returned real stored records
+
+This means local development persistence is already operational. The remaining database work is mainly about hosted deployment readiness, not basic functionality.
 
 ## Final Conclusion
 
