@@ -18,6 +18,7 @@ import type {
   UploadPanelKey,
 } from './types';
 import { featureKeys } from './types';
+import { uploadPanelKeywordMap, uploadPanelLabelMap } from './uploadPanels';
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -90,15 +91,7 @@ export const analyzeDocumentContent = (
   const extraction = extractDocumentInsights(text);
   const normalizedText = text.toLowerCase();
 
-  const categoryMap: Record<UploadPanelKey, string[]> = {
-    kra_instruction: ['teaching effectiveness', 'curriculum', 'thesis', 'mentorship', 'instruction'],
-    kra_research: ['research', 'inventions', 'creative works', 'publication', 'patent'],
-    kra_extension: ['extension', 'community', 'service to the community', 'outreach'],
-    kra_professional_development: ['professional development', 'training', 'seminar', 'certification'],
-    tallied_points: ['total', 'points', 'rating', 'score', 'summary'],
-  };
-
-  const detectedCategories = categoryMap[panelKey].filter((term) => normalizedText.includes(term));
+  const detectedCategories = uploadPanelKeywordMap[panelKey].filter((term) => normalizedText.includes(term));
   const keywordHits = [
     'teaching effectiveness',
     'curriculum',
@@ -410,18 +403,10 @@ function buildDocumentSummary(
   detectedCategories: string[],
   textLength: number,
 ): string {
-  const panelLabels: Record<UploadPanelKey, string> = {
-    kra_instruction: 'Instruction',
-    kra_research: 'Research, Invention, and Creative Work',
-    kra_extension: 'Extension Services',
-    kra_professional_development: 'Professional Development',
-    tallied_points: 'Tallied Points',
-  };
-
   const fieldCount = detectedFields.length;
   const categoryCount = detectedCategories.length;
 
-  return `${panelLabels[panelKey]} analysis detected ${fieldCount} score field(s), ${categoryCount} panel-aligned category match(es), and ${textLength} extracted characters.`;
+  return `${uploadPanelLabelMap[panelKey]} analysis detected ${fieldCount} score field(s), ${categoryCount} panel-aligned category match(es), and ${textLength} extracted characters.`;
 }
 
 function calculateBaseProbability(features: FeatureVector): number {

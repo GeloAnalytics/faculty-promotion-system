@@ -16,34 +16,19 @@
     <div class="page-shell">
       <header class="hero">
         <div class="hero-copy">
-          <p class="eyebrow">Employee Workspace</p>
-          <h1>Build your faculty submission in one place.</h1>
+          <p class="eyebrow">Employee Portal</p>
+          <h1 id="workspace-greeting">Hello. Enter your faculty record and upload your supporting documents here for faculty promotion.</h1>
           <p class="hero-text">
-            Employees can save the base faculty record, upload evidence files by panel, and monitor a draft point
-            summary from the uploaded data.
+            Complete your faculty record and upload the supporting documents needed for faculty promotion.
           </p>
-          <div class="hero-actions">
-            <button class="button button-primary" data-scroll-target="#faculty-panel">Open Faculty Record</button>
-            <button class="button button-secondary" data-scroll-target="#draft-points-panel">View Draft Points</button>
-            <button class="button button-ghost" data-action="logout" type="button">Log Out</button>
-          </div>
-        </div>
-        <div class="hero-stats">
-          <div class="stat-card">
-            <span class="stat-label">System Status</span>
-            <strong id="health-status">Loading...</strong>
-          </div>
-          <div class="stat-card">
-            <span class="stat-label">Model Status</span>
-            <strong id="model-status">Loading...</strong>
-          </div>
-          <div class="stat-card">
-            <span class="stat-label">Guideline PDF</span>
-            <strong id="health-guideline">Loading...</strong>
-          </div>
-          <div class="stat-card">
-            <span class="stat-label">Signed In User</span>
-            <strong id="session-user">Guest</strong>
+          <div class="hero-meta">
+            <div class="stat-card session-card">
+              <span class="stat-label">Signed In User</span>
+              <strong id="session-user">Guest</strong>
+            </div>
+            <div class="hero-actions">
+              <button class="button button-ghost" data-action="logout" type="button">Log Out</button>
+            </div>
           </div>
         </div>
       </header>
@@ -133,12 +118,12 @@
         <section class="panel panel-wide" id="draft-points-panel">
           <div class="panel-heading">
             <div>
-              <p class="section-kicker">Draft Points</p>
-              <h2>Employee-side draft score and coverage summary</h2>
+              <p class="section-kicker">Approximate Scoring</p>
+              <h2>Employee-side approximate score and coverage summary</h2>
             </div>
           </div>
           <div id="employee-points" class="database-viewer">
-            <div class="notice">Save a faculty record and upload files to generate a draft score view.</div>
+            <div class="notice">Save a faculty record and upload files to generate an approximate score view.</div>
           </div>
         </section>
 
@@ -146,7 +131,7 @@
           <div class="panel-heading">
             <div>
               <p class="section-kicker">Upload Panels</p>
-              <h2>Submit evidence by KRA and tallied points</h2>
+              <h2>Submit evidence for each criterion under every KRA</h2>
             </div>
           </div>
           <div id="upload-panel-grid" class="upload-panel-grid"></div>

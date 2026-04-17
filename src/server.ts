@@ -24,6 +24,7 @@ import {
   runThesisWorkflow,
   summarizeTqeReferenceData,
 } from './utils';
+import { uploadPanels } from './uploadPanels';
 import { extractImageTextWithOcr, isOcrReady, type OcrConfig, type OcrProvider } from './ocr';
 import type {
   FacultyIngestionPayload,
@@ -81,38 +82,6 @@ const ocrConfig: OcrConfig = {
   fileFieldName: env.OCR_FILE_FIELD_NAME,
   timeoutMs: env.OCR_TIMEOUT_MS,
 };
-const uploadPanels: UploadPanelDefinition[] = [
-  {
-    key: 'kra_instruction',
-    title: 'Key Result Area 1: Instruction',
-    description: 'Upload instructional evidence and related requirement documents.',
-    acceptedFormats: ['pdf', 'png', 'jpg', 'jpeg', 'bmp', 'tif', 'tiff'],
-  },
-  {
-    key: 'kra_research',
-    title: 'Key Result Area 2: Research, Invention, and Creative Work',
-    description: 'Upload research outputs, inventions, and creative-work evidence.',
-    acceptedFormats: ['pdf', 'png', 'jpg', 'jpeg', 'bmp', 'tif', 'tiff'],
-  },
-  {
-    key: 'kra_extension',
-    title: 'Key Result Area 3: Extension Services',
-    description: 'Upload extension-service records and supporting documents.',
-    acceptedFormats: ['pdf', 'png', 'jpg', 'jpeg', 'bmp', 'tif', 'tiff'],
-  },
-  {
-    key: 'kra_professional_development',
-    title: 'Key Result Area 4: Professional Development',
-    description: 'Upload training, seminar, and professional-development evidence.',
-    acceptedFormats: ['pdf', 'png', 'jpg', 'jpeg', 'bmp', 'tif', 'tiff'],
-  },
-  {
-    key: 'tallied_points',
-    title: 'Tallied Points',
-    description: 'Upload Excel or CSV files containing tallied or consolidated points.',
-    acceptedFormats: ['xlsx', 'xls', 'csv'],
-  },
-];
 
 const personalDataSchema = z.object({
   employeeId: z.string().trim().optional(),
@@ -384,6 +353,7 @@ app.post(
     try {
       const kind = parseDocumentKind(req.body.kind);
       const panelKey = parseUploadPanelKey(req.body.panelKey);
+      const panelDefinition = findUploadPanelDefinition(panelKey);
       const requestedProfileId =
         typeof req.body.profileId === 'string' && req.body.profileId.trim() ? req.body.profileId : null;
       const mimeType = req.file.mimetype.toLowerCase();
@@ -393,43 +363,9 @@ app.post(
       const linkage = await resolveUploadProfileLink(req.user!.id, fileName, requestedProfileId);
       const profileId = linkage.profileId;
 
-      if (panelKey === 'tallied_points' && !isSpreadsheet && !isCsv) {
+      if (isSpreadsheet || isCsv) {
         return res.status(400).json({
-          error: 'Tallied Points panel only accepts Excel or CSV files',
-        });
-      }
-
-      if (panelKey !== 'tallied_points' && (isSpreadsheet || isCsv)) {
-        return res.status(400).json({
-          error: 'Spreadsheet files are only accepted in the Tallied Points panel',
-        });
-      }
-
-      if (isSpreadsheet) {
-        const savedDocument = await prisma.uploadedDocument.create({
-          data: {
-            ownerUserId: req.user!.id,
-            profileId,
-            kind,
-            originalName: fileName,
-            mimeType: req.file.mimetype,
-            extractionMetadata: toPrismaJson({
-              panelKey,
-              storedForTraining: true,
-              extractionMode: 'spreadsheet-reference',
-              sizeBytes: req.file.size,
-              linkage,
-            }),
-          },
-        });
-
-        return res.json({
-          fileType: 'spreadsheet',
-          documentId: savedDocument.id,
-          panelKey,
-          profileId,
-          linkage,
-          message: 'Spreadsheet stored for training-data preparation.',
+          error: 'Spreadsheet and CSV uploads are no longer supported in the criterion-based upload panels',
         });
       }
 
@@ -447,6 +383,7 @@ app.post(
             extractedText: data.text,
             extractionMetadata: toPrismaJson({
               panelKey,
+              panelTitle: panelDefinition.title,
               storedForTraining: true,
               analysis,
               linkage,
@@ -480,6 +417,7 @@ app.post(
             extractedText,
             extractionMetadata: toPrismaJson({
               panelKey,
+              panelTitle: panelDefinition.title,
               storedForTraining: true,
               ocr: {
                 provider: ocrResult.provider,
@@ -498,41 +436,6 @@ app.post(
           profileId,
           linkage,
           textPreview: extractedText.slice(0, 1000),
-          analysis,
-        });
-      }
-
-      if (isCsv) {
-        const csvText = req.file.buffer.toString('utf8');
-        const analysis = analyzeDocumentContent(csvText, panelKey, 'csv');
-
-        const savedDocument = await prisma.uploadedDocument.create({
-          data: {
-            ownerUserId: req.user!.id,
-            profileId,
-            kind,
-            originalName: fileName,
-            mimeType: req.file.mimetype,
-            extractedText: csvText,
-            extractionMetadata: toPrismaJson({
-              panelKey,
-              storedForTraining: true,
-              analysis,
-              linkage,
-              csv: {
-                rowCount: csvText.split(/\r?\n/).filter(Boolean).length,
-              },
-            }),
-          },
-        });
-
-        return res.json({
-          fileType: 'csv',
-          documentId: savedDocument.id,
-          panelKey,
-          profileId,
-          linkage,
-          textPreview: csvText.slice(0, 1000),
           analysis,
         });
       }
@@ -654,9 +557,11 @@ app.patch(
           labelSource: z.string().trim().optional(),
           datasetSplit: z.string().trim().optional(),
           notes: z.string().trim().optional(),
+          criterionScores: z.record(z.coerce.number().min(0)).optional(),
           validated: z.boolean().optional(),
         })
         .parse(req.body);
+      const evaluatorAssessment = createEvaluatorAssessment(payload.notes, payload.criterionScores);
 
       const trainingExample = await prisma.trainingExample.update({
         where: { id: req.params.id },
@@ -664,7 +569,7 @@ app.patch(
           labelPromoted: payload.labelPromoted,
           labelSource: payload.labelSource,
           datasetSplit: payload.datasetSplit,
-          notes: payload.notes,
+          notes: serializeEvaluatorAssessment(evaluatorAssessment),
           status: payload.validated ? TrainingExampleStatus.VALIDATED : TrainingExampleStatus.LABELED,
         },
       });
@@ -979,8 +884,17 @@ app.get('/api/evaluator/review-queue', requireRole(UserRole.EVALUATOR, UserRole.
           createdAt: document.createdAt,
           metadata: summarizeDocumentMetadata(document.extractionMetadata),
         })),
-        trainingItems: profile.trainingItems,
+        trainingItems: profile.trainingItems.map((item) => ({
+          ...item,
+          evaluatorAssessment: parseEvaluatorAssessment(item.notes),
+        })),
         latestTrainingExampleId: profile.trainingItems[0]?.id ?? null,
+        latestTrainingItem: profile.trainingItems[0]
+          ? {
+              ...profile.trainingItems[0],
+              evaluatorAssessment: parseEvaluatorAssessment(profile.trainingItems[0].notes),
+            }
+          : null,
       })),
     });
   } catch (error) {
@@ -1223,7 +1137,11 @@ function parseDocumentKind(input: unknown): DocumentKind {
 function parseUploadPanelKey(input: unknown): UploadPanelDefinition['key'] {
   const value = typeof input === 'string' ? input : '';
   const matched = uploadPanels.find((panel) => panel.key === value);
-  return matched ? matched.key : 'kra_instruction';
+  return matched ? matched.key : uploadPanels[0].key;
+}
+
+function findUploadPanelDefinition(panelKey: UploadPanelDefinition['key']) {
+  return uploadPanels.find((panel) => panel.key === panelKey) ?? uploadPanels[0];
 }
 
 function hashPassword(password: string, salt: string): string {
@@ -1250,11 +1168,18 @@ function getHomePathForRole(role: UserRole | SessionUser['role']) {
 
 type ParsedDocumentMetadata = {
   panelKey: string | null;
+  panelTitle: string | null;
   analysisSummary: string | null;
   extractedScores: Record<string, number>;
   completenessScore: number | null;
   qualityScore: number | null;
   linkage: string | null;
+};
+
+type EvaluatorAssessment = {
+  freeformNotes: string;
+  criterionScores: Partial<Record<UploadPanelDefinition['key'], number>>;
+  totalScore: number;
 };
 
 function summarizeDocumentMetadata(value: unknown): ParsedDocumentMetadata {
@@ -1265,6 +1190,7 @@ function summarizeDocumentMetadata(value: unknown): ParsedDocumentMetadata {
 
   return {
     panelKey: typeof metadata.panelKey === 'string' ? metadata.panelKey : null,
+    panelTitle: typeof metadata.panelTitle === 'string' ? metadata.panelTitle : null,
     analysisSummary: typeof analysis.summary === 'string' ? analysis.summary : null,
     extractedScores,
     completenessScore: readOptionalNumber(analysis.completenessScore),
@@ -1274,6 +1200,91 @@ function summarizeDocumentMetadata(value: unknown): ParsedDocumentMetadata {
         ? `${linkage.matchedBy}${typeof linkage.matchedName === 'string' ? `: ${linkage.matchedName}` : ''}`
         : null,
   };
+}
+
+function createEvaluatorAssessment(notes: string | undefined, criterionScores: Record<string, number> | undefined): EvaluatorAssessment {
+  const sanitizedScores = sanitizeCriterionScores(criterionScores ?? {});
+  return {
+    freeformNotes: notes ?? '',
+    criterionScores: sanitizedScores,
+    totalScore: roundScore(
+      Object.values(sanitizedScores).reduce((sum, value) => {
+        return sum + value;
+      }, 0),
+    ),
+  };
+}
+
+function sanitizeCriterionScores(input: Record<string, number>) {
+  const sanitized: Partial<Record<UploadPanelDefinition['key'], number>> = {};
+  const sharedCapTotals = new Map<string, number>();
+
+  for (const panel of uploadPanels) {
+    const value = input[panel.key];
+    if (typeof value !== 'number' || !Number.isFinite(value)) {
+      continue;
+    }
+
+    const roundedValue = roundScore(Math.max(0, Math.min(value, panel.maxScore)));
+    sanitized[panel.key] = roundedValue;
+
+    if (panel.sharedCapKey) {
+      sharedCapTotals.set(panel.sharedCapKey, (sharedCapTotals.get(panel.sharedCapKey) ?? 0) + roundedValue);
+    }
+  }
+
+  for (const panel of uploadPanels) {
+    if (!panel.sharedCapKey || !panel.sharedCapMaxScore) {
+      continue;
+    }
+
+    const total = sharedCapTotals.get(panel.sharedCapKey) ?? 0;
+    if (total > panel.sharedCapMaxScore) {
+      throw new Error(`${panel.sharedCapLabel ?? 'Shared criterion'} cannot exceed ${panel.sharedCapMaxScore} points`);
+    }
+  }
+
+  return sanitized;
+}
+
+function parseEvaluatorAssessment(value: unknown): EvaluatorAssessment {
+  if (typeof value !== 'string' || !value.trim()) {
+    return {
+      freeformNotes: '',
+      criterionScores: {},
+      totalScore: 0,
+    };
+  }
+
+  try {
+    const parsed = JSON.parse(value) as Record<string, unknown>;
+    const scoreRecord = readNumberRecord(parsed.criterionScores);
+    const sanitizedScores = sanitizeCriterionScores(scoreRecord);
+    const totalScore =
+      typeof parsed.totalScore === 'number' && Number.isFinite(parsed.totalScore)
+        ? roundScore(parsed.totalScore)
+        : roundScore(Object.values(sanitizedScores).reduce((sum, score) => sum + score, 0));
+
+    return {
+      freeformNotes: typeof parsed.freeformNotes === 'string' ? parsed.freeformNotes : '',
+      criterionScores: sanitizedScores,
+      totalScore,
+    };
+  } catch {
+    return {
+      freeformNotes: value,
+      criterionScores: {},
+      totalScore: 0,
+    };
+  }
+}
+
+function serializeEvaluatorAssessment(assessment: EvaluatorAssessment) {
+  return JSON.stringify({
+    freeformNotes: assessment.freeformNotes,
+    criterionScores: assessment.criterionScores,
+    totalScore: assessment.totalScore,
+  });
 }
 
 function buildDraftPointSummary(
@@ -1318,7 +1329,7 @@ function buildDraftPointSummary(
   const overallEstimate = instruction + research + extension + professionalDevelopment + ipcrAverage;
 
   return {
-    note: 'Draft estimate only. Evaluator review is still required for the official score.',
+    note: 'Approximate estimate only. Evaluator review is still required for the official score.',
     facultyName: typeof personalData.fullName === 'string' ? personalData.fullName : null,
     semester: profile?.semester ?? null,
     categories: {
