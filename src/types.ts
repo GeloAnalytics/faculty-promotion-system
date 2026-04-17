@@ -16,7 +16,7 @@ export const featureKeys = [
 export type FeatureKey = (typeof featureKeys)[number];
 export type FeatureVector = Record<FeatureKey, number>;
 
-export type AppUserRole = 'ADMIN' | 'ANALYST' | 'STAFF';
+export type AppUserRole = 'ADMIN' | 'EMPLOYEE' | 'EVALUATOR';
 export type UploadDocumentKind = 'REQUIREMENT' | 'GUIDELINE' | 'TRAINING_SUPPORT';
 export type TrainingStatus = 'DRAFT' | 'LABELED' | 'VALIDATED';
 export type UploadPanelKey =
@@ -27,7 +27,7 @@ export type UploadPanelKey =
   | 'tallied_points';
 
 export interface PersonalData {
-  teacherId?: string;
+  employeeId?: string;
   fullName: string;
   age?: number;
   sex?: string;

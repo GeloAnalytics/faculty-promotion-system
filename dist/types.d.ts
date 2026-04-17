@@ -1,12 +1,12 @@
 export declare const featureKeys: readonly ["age", "yearsInService", "highestEducationalAttainmentLevel", "teachingEffectiveness", "researchOutputs", "extensionServices", "administrativeExperience", "professionalDevelopmentHours", "ipcrAverage", "promotionHistoryCount", "documentCompleteness", "documentQualityScore"];
 export type FeatureKey = (typeof featureKeys)[number];
 export type FeatureVector = Record<FeatureKey, number>;
-export type AppUserRole = 'ADMIN' | 'ANALYST' | 'STAFF';
+export type AppUserRole = 'ADMIN' | 'EMPLOYEE' | 'EVALUATOR';
 export type UploadDocumentKind = 'REQUIREMENT' | 'GUIDELINE' | 'TRAINING_SUPPORT';
 export type TrainingStatus = 'DRAFT' | 'LABELED' | 'VALIDATED';
 export type UploadPanelKey = 'kra_instruction' | 'kra_research' | 'kra_extension' | 'kra_professional_development' | 'tallied_points';
 export interface PersonalData {
-    teacherId?: string;
+    employeeId?: string;
     fullName: string;
     age?: number;
     sex?: string;

@@ -4,11 +4,8 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 const node_crypto_1 = __importDefault(require("node:crypto"));
-const node_child_process_1 = require("node:child_process");
 const node_fs_1 = __importDefault(require("node:fs"));
-const node_os_1 = __importDefault(require("node:os"));
 const node_path_1 = __importDefault(require("node:path"));
-const node_util_1 = require("node:util");
 const express_1 = __importDefault(require("express"));
 const cors_1 = __importDefault(require("cors"));
 const multer_1 = __importDefault(require("multer"));
@@ -16,6 +13,7 @@ const pdf_parse_1 = __importDefault(require("pdf-parse"));
 const client_1 = require("@prisma/client");
 const zod_1 = require("zod");
 const utils_1 = require("./utils");
+const ocr_1 = require("./ocr");
 const envSchema = zod_1.z.object({
     DATABASE_URL: zod_1.z.string().min(1),
     PORT: zod_1.z.coerce.number().int().positive().default(3000),
@@ -23,6 +21,12 @@ const envSchema = zod_1.z.object({
     AUTH_SECRET: zod_1.z.string().min(32).default('development-auth-secret-change-me-123456'),
     CORS_ORIGIN: zod_1.z.string().default('http://localhost:3000'),
     TRUST_PROXY: zod_1.z.coerce.number().int().nonnegative().default(1),
+    OCR_PROVIDER: zod_1.z.enum(['windows', 'http', 'ocrspace', 'disabled']).default('windows'),
+    OCR_API_URL: zod_1.z.string().trim().optional(),
+    OCR_API_KEY: zod_1.z.string().trim().optional(),
+    OCR_API_KEY_HEADER: zod_1.z.string().trim().default('Authorization'),
+    OCR_FILE_FIELD_NAME: zod_1.z.string().trim().default('file'),
+    OCR_TIMEOUT_MS: zod_1.z.coerce.number().int().positive().default(30000),
 });
 const env = envSchema.parse(process.env);
 const isProduction = env.NODE_ENV === 'production';
@@ -40,7 +44,15 @@ const tqeReferenceSummary = (0, utils_1.summarizeTqeReferenceData)(tqeReferenceR
 const publicDir = node_path_1.default.join(repoRoot, 'public');
 const ocrScriptPath = node_path_1.default.join(repoRoot, 'scripts', 'ocr-image.ps1');
 const sessionCookieName = 'fps_session';
-const execFileAsync = (0, node_util_1.promisify)(node_child_process_1.execFile);
+const ocrConfig = {
+    provider: env.OCR_PROVIDER,
+    scriptPath: ocrScriptPath,
+    apiUrl: env.OCR_API_URL,
+    apiKey: env.OCR_API_KEY,
+    apiKeyHeader: env.OCR_API_KEY_HEADER,
+    fileFieldName: env.OCR_FILE_FIELD_NAME,
+    timeoutMs: env.OCR_TIMEOUT_MS,
+};
 const uploadPanels = [
     {
         key: 'kra_instruction',
@@ -74,7 +86,7 @@ const uploadPanels = [
     },
 ];
 const personalDataSchema = zod_1.z.object({
-    teacherId: zod_1.z.string().trim().optional(),
+    employeeId: zod_1.z.string().trim().optional(),
     fullName: zod_1.z.string().trim().min(1),
     age: zod_1.z.number().nonnegative().optional(),
     sex: zod_1.z.string().trim().optional(),
@@ -118,6 +130,9 @@ const registerSchema = zod_1.z.object({
     fullName: zod_1.z.string().trim().min(2),
     email: zod_1.z.string().trim().email(),
     password: zod_1.z.string().min(8),
+    role: zod_1.z.nativeEnum(client_1.UserRole).refine((value) => value === client_1.UserRole.EMPLOYEE || value === client_1.UserRole.EVALUATOR, {
+        message: 'Registration role must be Employee or Evaluator',
+    }),
 });
 const loginSchema = zod_1.z.object({
     email: zod_1.z.string().trim().email(),
@@ -185,6 +200,9 @@ app.use((0, cors_1.default)({
 app.use(express_1.default.json({ limit: '2mb' }));
 app.use(express_1.default.urlencoded({ extended: true, limit: '2mb' }));
 app.use(attachSessionUser);
+app.get('/evaluator', (_req, res) => {
+    res.sendFile(node_path_1.default.join(publicDir, 'evaluator.html'));
+});
 app.use(express_1.default.static(publicDir, { extensions: ['html'], maxAge: isProduction ? '1h' : 0 }));
 app.get('/api/health', (_req, res) => {
     res.json({
@@ -202,7 +220,8 @@ app.get('/api/health', (_req, res) => {
             tqeRows: tqeReferenceRecords.length,
             guidelinePdfLoaded: guidelinePdfPath !== null,
             guidelinePdfFileName: guidelinePdfPath ? node_path_1.default.basename(guidelinePdfPath) : null,
-            imageOcrReady: false,
+            imageOcrReady: (0, ocr_1.isOcrReady)(ocrConfig),
+            imageOcrProvider: ocrConfig.provider,
         },
         model: {
             status: 'inactive',
@@ -225,12 +244,12 @@ app.post('/api/auth/register', async (req, res) => {
                 email: payload.email.toLowerCase(),
                 passwordHash,
                 passwordSalt,
-                role: client_1.UserRole.STAFF,
+                role: payload.role,
             },
         });
         const sessionUser = toSessionUser(user);
         setSessionCookie(res, sessionUser);
-        return res.status(201).json({ user: sessionUser });
+        return res.status(201).json({ user: sessionUser, homePath: getHomePathForRole(sessionUser.role) });
     }
     catch (error) {
         return handleRequestError(res, error);
@@ -245,7 +264,7 @@ app.post('/api/auth/login', async (req, res) => {
         }
         const sessionUser = toSessionUser(user);
         setSessionCookie(res, sessionUser);
-        return res.json({ user: sessionUser });
+        return res.json({ user: sessionUser, homePath: getHomePathForRole(sessionUser.role) });
     }
     catch (error) {
         return handleRequestError(res, error);
@@ -256,7 +275,10 @@ app.post('/api/auth/logout', (_req, res) => {
     res.status(204).send();
 });
 app.get('/api/auth/me', requireAuth, (req, res) => {
-    res.json({ user: req.user });
+    res.json({
+        user: req.user,
+        homePath: getHomePathForRole(req.user.role),
+    });
 });
 app.get('/api/reference/tqe-summary', (_req, res) => {
     res.json({
@@ -288,18 +310,20 @@ app.get('/api/reference/guidelines', async (_req, res) => {
         return handleRequestError(res, error);
     }
 });
-app.post('/api/documents/extract', requireAuth, upload.single('document'), async (req, res) => {
+app.post('/api/documents/extract', requireRole(client_1.UserRole.EMPLOYEE, client_1.UserRole.ADMIN), upload.single('document'), async (req, res) => {
     if (!req.file) {
         return res.status(400).json({ error: 'No document uploaded' });
     }
     try {
         const kind = parseDocumentKind(req.body.kind);
         const panelKey = parseUploadPanelKey(req.body.panelKey);
-        const profileId = typeof req.body.profileId === 'string' && req.body.profileId.trim() ? req.body.profileId : null;
+        const requestedProfileId = typeof req.body.profileId === 'string' && req.body.profileId.trim() ? req.body.profileId : null;
         const mimeType = req.file.mimetype.toLowerCase();
         const fileName = req.file.originalname;
         const isCsv = /\.csv$/i.test(fileName);
         const isSpreadsheet = /\.(xlsx|xls)$/i.test(fileName);
+        const linkage = await resolveUploadProfileLink(req.user.id, fileName, requestedProfileId);
+        const profileId = linkage.profileId;
         if (panelKey === 'tallied_points' && !isSpreadsheet && !isCsv) {
             return res.status(400).json({
                 error: 'Tallied Points panel only accepts Excel or CSV files',
@@ -323,6 +347,7 @@ app.post('/api/documents/extract', requireAuth, upload.single('document'), async
                         storedForTraining: true,
                         extractionMode: 'spreadsheet-reference',
                         sizeBytes: req.file.size,
+                        linkage,
                     }),
                 },
             });
@@ -330,6 +355,8 @@ app.post('/api/documents/extract', requireAuth, upload.single('document'), async
                 fileType: 'spreadsheet',
                 documentId: savedDocument.id,
                 panelKey,
+                profileId,
+                linkage,
                 message: 'Spreadsheet stored for training-data preparation.',
             });
         }
@@ -348,6 +375,7 @@ app.post('/api/documents/extract', requireAuth, upload.single('document'), async
                         panelKey,
                         storedForTraining: true,
                         analysis,
+                        linkage,
                     }),
                 },
             });
@@ -355,49 +383,45 @@ app.post('/api/documents/extract', requireAuth, upload.single('document'), async
                 fileType: 'pdf',
                 documentId: savedDocument.id,
                 panelKey,
+                profileId,
+                linkage,
                 textPreview: data.text.slice(0, 1000),
                 analysis,
             });
         }
         if (mimeType.startsWith('image/') || /\.(png|jpg|jpeg|bmp|tif|tiff)$/i.test(fileName)) {
-            const tempImagePath = node_path_1.default.join(node_os_1.default.tmpdir(), `fps-ocr-${node_crypto_1.default.randomUUID()}${node_path_1.default.extname(fileName) || '.png'}`);
-            try {
-                node_fs_1.default.writeFileSync(tempImagePath, req.file.buffer);
-                const { stdout } = await execFileAsync('powershell', ['-ExecutionPolicy', 'Bypass', '-File', ocrScriptPath, '-ImagePath', tempImagePath], { windowsHide: true, maxBuffer: 5 * 1024 * 1024 });
-                const ocrPayload = JSON.parse(stdout);
-                const extractedText = (ocrPayload.text ?? '').trim();
-                const analysis = (0, utils_1.analyzeDocumentContent)(extractedText, panelKey, 'image');
-                const savedDocument = await prisma.uploadedDocument.create({
-                    data: {
-                        ownerUserId: req.user.id,
-                        profileId,
-                        kind,
-                        originalName: fileName,
-                        mimeType: req.file.mimetype,
-                        extractedText,
-                        extractionMetadata: toPrismaJson({
-                            panelKey,
-                            storedForTraining: true,
-                            ocr: {
-                                lineCount: ocrPayload.lineCount ?? 0,
-                            },
-                            analysis,
-                        }),
-                    },
-                });
-                return res.json({
-                    fileType: 'image',
-                    documentId: savedDocument.id,
-                    panelKey,
-                    textPreview: extractedText.slice(0, 1000),
-                    analysis,
-                });
-            }
-            finally {
-                if (node_fs_1.default.existsSync(tempImagePath)) {
-                    node_fs_1.default.unlinkSync(tempImagePath);
-                }
-            }
+            const ocrResult = await (0, ocr_1.extractImageTextWithOcr)(req.file.buffer, fileName, ocrConfig);
+            const extractedText = ocrResult.text.trim();
+            const analysis = (0, utils_1.analyzeDocumentContent)(extractedText, panelKey, 'image');
+            const savedDocument = await prisma.uploadedDocument.create({
+                data: {
+                    ownerUserId: req.user.id,
+                    profileId,
+                    kind,
+                    originalName: fileName,
+                    mimeType: req.file.mimetype,
+                    extractedText,
+                    extractionMetadata: toPrismaJson({
+                        panelKey,
+                        storedForTraining: true,
+                        ocr: {
+                            provider: ocrResult.provider,
+                            lineCount: ocrResult.lineCount,
+                        },
+                        analysis,
+                        linkage,
+                    }),
+                },
+            });
+            return res.json({
+                fileType: 'image',
+                documentId: savedDocument.id,
+                panelKey,
+                profileId,
+                linkage,
+                textPreview: extractedText.slice(0, 1000),
+                analysis,
+            });
         }
         if (isCsv) {
             const csvText = req.file.buffer.toString('utf8');
@@ -414,6 +438,7 @@ app.post('/api/documents/extract', requireAuth, upload.single('document'), async
                         panelKey,
                         storedForTraining: true,
                         analysis,
+                        linkage,
                         csv: {
                             rowCount: csvText.split(/\r?\n/).filter(Boolean).length,
                         },
@@ -424,6 +449,8 @@ app.post('/api/documents/extract', requireAuth, upload.single('document'), async
                 fileType: 'csv',
                 documentId: savedDocument.id,
                 panelKey,
+                profileId,
+                linkage,
                 textPreview: csvText.slice(0, 1000),
                 analysis,
             });
@@ -434,14 +461,14 @@ app.post('/api/documents/extract', requireAuth, upload.single('document'), async
         return handleRequestError(res, error);
     }
 });
-app.post('/api/faculty/ingest', requireAuth, async (req, res) => {
+app.post('/api/faculty/ingest', requireRole(client_1.UserRole.EMPLOYEE, client_1.UserRole.ADMIN), async (req, res) => {
     try {
         const payload = facultyIngestionSchema.parse(req.body);
         const features = (0, utils_1.buildFeatureVector)(payload);
         const tqeBenchmarks = (0, utils_1.findClosestTqeBenchmarks)(features, tqeReferenceRecords);
         const profile = await prisma.facultyProfile.create({
             data: {
-                teacherId: payload.personalData.teacherId,
+                employeeId: payload.personalData.employeeId,
                 name: payload.personalData.fullName,
                 semester: payload.performanceReview.reviewPeriod,
                 teachingQuality: payload.personalData.academicRank,
@@ -464,9 +491,14 @@ app.post('/api/faculty/ingest', requireAuth, async (req, res) => {
                 featureSnapshot: toPrismaJson(features),
             },
         });
+        const linkedDocuments = await attachExistingDocumentsToProfile(req.user.id, profile.id, {
+            fullName: payload.personalData.fullName,
+            employeeId: payload.personalData.employeeId,
+        });
         return res.status(201).json({
             profileId: profile.id,
             trainingExampleId: trainingDraft.id,
+            linkedDocuments,
             features,
             model: {
                 status: 'inactive',
@@ -497,7 +529,7 @@ app.post('/api/predictions/generate', requireAuth, async (req, res) => {
         details: 'The system is currently configured for training-data collection rather than live prediction.',
     });
 });
-app.post('/api/training/examples', requireAuth, async (req, res) => {
+app.post('/api/training/examples', requireRole(client_1.UserRole.EVALUATOR, client_1.UserRole.ADMIN), async (req, res) => {
     try {
         const payload = trainingSubmissionSchema.parse(req.body);
         const trainingExample = await prisma.trainingExample.create({
@@ -520,7 +552,7 @@ app.post('/api/training/examples', requireAuth, async (req, res) => {
         return handleRequestError(res, error);
     }
 });
-app.patch('/api/training/examples/:id/label', requireAuth, async (req, res) => {
+app.patch('/api/training/examples/:id/label', requireRole(client_1.UserRole.EVALUATOR, client_1.UserRole.ADMIN), async (req, res) => {
     try {
         const payload = zod_1.z
             .object({
@@ -547,14 +579,14 @@ app.patch('/api/training/examples/:id/label', requireAuth, async (req, res) => {
         return handleRequestError(res, error);
     }
 });
-app.get('/api/training/examples', requireAuth, async (_req, res) => {
+app.get('/api/training/examples', requireRole(client_1.UserRole.EVALUATOR, client_1.UserRole.ADMIN), async (_req, res) => {
     try {
         const trainingExamples = await prisma.trainingExample.findMany({
             take: 50,
             orderBy: { createdAt: 'desc' },
             include: {
                 createdBy: { select: { id: true, fullName: true, email: true, role: true } },
-                profile: { select: { id: true, name: true, teacherId: true } },
+                profile: { select: { id: true, name: true, employeeId: true } },
             },
         });
         return res.json({ items: trainingExamples });
@@ -563,7 +595,7 @@ app.get('/api/training/examples', requireAuth, async (_req, res) => {
         return handleRequestError(res, error);
     }
 });
-app.get('/api/admin/database-overview', requireAuth, async (_req, res) => {
+app.get('/api/admin/database-overview', requireRole(client_1.UserRole.EVALUATOR, client_1.UserRole.ADMIN), async (_req, res) => {
     try {
         const [userCount, profileCount, documentCount, trainingCount, predictionCount] = await Promise.all([
             prisma.user.count(),
@@ -589,7 +621,7 @@ app.get('/api/admin/database-overview', requireAuth, async (_req, res) => {
                 orderBy: { createdAt: 'desc' },
                 select: {
                     id: true,
-                    teacherId: true,
+                    employeeId: true,
                     name: true,
                     semester: true,
                     createdAt: true,
@@ -640,7 +672,7 @@ app.get('/api/admin/database-overview', requireAuth, async (_req, res) => {
         return handleRequestError(res, error);
     }
 });
-app.get('/api/dashboard/:profileId', requireAuth, async (req, res) => {
+app.get('/api/dashboard/:profileId', requireRole(client_1.UserRole.EVALUATOR, client_1.UserRole.ADMIN), async (req, res) => {
     try {
         const profile = await prisma.facultyProfile.findUnique({
             where: { id: req.params.profileId },
@@ -685,6 +717,149 @@ function requireAuth(req, res, next) {
     }
     return next();
 }
+function requireRole(...allowedRoles) {
+    return (req, res, next) => {
+        if (!req.user) {
+            return res.status(401).json({ error: 'Authentication required' });
+        }
+        if (!allowedRoles.includes(req.user.role)) {
+            return res.status(403).json({ error: 'You do not have access to this workspace' });
+        }
+        return next();
+    };
+}
+async function resolveUploadProfileLink(ownerUserId, originalName, requestedProfileId) {
+    if (requestedProfileId) {
+        const explicitProfile = await prisma.facultyProfile.findFirst({
+            where: {
+                id: requestedProfileId,
+                createdByUserId: ownerUserId,
+            },
+            select: {
+                id: true,
+                name: true,
+                employeeId: true,
+            },
+        });
+        if (explicitProfile) {
+            return {
+                profileId: explicitProfile.id,
+                matchedBy: 'explicit',
+                matchedName: explicitProfile.name,
+                matchedEmployeeId: explicitProfile.employeeId ?? null,
+            };
+        }
+    }
+    const profiles = await prisma.facultyProfile.findMany({
+        where: {
+            createdByUserId: ownerUserId,
+        },
+        select: {
+            id: true,
+            name: true,
+            employeeId: true,
+        },
+        orderBy: { createdAt: 'desc' },
+    });
+    const matchedProfile = findBestMatchingProfile(profiles, originalName);
+    if (!matchedProfile) {
+        return {
+            profileId: null,
+            matchedBy: 'unmatched',
+            matchedName: null,
+            matchedEmployeeId: null,
+        };
+    }
+    return {
+        profileId: matchedProfile.id,
+        matchedBy: 'filename',
+        matchedName: matchedProfile.name,
+        matchedEmployeeId: matchedProfile.employeeId ?? null,
+    };
+}
+async function attachExistingDocumentsToProfile(ownerUserId, profileId, profileData) {
+    const pendingDocuments = await prisma.uploadedDocument.findMany({
+        where: {
+            ownerUserId,
+            profileId: null,
+        },
+        select: {
+            id: true,
+            originalName: true,
+        },
+    });
+    const matchedDocuments = pendingDocuments.filter((document) => scoreProfileFilename(profileData.fullName, profileData.employeeId, document.originalName) > 0);
+    if (!matchedDocuments.length) {
+        return {
+            count: 0,
+            documentIds: [],
+            matchedFileNames: [],
+        };
+    }
+    await prisma.uploadedDocument.updateMany({
+        where: {
+            id: {
+                in: matchedDocuments.map((document) => document.id),
+            },
+        },
+        data: {
+            profileId,
+        },
+    });
+    return {
+        count: matchedDocuments.length,
+        documentIds: matchedDocuments.map((document) => document.id),
+        matchedFileNames: matchedDocuments.map((document) => document.originalName),
+    };
+}
+function findBestMatchingProfile(profiles, originalName) {
+    let bestMatch = null;
+    let bestScore = 0;
+    for (const profile of profiles) {
+        const score = scoreProfileFilename(profile.name, profile.employeeId ?? undefined, originalName);
+        if (score > bestScore) {
+            bestScore = score;
+            bestMatch = profile;
+        }
+    }
+    return bestScore > 0 ? bestMatch : null;
+}
+function scoreProfileFilename(fullName, employeeId, originalName) {
+    const normalizedFileName = normalizeForMatch(node_path_1.default.parse(originalName).name);
+    const fileTokens = new Set(tokenizeForMatch(originalName));
+    const nameTokens = tokenizeForMatch(fullName);
+    let score = 0;
+    if (employeeId) {
+        const normalizedEmployeeId = normalizeForMatch(employeeId);
+        if (normalizedEmployeeId && normalizedFileName.includes(normalizedEmployeeId)) {
+            score += 100;
+        }
+    }
+    if (!nameTokens.length) {
+        return score;
+    }
+    const matchedNameTokenCount = nameTokens.filter((token) => fileTokens.has(token)).length;
+    if (matchedNameTokenCount === nameTokens.length) {
+        score += 50 + matchedNameTokenCount;
+    }
+    else if (matchedNameTokenCount >= Math.max(2, nameTokens.length - 1)) {
+        score += 15 + matchedNameTokenCount;
+    }
+    return score;
+}
+function tokenizeForMatch(value) {
+    return normalizeForMatch(value)
+        .split(' ')
+        .filter((token) => token.length >= 2);
+}
+function normalizeForMatch(value) {
+    return value
+        .toLowerCase()
+        .normalize('NFKD')
+        .replace(/[^a-z0-9]+/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
 function parseDocumentKind(input) {
     const normalized = typeof input === 'string' ? input.toUpperCase() : 'REQUIREMENT';
     if (normalized === 'GUIDELINE') {
@@ -714,6 +889,9 @@ function toSessionUser(user) {
         fullName: user.fullName,
         role: user.role,
     };
+}
+function getHomePathForRole(role) {
+    return role === client_1.UserRole.EVALUATOR ? '/evaluator' : '/';
 }
 function setSessionCookie(res, user) {
     const payload = Buffer.from(JSON.stringify({

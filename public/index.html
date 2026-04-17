@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Faculty Promotion Training Data System</title>
+    <title>Faculty Promotion Employee Portal</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -12,18 +12,18 @@
     />
     <link rel="stylesheet" href="/styles.css" />
   </head>
-  <body>
+  <body data-portal="employee">
     <div class="page-shell">
       <header class="hero">
         <div class="hero-copy">
-          <p class="eyebrow">Faculty Promotion Training Data System</p>
-          <h1>Collect structured evidence first. Train the model later.</h1>
+          <p class="eyebrow">Employee Portal</p>
+          <h1>Upload promotion evidence and keep your records organized.</h1>
           <p class="hero-text">
-            This workspace is focused on faculty record intake, KRA upload collection, OCR-assisted reading,
-            and training-data preparation for the future model.
+            This portal is for employees submitting profile information, KRA documents, and tallied-point files for
+            faculty promotion processing.
           </p>
           <div class="hero-actions">
-            <button class="button button-primary" data-scroll-target="#auth-panel">Access Workspace</button>
+            <button class="button button-primary" data-scroll-target="#auth-panel">Access Employee Portal</button>
             <button class="button button-secondary" data-scroll-target="#upload-panels">Open Upload Panels</button>
           </div>
         </div>
@@ -52,7 +52,7 @@
           <div class="panel-heading">
             <div>
               <p class="section-kicker">Account Access</p>
-              <h2>Create an account or sign in</h2>
+              <h2>Create an employee account or sign in</h2>
             </div>
           </div>
           <div class="auth-switch">
@@ -62,11 +62,18 @@
           <form id="auth-form" class="stack-form">
             <label class="field" id="name-field">
               <span>Full name</span>
-              <input type="text" id="auth-name" placeholder="Faculty Analyst" />
+              <input type="text" id="auth-name" placeholder="Faculty Employee" />
+            </label>
+            <label class="field" id="role-field">
+              <span>Account type</span>
+              <select id="auth-role">
+                <option value="EMPLOYEE">Employee</option>
+                <option value="EVALUATOR">Evaluator</option>
+              </select>
             </label>
             <label class="field">
               <span>Email</span>
-              <input type="email" id="auth-email" placeholder="analyst@example.com" required />
+              <input type="email" id="auth-email" placeholder="employee@example.com" required />
             </label>
             <label class="field">
               <span>Password</span>
@@ -77,11 +84,24 @@
           <div id="auth-result" class="notice">No account action yet.</div>
         </section>
 
+        <section class="panel">
+          <div class="panel-heading">
+            <div>
+              <p class="section-kicker">Portal Routing</p>
+              <h2>Evaluator workspace</h2>
+            </div>
+          </div>
+          <p class="card-copy">
+            Evaluators use a separate review page for checking records, applying labels, and viewing database contents.
+          </p>
+          <a class="button button-secondary portal-link" href="/evaluator">Open Evaluator Portal</a>
+        </section>
+
         <section class="panel panel-wide">
           <div class="panel-heading">
             <div>
               <p class="section-kicker">Faculty Record</p>
-              <h2>Create the base training record</h2>
+              <h2>Create the base employee record</h2>
             </div>
           </div>
           <form id="faculty-form" class="stack-form">
@@ -91,8 +111,8 @@
                 <input type="text" id="fullName" value="Sample Faculty" required />
               </label>
               <label class="field">
-                <span>Teacher ID</span>
-                <input type="text" id="teacherId" value="T039" />
+                <span>Employee ID</span>
+                <input type="text" id="employeeId" value="E039" />
               </label>
             </div>
             <div class="field-row">
@@ -168,66 +188,21 @@
           <div id="upload-panel-grid" class="upload-panel-grid"></div>
         </section>
 
-        <section class="panel">
-          <div class="panel-heading">
-            <div>
-              <p class="section-kicker">Training Labels</p>
-              <h2>Label collected records</h2>
-            </div>
-          </div>
-          <form id="training-form" class="stack-form">
-            <label class="field">
-              <span>Promotion outcome</span>
-              <select id="training-label">
-                <option value="true">Promoted</option>
-                <option value="false">Not Promoted</option>
-              </select>
-            </label>
-            <label class="field">
-              <span>Label source</span>
-              <input type="text" id="training-source" value="Committee decision" />
-            </label>
-            <label class="field">
-              <span>Dataset split</span>
-              <select id="training-split">
-                <option value="train">Train</option>
-                <option value="validation">Validation</option>
-                <option value="test">Test</option>
-              </select>
-            </label>
-            <label class="field">
-              <span>Notes</span>
-              <input type="text" id="training-notes" placeholder="Optional training annotation" />
-            </label>
-            <button class="button button-secondary" type="submit">Save Training Label</button>
-          </form>
-          <div id="training-result" class="notice">No training example labeled yet.</div>
-        </section>
-
-        <section class="panel">
-          <div class="panel-heading">
-            <div>
-              <p class="section-kicker">Status</p>
-              <h2>Data collection progress</h2>
-            </div>
-          </div>
-          <div id="training-list" class="notice">No collected-data summary yet.</div>
-        </section>
-
         <section class="panel panel-wide">
           <div class="panel-heading">
             <div>
-              <p class="section-kicker">Database Viewer</p>
-              <h2>See what is stored in PostgreSQL</h2>
+              <p class="section-kicker">Submission Status</p>
+              <h2>Employee-side collection progress</h2>
             </div>
           </div>
-          <div id="database-viewer" class="database-viewer">
-            <div class="notice">Sign in to load the database contents.</div>
+          <div id="training-list" class="notice">
+            Save a faculty record first, then upload requirement files into the matching KRA panels.
           </div>
         </section>
       </main>
     </div>
 
+    <script src="/config.js"></script>
     <script src="/app.js"></script>
   </body>
 </html>

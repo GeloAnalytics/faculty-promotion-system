@@ -119,6 +119,13 @@ select {
   color: var(--accent-strong);
 }
 
+.portal-link {
+  display: inline-flex;
+  text-decoration: none;
+  align-items: center;
+  justify-content: center;
+}
+
 .button-ghost {
   background: transparent;
   color: var(--muted);
@@ -336,6 +343,42 @@ select {
 .database-table td {
   color: var(--muted);
   font-size: 0.94rem;
+}
+
+.training-example-list {
+  display: grid;
+  gap: 14px;
+}
+
+.training-example-card {
+  padding: 16px 18px;
+  border-radius: 18px;
+  background: var(--surface-strong);
+  border: 1px solid var(--border);
+}
+
+.training-example-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: baseline;
+  margin-bottom: 8px;
+}
+
+.training-example-status {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.training-select-button {
+  margin-top: 8px;
 }
 
 .notice {
