@@ -279,7 +279,7 @@ export const loadTqeReferenceData = (csvPath: string): TqeRecord[] => {
   const rows = fs
     .readFileSync(csvPath, 'utf8')
     .split(/\r?\n/)
-    .map((line) => line.trim())
+    .map((line: string) => line.trim())
     .filter(Boolean);
 
   if (rows.length <= 1) {
@@ -288,7 +288,7 @@ export const loadTqeReferenceData = (csvPath: string): TqeRecord[] => {
 
   const dataRows = rows.slice(1);
 
-  return dataRows.map((row) => {
+  return dataRows.map((row: string) => {
     const values = row.split(',');
 
     return {
@@ -370,7 +370,7 @@ export const extractGuidelineReference = (text: string, fileName: string): Guide
     'service to the community',
     'creative works',
     'inventions',
-  ].filter((term) => lowered.includes(term));
+  ].filter((term: string) => lowered.includes(term));
 
   return {
     fileName,
@@ -383,8 +383,8 @@ export const extractGuidelineReference = (text: string, fileName: string): Guide
 export const findGuidelinePdfPath = (rootDir: string): string | null => {
   const candidates = fs
     .readdirSync(rootDir)
-    .filter((entry) => entry.toLowerCase().endsWith('.pdf'))
-    .filter((entry) => /jc|dbm|guideline|promotion/i.test(entry));
+    .filter((entry: string) => entry.toLowerCase().endsWith('.pdf'))
+    .filter((entry: string) => /jc|dbm|guideline|promotion/i.test(entry));
 
   if (candidates.length === 0) {
     return null;
@@ -399,7 +399,8 @@ function extractScore(text: string, regex: RegExp): number | undefined {
     return undefined;
   }
 
-  const value = match.find((entry) => entry && /^\d+(\.\d+)?$/.test(entry));
+  const value = match.find((entry: string | undefined) => entry && /^\d+(\.\d+)?$/.test(entry));
+
   return value ? Number.parseFloat(value) : undefined;
 }
 
