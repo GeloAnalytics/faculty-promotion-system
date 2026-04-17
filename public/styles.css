@@ -238,16 +238,23 @@ select {
   margin-bottom: 16px;
 }
 
+.upload-groups {
+  display: grid;
+  gap: 24px;
+}
+
 .upload-panel-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 18px;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 16px;
+  align-items: start;
 }
 
 .upload-group,
 .criteria-group {
   display: grid;
   gap: 14px;
+  align-content: start;
 }
 
 .upload-group-heading {
@@ -622,6 +629,7 @@ select {
   .content-grid,
   .reference-grid,
   .auth-grid,
+  .upload-groups,
   .upload-panel-grid,
   .criteria-grid,
   .database-sections,
