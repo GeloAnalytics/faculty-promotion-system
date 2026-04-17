@@ -41,7 +41,7 @@ select {
 
 .hero {
   display: block;
-  width: min(100%, calc((100% - 20px) / 2));
+  width: 100%;
   margin-bottom: 22px;
 }
 
@@ -88,7 +88,6 @@ select {
 }
 
 .hero h1 {
-  max-width: 19ch;
   font-family: "Space Grotesk", sans-serif;
   font-size: clamp(1.95rem, 3vw, 3rem);
   line-height: 1.08;
@@ -96,7 +95,6 @@ select {
 }
 
 .hero-text {
-  max-width: 64ch;
   margin: 0;
   color: var(--muted);
   line-height: 1.65;
