@@ -42,6 +42,8 @@ select {
 .hero {
   display: grid;
   grid-column: 1 / -1;
+  justify-items: start;
+  align-items: start;
   gap: 12px;
   position: relative;
   overflow: hidden;
@@ -82,6 +84,9 @@ select {
 }
 
 .hero h1 {
+  width: 100%;
+  max-width: 100%;
+  justify-self: stretch;
   font-family: "Space Grotesk", sans-serif;
   font-size: clamp(1.95rem, 3vw, 3rem);
   line-height: 1.08;
@@ -89,6 +94,9 @@ select {
 }
 
 .hero-text {
+  width: 100%;
+  max-width: 100%;
+  justify-self: stretch;
   margin: 0;
   color: var(--muted);
   line-height: 1.65;
@@ -97,6 +105,7 @@ select {
 
 .hero-meta {
   display: flex;
+  width: 100%;
   justify-content: space-between;
   align-items: center;
   gap: 18px;
