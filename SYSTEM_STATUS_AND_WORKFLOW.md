@@ -9,6 +9,10 @@ The machine learning model is still present in the codebase as a future feature,
 Current runtime status:
 
 - User authentication is active.
+- Role-based page routing is active.
+- Dedicated login page is active.
+- Employee workspace page is active.
+- Evaluator workspace page is active.
 - Faculty record intake is active.
 - Training-example draft creation is active.
 - File upload and storage is active.
@@ -34,6 +38,7 @@ It can currently:
 
 - create user accounts
 - log users in and out
+- route users to the correct workspace based on role
 - create faculty profile records
 - create training-example draft records
 - save uploaded documents with metadata
@@ -41,6 +46,8 @@ It can currently:
 - save OCR text from image uploads
 - save manual labels for promotion outcome
 - organize uploads by the five required upload panels
+- show employee-specific draft points and upload history
+- show evaluator-side per-employee review logs
 - display database counts and recent records in the UI after sign-in
 
 ### Can it properly read and organize contents from file uploads?
@@ -139,11 +146,13 @@ Implemented in:
 
 Implemented in [prisma/schema.prisma](/c:/Users/PC/faculty-promotion-system/prisma/schema.prisma:28).
 
-### Frontend workflow
+### Frontend workflow and page split
 
 Implemented in:
 
 - [public/index.html](/c:/Users/PC/faculty-promotion-system/public/index.html:16)
+- [public/employee.html](/c:/Users/PC/faculty-promotion-system/public/employee.html:16)
+- [public/evaluator.html](/c:/Users/PC/faculty-promotion-system/public/evaluator.html:16)
 - [public/app.js](/c:/Users/PC/faculty-promotion-system/public/app.js:1)
 
 ### Database viewer
@@ -171,15 +180,34 @@ Backend routes:
 How it works:
 
 - A new account is created with email, full name, password hash, and salt.
+- A new account also stores the selected role (`EMPLOYEE` or `EVALUATOR`).
 - Password hashing uses PBKDF2 in [src/server.ts](/c:/Users/PC/faculty-promotion-system/src/server.ts:642).
 - On login, the server creates a signed cookie session.
 - Protected routes require that session cookie.
+- After login, the frontend redirects users to `/employee` or `/evaluator` based on role.
 
 Stored data:
 
 - `users` table in [prisma/schema.prisma](/c:/Users/PC/faculty-promotion-system/prisma/schema.prisma:28)
 
-### 2. Faculty base record creation
+### 2. Workspace routing and page separation
+
+The system now uses three separate pages:
+
+1. `/` for sign in and account creation
+2. `/employee` for employee submissions
+3. `/evaluator` for evaluator review and scoring
+
+How it works:
+
+- the landing page only handles authentication
+- employee users are redirected into the employee workspace
+- evaluator users are redirected into the evaluator workspace
+- direct access is role-checked both in the frontend flow and in protected backend routes
+
+This keeps the employee and evaluator experience separate instead of mixing both workflows into one page.
+
+### 3. Faculty base record creation
 
 The user fills in the faculty record form and submits it.
 
@@ -204,7 +232,7 @@ Important point:
 
 - This is already useful for future model training because the raw input and feature snapshot are both stored.
 
-### 3. Five upload panels
+### 4. Five upload panels
 
 After the faculty record exists, the user uploads evidence files into one of five panels.
 
@@ -237,7 +265,7 @@ How uploads are organized:
 
 This means the uploads are already organized at the database level by category.
 
-### 4. PDF upload behavior
+### 5. PDF upload behavior
 
 For PDF files:
 
@@ -263,7 +291,7 @@ What this means in practice:
 - The system can capture a structured analysis summary
 - The system cannot yet fully map documents to exact NBC 461 scoring fields
 
-### 5. Image upload behavior
+### 6. Image upload behavior
 
 For image files:
 
@@ -282,7 +310,7 @@ Current limitation:
 
 - OCR output is still heuristic and not yet converted into exact NBC 461 rule-scored fields
 
-### 6. Tallied points upload behavior
+### 7. Tallied points upload behavior
 
 For `csv`, `xls`, and `xlsx` files:
 
@@ -298,7 +326,7 @@ Current limitation:
 
 So this panel is good for **collection and storage**, but not yet for automated ingestion of tallied scores into normalized records.
 
-### 7. Guideline reference behavior
+### 8. Guideline reference behavior
 
 The system also parses the guideline PDF:
 
@@ -317,7 +345,7 @@ What it currently does:
 
 This is helpful as a reference layer, but it is not yet a full rule engine for NBC 461 scoring.
 
-### 8. TQE.csv reference behavior
+### 9. TQE.csv reference behavior
 
 The system loads `TQE.csv` at startup.
 
@@ -334,7 +362,27 @@ What it does **not** do:
 
 This makes `TQE.csv` a reference dataset, not a training pipeline yet.
 
-### 9. Training example labeling
+### 10. Employee dashboard behavior
+
+After an employee signs in, the employee workspace loads a role-specific dashboard.
+
+Backend route:
+
+- `GET /api/employee/dashboard`
+
+What it currently shows:
+
+- saved faculty profiles for the signed-in employee
+- recent upload logs for the signed-in employee
+- a draft point summary based on entered values and extracted upload metadata
+- upload coverage across the expected panels
+
+Important note:
+
+- the draft points are only an estimate for employee visibility
+- the evaluator still performs the actual scoring decision
+
+### 11. Training example labeling
 
 Once a faculty record exists, the user can label it.
 
@@ -356,7 +404,24 @@ How it works:
 
 This is the strongest part of the current system for future machine learning readiness.
 
-### 10. Database viewer behavior
+### 12. Evaluator review queue behavior
+
+After an evaluator signs in, the evaluator workspace loads a review queue grouped by employee profile.
+
+Backend route:
+
+- `GET /api/evaluator/review-queue`
+
+What it currently shows:
+
+- employee identity and submitter account details
+- upload logs linked to each employee profile
+- draft score totals derived from collected data
+- the latest training example ready for evaluator scoring
+
+This gives evaluators a cleaner review flow before they save the actual score or label.
+
+### 13. Database viewer behavior
 
 After signing in, the UI now exposes a simple database viewer.
 
@@ -573,7 +638,22 @@ Impact:
 
 - deployment architecture still needs a real file-storage design
 
-### 5. Database viewer is operational but basic
+### 5. Draft scoring is still heuristic
+
+The employee page now shows draft points, but those values are still only a temporary estimate.
+
+Current limitation:
+
+- values come from entered fields and extracted upload metadata
+- they are not yet the final NBC 461 rule-based score
+- evaluator review is still required for the official result
+
+Impact:
+
+- useful for employee-side progress tracking
+- not yet a complete scoring engine
+
+### 6. Database viewer is operational but basic
 
 The database viewer is useful for validation, but it is still a lightweight operational view.
 
@@ -590,7 +670,7 @@ Impact:
 - useful for debugging and demos
 - not yet a full admin data-management interface
 
-### 6. Session model is simple
+### 7. Session model is simple
 
 The current cookie session is signed and useful, but it is still a lightweight custom approach.
 

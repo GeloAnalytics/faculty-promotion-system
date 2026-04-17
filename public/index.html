@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Faculty Promotion Employee Portal</title>
+    <title>Faculty Promotion Access Portal</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -12,19 +12,19 @@
     />
     <link rel="stylesheet" href="/styles.css" />
   </head>
-  <body data-portal="employee">
+  <body data-portal="auth">
     <div class="page-shell">
       <header class="hero">
         <div class="hero-copy">
-          <p class="eyebrow">Employee Portal</p>
-          <h1>Upload promotion evidence and keep your records organized.</h1>
+          <p class="eyebrow">Access Portal</p>
+          <h1>Sign in once, then go straight to the right review workspace.</h1>
           <p class="hero-text">
-            This portal is for employees submitting profile information, KRA documents, and tallied-point files for
-            faculty promotion processing.
+            Employees are routed to their submission page for faculty records, uploads, and draft points. Evaluators are
+            routed to the review page for upload logs and official scoring.
           </p>
           <div class="hero-actions">
-            <button class="button button-primary" data-scroll-target="#auth-panel">Access Employee Portal</button>
-            <button class="button button-secondary" data-scroll-target="#upload-panels">Open Upload Panels</button>
+            <button class="button button-primary" data-scroll-target="#auth-panel">Open Sign In</button>
+            <button class="button button-secondary" data-scroll-target="#role-guides">See Workspace Roles</button>
           </div>
         </div>
         <div class="hero-stats">
@@ -52,7 +52,7 @@
           <div class="panel-heading">
             <div>
               <p class="section-kicker">Account Access</p>
-              <h2>Create an employee account or sign in</h2>
+              <h2>Sign in or create an account</h2>
             </div>
           </div>
           <div class="auth-switch">
@@ -62,7 +62,7 @@
           <form id="auth-form" class="stack-form">
             <label class="field" id="name-field">
               <span>Full name</span>
-              <input type="text" id="auth-name" placeholder="Faculty Employee" />
+              <input type="text" id="auth-name" placeholder="Faculty Employee or Evaluator" />
             </label>
             <label class="field" id="role-field">
               <span>Account type</span>
@@ -73,7 +73,7 @@
             </label>
             <label class="field">
               <span>Email</span>
-              <input type="email" id="auth-email" placeholder="employee@example.com" required />
+              <input type="email" id="auth-email" placeholder="name@example.com" required />
             </label>
             <label class="field">
               <span>Password</span>
@@ -81,122 +81,46 @@
             </label>
             <button class="button button-primary" id="auth-submit" type="submit">Sign In</button>
           </form>
-          <div id="auth-result" class="notice">No account action yet.</div>
+          <div id="auth-result" class="notice">Choose sign in or create account to continue.</div>
         </section>
 
         <section class="panel">
           <div class="panel-heading">
             <div>
-              <p class="section-kicker">Portal Routing</p>
-              <h2>Evaluator workspace</h2>
+              <p class="section-kicker">Routing</p>
+              <h2>Role-based destination</h2>
             </div>
           </div>
           <p class="card-copy">
-            Evaluators use a separate review page for checking records, applying labels, and viewing database contents.
+            After login, employees are redirected to the employee panel and evaluators are redirected to the evaluator
+            panel automatically.
           </p>
-          <a class="button button-secondary portal-link" href="/evaluator">Open Evaluator Portal</a>
+          <div class="notice">
+            Employees: `/employee`<br />
+            Evaluators: `/evaluator`
+          </div>
         </section>
 
-        <section class="panel panel-wide">
+        <section class="panel panel-wide" id="role-guides">
           <div class="panel-heading">
             <div>
-              <p class="section-kicker">Faculty Record</p>
-              <h2>Create the base employee record</h2>
+              <p class="section-kicker">Workspace Roles</p>
+              <h2>What each page is for</h2>
             </div>
           </div>
-          <form id="faculty-form" class="stack-form">
-            <div class="field-row">
-              <label class="field">
-                <span>Faculty name</span>
-                <input type="text" id="fullName" value="Sample Faculty" required />
-              </label>
-              <label class="field">
-                <span>Employee ID</span>
-                <input type="text" id="employeeId" value="E039" />
-              </label>
-            </div>
-            <div class="field-row">
-              <label class="field">
-                <span>Highest attainment</span>
-                <select id="attainment">
-                  <option>Doctorate</option>
-                  <option>Master's</option>
-                  <option>Bachelor's</option>
-                </select>
-              </label>
-              <label class="field">
-                <span>Academic rank</span>
-                <input type="text" id="academicRank" value="Assistant Professor" />
-              </label>
-            </div>
-            <div class="field-row">
-              <label class="field">
-                <span>Years in service</span>
-                <input type="number" id="yearsInService" value="11" min="0" step="1" />
-              </label>
-              <label class="field">
-                <span>Review period</span>
-                <input type="text" id="reviewPeriod" value="2025" />
-              </label>
-            </div>
-            <div class="field-row">
-              <label class="field">
-                <span>IPCR average</span>
-                <input type="number" id="ipcrAverage" value="4.5" min="0" max="5" step="0.01" />
-              </label>
-              <label class="field">
-                <span>Teaching effectiveness</span>
-                <input type="number" id="teachingEffectiveness" value="91.8" min="0" max="100" step="0.01" />
-              </label>
-            </div>
-            <div class="field-row">
-              <label class="field">
-                <span>Research outputs</span>
-                <input type="number" id="researchOutputs" value="4.4" min="0" step="0.01" />
-              </label>
-              <label class="field">
-                <span>Extension services</span>
-                <input type="number" id="extensionServices" value="3" min="0" step="0.01" />
-              </label>
-            </div>
-            <div class="field-row">
-              <label class="field">
-                <span>Administrative experience</span>
-                <input type="number" id="administrativeExperience" value="2" min="0" step="0.01" />
-              </label>
-              <label class="field">
-                <span>Professional development hours</span>
-                <input type="number" id="professionalDevelopmentHours" value="48" min="0" step="0.01" />
-              </label>
-            </div>
-            <label class="field">
-              <span>Notes</span>
-              <input type="text" id="analysis-notes" placeholder="Optional context for the faculty record" />
-            </label>
-            <button class="button button-primary" type="submit">Save Faculty Record</button>
-          </form>
-          <div id="faculty-result" class="notice">No faculty record saved yet.</div>
-        </section>
-
-        <section class="panel panel-wide" id="upload-panels">
-          <div class="panel-heading">
-            <div>
-              <p class="section-kicker">Five Upload Panels</p>
-              <h2>Collect requirement files by KRA and tallied points</h2>
-            </div>
-          </div>
-          <div id="upload-panel-grid" class="upload-panel-grid"></div>
-        </section>
-
-        <section class="panel panel-wide">
-          <div class="panel-heading">
-            <div>
-              <p class="section-kicker">Submission Status</p>
-              <h2>Employee-side collection progress</h2>
-            </div>
-          </div>
-          <div id="training-list" class="notice">
-            Save a faculty record first, then upload requirement files into the matching KRA panels.
+          <div class="database-sections">
+            <article class="card">
+              <h3>Employee Workspace</h3>
+              <p class="card-copy">
+                Save the base faculty record, upload KRA evidence, and monitor draft point totals plus upload history.
+              </p>
+            </article>
+            <article class="card">
+              <h3>Evaluator Workspace</h3>
+              <p class="card-copy">
+                Review logs per employee, inspect uploaded evidence, and apply the official evaluation or label update.
+              </p>
+            </article>
           </div>
         </section>
       </main>
