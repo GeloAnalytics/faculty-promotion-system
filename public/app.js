@@ -17,6 +17,9 @@ const employeeLogs = byId("employee-logs");
 const employeeProfiles = byId("employee-profiles");
 const reviewQueue = byId("review-queue");
 const databaseViewer = byId("database-viewer");
+const trainingCriteria = byId("training-criteria");
+const trainingScoreTotal = byId("training-score-total");
+const workspaceGreeting = byId("workspace-greeting");
 const showLoginButton = byId("show-login");
 const showRegisterButton = byId("show-register");
 const nameField = byId("name-field");
@@ -26,6 +29,8 @@ const authSubmit = byId("auth-submit");
 let authMode = "login";
 let currentUser = null;
 let latestRecordContext = null;
+let uploadPanelCatalog = [];
+const latestTrainingItemById = new Map();
 
 document.querySelectorAll("[data-scroll-target]").forEach((button) => {
   button.addEventListener("click", () => {
@@ -114,6 +119,7 @@ trainingForm?.addEventListener("submit", async (event) => {
         labelSource: valueOf("training-source"),
         datasetSplit: valueOf("training-split"),
         notes: valueOf("training-notes"),
+        criterionScores: collectCriterionScores(),
       }),
     });
 
@@ -165,20 +171,34 @@ async function refreshSession() {
     if (sessionUser) {
       sessionUser.textContent = `${data.user.fullName} (${prettyRole(data.user.role)})`;
     }
+    if (workspaceGreeting) {
+      workspaceGreeting.textContent =
+        portal === "evaluator"
+          ? `Hello ${data.user.fullName}. Here are the logs and records for evaluation.`
+          : `Hello ${data.user.fullName}. Enter your faculty record and upload your supporting documents here for faculty promotion.`;
+    }
   } catch {
     currentUser = null;
     if (sessionUser) {
       sessionUser.textContent = "Guest";
     }
+    if (workspaceGreeting) {
+      workspaceGreeting.textContent =
+        portal === "evaluator"
+          ? "Hello. Here are the logs and records for evaluation."
+          : "Hello. Enter your faculty record and upload your supporting documents here for faculty promotion.";
+    }
   }
 }
 
 async function loadEmployeeWorkspace() {
-  await Promise.all([loadUploadPanels(), loadEmployeeDashboard()]);
+  await Promise.all([loadUploadPanelCatalog(), loadEmployeeDashboard()]);
+  renderUploadPanels(uploadPanelCatalog);
 }
 
 async function loadEvaluatorWorkspace() {
-  await Promise.all([loadReviewQueue(), loadDatabaseOverview()]);
+  await Promise.all([loadUploadPanelCatalog(), loadReviewQueue(), loadDatabaseOverview()]);
+  renderEvaluatorCriteria(uploadPanelCatalog);
 }
 
 async function loadHealth() {
@@ -206,16 +226,18 @@ async function loadHealth() {
   }
 }
 
-async function loadUploadPanels() {
-  if (!uploadPanelGrid) {
-    return;
-  }
-
+async function loadUploadPanelCatalog() {
   try {
     const data = await apiFetch(buildApiUrl("/api/config/upload-panels"), { method: "GET" }, false);
-    renderUploadPanels(data.panels);
+    uploadPanelCatalog = Array.isArray(data.panels) ? data.panels : [];
   } catch (error) {
-    uploadPanelGrid.innerHTML = `<div class="notice notice-error">${escapeHtml(toErrorMessage(error))}</div>`;
+    uploadPanelCatalog = [];
+    if (uploadPanelGrid) {
+      uploadPanelGrid.innerHTML = `<div class="notice notice-error">${escapeHtml(toErrorMessage(error))}</div>`;
+    }
+    if (trainingCriteria) {
+      trainingCriteria.innerHTML = `<div class="notice notice-error">${escapeHtml(toErrorMessage(error))}</div>`;
+    }
   }
 }
 
@@ -282,34 +304,66 @@ function renderUploadPanels(panels) {
     return;
   }
 
-  uploadPanelGrid.innerHTML = "";
+  if (!panels.length) {
+    uploadPanelGrid.innerHTML = '<div class="notice">No upload panels are configured.</div>';
+    return;
+  }
 
-  panels.forEach((panel) => {
-    const article = document.createElement("article");
-    article.className = "card upload-card";
-    article.innerHTML = `
-      <h3>${escapeHtml(panel.title)}</h3>
-      <p class="card-copy">${escapeHtml(panel.description)}</p>
-      <p class="card-copy">Accepted: ${escapeHtml(panel.acceptedFormats.join(", "))}</p>
-      <form class="stack-form upload-panel-form" data-panel-key="${escapeHtml(panel.key)}">
-        <label class="field">
-          <span>Select file</span>
-          <input type="file" name="document" required />
-        </label>
-        <button class="button button-primary" type="submit">Upload to Panel</button>
-      </form>
-      <div class="notice panel-result">No file uploaded yet.</div>
-      <div class="upload-preview">
-        <div class="upload-preview-label">Uploaded file preview</div>
-        <div class="upload-file-name">No file selected.</div>
-        <div class="upload-file-view"></div>
-        <div class="upload-text-preview">No extracted text available yet.</div>
-      </div>
-    `;
+  const groupedPanels = groupPanelsByKra(panels);
+  uploadPanelGrid.innerHTML = groupedPanels
+    .map(
+      ([kraTitle, items]) => `
+        <section class="upload-group">
+          <div class="upload-group-heading">
+            <h3>${escapeHtml(kraTitle)}</h3>
+            <p class="card-copy">${escapeHtml(describePanelAudience(items))}</p>
+          </div>
+          <div class="upload-panel-grid">
+            ${items
+              .map(
+                (panel) => `
+                  <article class="card upload-card" data-panel-key="${escapeHtml(panel.key)}">
+                    <div class="upload-card-header">
+                      <h4>${escapeHtml(panel.title)}</h4>
+                      <span class="upload-score-cap">Max ${escapeHtml(String(panel.maxScore))} pts</span>
+                    </div>
+                    ${panel.audienceLabel ? `<p class="upload-audience-chip">${escapeHtml(panel.audienceLabel)}</p>` : ""}
+                    <p class="card-copy">${escapeHtml(panel.description)}</p>
+                    <p class="card-copy">Accepted: ${escapeHtml(panel.acceptedFormats.join(", "))}</p>
+                    <form class="stack-form upload-panel-form" data-panel-key="${escapeHtml(panel.key)}">
+                      <label class="field">
+                        <span>Select file</span>
+                        <input type="file" name="document" required />
+                      </label>
+                      <button class="button button-primary" type="submit">Upload Evidence</button>
+                    </form>
+                    <div class="notice panel-result">No file uploaded yet.</div>
+                    <div class="upload-preview">
+                      <div class="upload-preview-label">Uploaded file preview</div>
+                      <div class="upload-file-name">No file selected.</div>
+                      <div class="upload-file-view"></div>
+                      <div class="upload-text-preview">No extracted text available yet.</div>
+                    </div>
+                  </article>
+                `,
+              )
+              .join("")}
+          </div>
+        </section>
+      `,
+    )
+    .join("");
+
+  uploadPanelGrid.querySelectorAll(".upload-card").forEach((article) => {
+    const panelKey = article.dataset.panelKey || "";
+    const panel = panels.find((item) => item.key === panelKey);
+    if (!panel) {
+      return;
+    }
 
     const form = article.querySelector(".upload-panel-form");
     const result = article.querySelector(".panel-result");
-    const fileInput = form.querySelector('input[type="file"]');
+    const fileInput = form?.querySelector('input[type="file"]');
     const fileName = article.querySelector(".upload-file-name");
     const fileView = article.querySelector(".upload-file-view");
     const textPreview = article.querySelector(".upload-text-preview");
@@ -327,7 +381,7 @@ function renderUploadPanels(panels) {
       renderClientPreview(file, fileView, textPreview);
     });
 
-    form.addEventListener("submit", async (event) => {
+    form?.addEventListener("submit", async (event) => {
       event.preventDefault();
       if (!fileInput.files?.length) {
         setNotice(result, "Choose a file first.", true);
@@ -337,7 +391,7 @@ function renderUploadPanels(panels) {
       const formData = new FormData();
       formData.append("document", fileInput.files[0]);
       formData.append("panelKey", panel.key);
-      formData.append("kind", panel.key === "tallied_points" ? "TRAINING_SUPPORT" : "REQUIREMENT");
+      formData.append("kind", "REQUIREMENT");
       if (latestRecordContext?.profileId) {
         formData.append("profileId", latestRecordContext.profileId);
       }
@@ -350,20 +404,71 @@ function renderUploadPanels(panels) {
           credentials: "include",
         });
         const data = await readJson(response);
-        const message =
-          data.fileType === "image" || data.fileType === "pdf" || data.fileType === "csv"
-            ? `${panel.title} upload stored successfully. ${data.analysis?.summary ?? "Analysis completed."}`
-            : `${panel.title} upload stored successfully.`;
-        setNotice(result, message);
+        setNotice(result, `${panel.title} upload stored successfully. ${data.analysis?.summary ?? "Analysis completed."}`);
         updateUploadedPreview(data, fileInput.files[0], fileView, textPreview);
         await loadEmployeeDashboard();
       } catch (error) {
         setNotice(result, toErrorMessage(error), true);
       }
     });
-
-    uploadPanelGrid.appendChild(article);
   });
+}
+
+function renderEvaluatorCriteria(panels) {
+  if (!trainingCriteria) {
+    return;
+  }
+
+  if (!panels.length) {
+    trainingCriteria.innerHTML = '<div class="notice">No evaluator criteria are configured.</div>';
+    syncCriterionScoreTotal();
+    return;
+  }
+
+  const groupedPanels = groupPanelsByKra(panels);
+  trainingCriteria.innerHTML = groupedPanels
+    .map(
+      ([kraTitle, items]) => `
+        <section class="criteria-group">
+          <div class="upload-group-heading">
+            <h3>${escapeHtml(kraTitle)}</h3>
+            <p class="card-copy">${escapeHtml(describePanelAudience(items))}</p>
+          </div>
+          <div class="criteria-grid">
+            ${items
+              .map(
+                (panel) => `
+                  <label class="field score-field">
+                    <span>${escapeHtml(panel.title)}</span>
+                    <input
+                      type="number"
+                      min="0"
+                      max="${escapeHtml(String(panel.maxScore))}"
+                      step="0.01"
+                      data-score-key="${escapeHtml(panel.key)}"
+                      data-score-max="${escapeHtml(String(panel.maxScore))}"
+                      ${panel.sharedCapKey ? `data-shared-cap-key="${escapeHtml(panel.sharedCapKey)}"` : ""}
+                      ${panel.sharedCapMaxScore ? `data-shared-cap-max="${escapeHtml(String(panel.sharedCapMaxScore))}"` : ""}
+                    />
+                    <small class="field-help">
+                      ${escapeHtml(buildScoreHelpText(panel))}
+                    </small>
+                  </label>
+                `,
+              )
+              .join("")}
+          </div>
+        </section>
+      `,
+    )
+    .join("");
+
+  trainingCriteria.querySelectorAll("[data-score-key]").forEach((input) => {
+    input.addEventListener("input", syncCriterionScoreTotal);
+  });
+
+  hydrateTrainingForm(null);
+  syncCriterionScoreTotal();
 }
 
 function renderEmployeeDraftPoints(draftPoints, summary, errorMessage) {
@@ -379,7 +484,7 @@ function renderEmployeeDraftPoints(draftPoints, summary, errorMessage) {
   if (!draftPoints) {
     employeePoints.innerHTML = `
       <div class="notice">
-        Save your base faculty record first. After uploads are processed, this page will show a draft score summary and coverage status.
+        Save your base faculty record first. After uploads are processed, this page will show an approximate score summary and coverage status.
       </div>
     `;
     return;
@@ -391,7 +496,7 @@ function renderEmployeeDraftPoints(draftPoints, summary, errorMessage) {
     { label: "Extension", value: draftPoints.categories?.extension ?? 0 },
     { label: "Prof. Dev.", value: draftPoints.categories?.professionalDevelopment ?? 0 },
     { label: "IPCR Avg.", value: draftPoints.categories?.ipcrAverage ?? 0 },
-    { label: "Draft Total", value: draftPoints.overallEstimate ?? 0 },
+    { label: "Approx. Total", value: draftPoints.overallEstimate ?? 0 },
   ];
 
   employeePoints.innerHTML = `
@@ -439,7 +544,7 @@ function renderEmployeeProfiles(profiles) {
               </div>
               <p class="card-copy">Semester: ${escapeHtml(profile.semester || "-")}</p>
               <p class="card-copy">Documents linked: ${escapeHtml(String(profile.documentCount || 0))}</p>
-              <p class="card-copy">Draft total: ${escapeHtml(String(profile.draftPoints?.overallEstimate ?? 0))}</p>
+              <p class="card-copy">Approximate total: ${escapeHtml(String(profile.draftPoints?.overallEstimate ?? 0))}</p>
             </article>
           `,
         )
@@ -481,7 +586,7 @@ function renderEmployeeUploads(uploads, errorMessage) {
               (item) => `
                 <tr>
                   <td>${escapeHtml(item.originalName)}</td>
-                  <td>${escapeHtml(item.metadata?.panelKey || "-")}</td>
+                  <td>${escapeHtml(item.metadata?.panelTitle || item.metadata?.panelKey || "-")}</td>
                   <td>${escapeHtml(item.metadata?.analysisSummary || "Stored with no extracted summary yet.")}</td>
                   <td>${escapeHtml(item.metadata?.linkage || (item.profileId ? "profile-linked" : "pending"))}</td>
                   <td>${escapeHtml(formatDatabaseValue(item.createdAt))}</td>
@@ -500,6 +605,8 @@ function renderReviewQueue(items) {
     return;
   }
 
+  latestTrainingItemById.clear();
+
   if (!items.length) {
     reviewQueue.innerHTML = '<div class="notice">No employee submissions are waiting in the evaluator queue.</div>';
     return;
@@ -510,7 +617,11 @@ function renderReviewQueue(items) {
       ${items
         .map((item) => {
           const uploads = Array.isArray(item.uploadLogs) ? item.uploadLogs : [];
-          const latestTrainingId = item.latestTrainingExampleId || "";
+          const latestTrainingItem = item.latestTrainingItem || null;
+          const latestTrainingId = latestTrainingItem?.id || item.latestTrainingExampleId || "";
+          if (latestTrainingId && latestTrainingItem) {
+            latestTrainingItemById.set(latestTrainingId, latestTrainingItem);
+          }
           return `
             <article class="card review-card">
               <div class="training-example-header">
@@ -519,8 +630,9 @@ function renderReviewQueue(items) {
               </div>
               <p class="card-copy">Submitted by: ${escapeHtml(item.createdBy?.fullName || "-")} (${escapeHtml(item.createdBy?.email || "-")})</p>
               <p class="card-copy">Semester: ${escapeHtml(item.semester || "-")}</p>
-              <p class="card-copy">Draft total from uploaded data: ${escapeHtml(String(item.draftPoints?.overallEstimate ?? 0))}</p>
+              <p class="card-copy">Approximate total from uploaded data: ${escapeHtml(String(item.draftPoints?.overallEstimate ?? 0))}</p>
               <p class="card-copy">Coverage: ${escapeHtml(String(item.draftPoints?.evidenceCoverage?.uploadedPanelCount ?? 0))} / ${escapeHtml(String(item.draftPoints?.evidenceCoverage?.expectedPanelCount ?? 0))} panels</p>
+              <p class="card-copy">Latest evaluator total: ${escapeHtml(String(latestTrainingItem?.evaluatorAssessment?.totalScore ?? 0))}</p>
               <div class="review-log-list">
                 ${uploads.length ? uploads.map(renderUploadLogChip).join("") : '<div class="notice">No uploads linked yet.</div>'}
               </div>
@@ -543,6 +655,8 @@ function renderReviewQueue(items) {
       if (target) {
         target.value = trainingId;
       }
+      const latestTrainingItem = latestTrainingItemById.get(trainingId);
+      hydrateTrainingForm(latestTrainingItem);
       if (trainingResult) {
         setNotice(trainingResult, `Training example ${trainingId} selected for evaluator scoring.`);
       }
@@ -555,7 +669,7 @@ function renderUploadLogChip(log) {
   return `
     <article class="upload-log-chip">
       <strong>${escapeHtml(log.originalName)}</strong>
-      <span>${escapeHtml(log.metadata?.panelKey || "unassigned panel")}</span>
+      <span>${escapeHtml(log.metadata?.panelTitle || log.metadata?.panelKey || "unassigned panel")}</span>
       <p>${escapeHtml(log.metadata?.analysisSummary || "Stored without extracted summary.")}</p>
       <small>${escapeHtml(formatDatabaseValue(log.createdAt))}</small>
     </article>
@@ -747,6 +861,88 @@ function updateUploadedPreview(data, file, fileView, textPreview) {
   if (file) {
     textPreview.textContent = `${file.name} uploaded successfully.`;
   }
+}
+
+function groupPanelsByKra(panels) {
+  return Object.entries(
+    panels.reduce((groups, panel) => {
+      if (!groups[panel.kraTitle]) {
+        groups[panel.kraTitle] = [];
+      }
+      groups[panel.kraTitle].push(panel);
+      return groups;
+    }, {}),
+  );
+}
+
+function describePanelAudience(panels) {
+  const labels = Array.from(new Set(panels.map((panel) => panel.audienceLabel).filter(Boolean)));
+  if (!labels.length) {
+    return "Upload supporting evidence for each criterion in this KRA.";
+  }
+  return labels.join(" • ");
+}
+
+function buildScoreHelpText(panel) {
+  const sharedCapText =
+    panel.sharedCapLabel && panel.sharedCapMaxScore
+      ? ` ${panel.sharedCapLabel}: ${panel.sharedCapMaxScore} points.`
+      : "";
+  return `Score range: 0 to ${panel.maxScore}.${sharedCapText}`;
+}
+
+function collectCriterionScores() {
+  const scores = {};
+  document.querySelectorAll("[data-score-key]").forEach((input) => {
+    const scoreKey = input.dataset.scoreKey;
+    const rawValue = Number.parseFloat(input.value);
+    if (scoreKey && Number.isFinite(rawValue) && rawValue >= 0) {
+      scores[scoreKey] = rawValue;
+    }
+  });
+  return scores;
+}
+
+function syncCriterionScoreTotal() {
+  if (!trainingScoreTotal) {
+    return;
+  }
+
+  const scores = collectCriterionScores();
+  const total = Object.values(scores).reduce((sum, value) => sum + value, 0);
+  trainingScoreTotal.textContent = String(Math.round(total * 100) / 100);
+}
+
+function hydrateTrainingForm(trainingItem) {
+  if (!trainingForm) {
+    return;
+  }
+
+  const labelField = byId("training-label");
+  const sourceField = byId("training-source");
+  const splitField = byId("training-split");
+  const notesField = byId("training-notes");
+
+  if (labelField) {
+    labelField.value = String(trainingItem?.labelPromoted ?? true);
+  }
+  if (sourceField) {
+    sourceField.value = trainingItem?.labelSource || "Committee decision";
+  }
+  if (splitField) {
+    splitField.value = trainingItem?.datasetSplit || "train";
+  }
+  if (notesField) {
+    notesField.value = trainingItem?.evaluatorAssessment?.freeformNotes || trainingItem?.notes || "";
+  }
+
+  document.querySelectorAll("[data-score-key]").forEach((input) => {
+    const scoreKey = input.dataset.scoreKey;
+    const scoreValue = trainingItem?.evaluatorAssessment?.criterionScores?.[scoreKey];
+    input.value = Number.isFinite(scoreValue) ? String(scoreValue) : "";
+  });
+
+  syncCriterionScoreTotal();
 }
 
 function setAuthMode(mode) {

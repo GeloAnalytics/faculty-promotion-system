@@ -14,41 +14,8 @@
   </head>
   <body data-portal="auth">
     <div class="page-shell">
-      <header class="hero">
-        <div class="hero-copy">
-          <p class="eyebrow">Access Portal</p>
-          <h1>Sign in once, then go straight to the right review workspace.</h1>
-          <p class="hero-text">
-            Employees are routed to their submission page for faculty records, uploads, and draft points. Evaluators are
-            routed to the review page for upload logs and official scoring.
-          </p>
-          <div class="hero-actions">
-            <button class="button button-primary" data-scroll-target="#auth-panel">Open Sign In</button>
-            <button class="button button-secondary" data-scroll-target="#role-guides">See Workspace Roles</button>
-          </div>
-        </div>
-        <div class="hero-stats">
-          <div class="stat-card">
-            <span class="stat-label">System Status</span>
-            <strong id="health-status">Loading...</strong>
-          </div>
-          <div class="stat-card">
-            <span class="stat-label">Model Status</span>
-            <strong id="model-status">Loading...</strong>
-          </div>
-          <div class="stat-card">
-            <span class="stat-label">Guideline PDF</span>
-            <strong id="health-guideline">Loading...</strong>
-          </div>
-          <div class="stat-card">
-            <span class="stat-label">Signed In User</span>
-            <strong id="session-user">Guest</strong>
-          </div>
-        </div>
-      </header>
-
       <main class="content-grid">
-        <section class="panel" id="auth-panel">
+        <section class="panel panel-wide" id="auth-panel">
           <div class="panel-heading">
             <div>
               <p class="section-kicker">Account Access</p>
@@ -82,46 +49,6 @@
             <button class="button button-primary" id="auth-submit" type="submit">Sign In</button>
           </form>
           <div id="auth-result" class="notice">Choose sign in or create account to continue.</div>
-        </section>
-
-        <section class="panel">
-          <div class="panel-heading">
-            <div>
-              <p class="section-kicker">Routing</p>
-              <h2>Role-based destination</h2>
-            </div>
-          </div>
-          <p class="card-copy">
-            After login, employees are redirected to the employee panel and evaluators are redirected to the evaluator
-            panel automatically.
-          </p>
-          <div class="notice">
-            Employees: `/employee`<br />
-            Evaluators: `/evaluator`
-          </div>
-        </section>
-
-        <section class="panel panel-wide" id="role-guides">
-          <div class="panel-heading">
-            <div>
-              <p class="section-kicker">Workspace Roles</p>
-              <h2>What each page is for</h2>
-            </div>
-          </div>
-          <div class="database-sections">
-            <article class="card">
-              <h3>Employee Workspace</h3>
-              <p class="card-copy">
-                Save the base faculty record, upload KRA evidence, and monitor draft point totals plus upload history.
-              </p>
-            </article>
-            <article class="card">
-              <h3>Evaluator Workspace</h3>
-              <p class="card-copy">
-                Review logs per employee, inspect uploaded evidence, and apply the official evaluation or label update.
-              </p>
-            </article>
-          </div>
         </section>
       </main>
     </div>

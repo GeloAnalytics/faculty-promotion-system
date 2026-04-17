@@ -16,34 +16,19 @@
     <div class="page-shell">
       <header class="hero">
         <div class="hero-copy">
-          <p class="eyebrow">Evaluator Workspace</p>
-          <h1>Check upload logs, review employee records, and apply final scoring.</h1>
+          <p class="eyebrow">Evaluator Portal</p>
+          <h1 id="workspace-greeting">Hello. Here are the logs and records for evaluation.</h1>
           <p class="hero-text">
-            Evaluators can inspect what each employee uploaded, review the draft point signals, and score the linked
-            training example from a single page.
+            Review employee submissions, inspect uploaded evidence, and complete the scoring workflow here.
           </p>
-          <div class="hero-actions">
-            <button class="button button-primary" data-scroll-target="#review-queue-panel">Open Review Queue</button>
-            <button class="button button-secondary" data-scroll-target="#scoring-panel">Open Scoring Panel</button>
-            <button class="button button-ghost" data-action="logout" type="button">Log Out</button>
-          </div>
-        </div>
-        <div class="hero-stats">
-          <div class="stat-card">
-            <span class="stat-label">System Status</span>
-            <strong id="health-status">Loading...</strong>
-          </div>
-          <div class="stat-card">
-            <span class="stat-label">Model Status</span>
-            <strong id="model-status">Loading...</strong>
-          </div>
-          <div class="stat-card">
-            <span class="stat-label">Guideline PDF</span>
-            <strong id="health-guideline">Loading...</strong>
-          </div>
-          <div class="stat-card">
-            <span class="stat-label">Signed In User</span>
-            <strong id="session-user">Guest</strong>
+          <div class="hero-meta">
+            <div class="stat-card session-card">
+              <span class="stat-label">Signed In User</span>
+              <strong id="session-user">Guest</strong>
+            </div>
+            <div class="hero-actions">
+              <button class="button button-ghost" data-action="logout" type="button">Log Out</button>
+            </div>
           </div>
         </div>
       </header>
@@ -81,6 +66,21 @@
                   <option value="false">Not Promoted</option>
                 </select>
               </label>
+            </div>
+            <div class="panel panel-inner">
+              <div class="panel-heading">
+                <div>
+                  <p class="section-kicker">Criterion Scores</p>
+                  <h3>Score each uploaded criterion using the Annex I maxima</h3>
+                </div>
+                <div class="score-total-card">
+                  <span class="stat-label">Current total</span>
+                  <strong id="training-score-total">0</strong>
+                </div>
+              </div>
+              <div id="training-criteria" class="criteria-layout">
+                <div class="notice">Loading criterion-based scoring fields...</div>
+              </div>
             </div>
             <div class="field-row">
               <label class="field">
