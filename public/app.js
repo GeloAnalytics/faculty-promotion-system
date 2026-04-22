@@ -30,6 +30,7 @@ let authMode = "login";
 let currentUser = null;
 let latestRecordContext = null;
 let uploadPanelCatalog = [];
+let employeeUploads = [];
 const latestTrainingItemById = new Map();
 
 document.querySelectorAll("[data-scroll-target]").forEach((button) => {
@@ -244,17 +245,25 @@ async function loadUploadPanelCatalog() {
 async function loadEmployeeDashboard() {
   try {
     const data = await apiFetch(buildApiUrl("/api/employee/dashboard"), { method: "GET" });
+    employeeUploads = Array.isArray(data.uploads) ? data.uploads : [];
     renderEmployeeDraftPoints(data.latestProfile?.draftPoints, data.summary);
     renderEmployeeProfiles(data.profiles || []);
-    renderEmployeeUploads(data.uploads || []);
+    renderEmployeeUploads(employeeUploads);
+    if (uploadPanelCatalog.length) {
+      renderUploadPanels(uploadPanelCatalog);
+    }
 
     if (data.latestProfile?.id) {
       latestRecordContext = { profileId: data.latestProfile.id };
     }
   } catch (error) {
+    employeeUploads = [];
     renderEmployeeDraftPoints(null, null, toErrorMessage(error));
     renderEmployeeProfiles([]);
     renderEmployeeUploads([], toErrorMessage(error));
+    if (uploadPanelCatalog.length) {
+      renderUploadPanels(uploadPanelCatalog);
+    }
   }
 }
 
@@ -332,17 +341,21 @@ function renderUploadPanels(panels) {
                     <p class="card-copy">Accepted: ${escapeHtml(panel.acceptedFormats.join(", "))}</p>
                     <form class="stack-form upload-panel-form" data-panel-key="${escapeHtml(panel.key)}">
                       <label class="field">
-                        <span>Select file</span>
-                        <input type="file" name="document" required />
+                        <span>Select file(s)</span>
+                        <input type="file" name="document" multiple required />
                       </label>
                       <button class="button button-primary" type="submit">Upload Evidence</button>
                     </form>
-                    <div class="notice panel-result">No file uploaded yet.</div>
+                    <div class="notice panel-result">No files uploaded yet.</div>
                     <div class="upload-preview">
                       <div class="upload-preview-label">Uploaded file preview</div>
-                      <div class="upload-file-name">No file selected.</div>
+                      <div class="upload-file-name">No files selected.</div>
                       <div class="upload-file-view"></div>
                       <div class="upload-text-preview">No extracted text available yet.</div>
+                    </div>
+                    <div class="upload-history">
+                      <div class="upload-preview-label">Saved files for this panel</div>
+                      <div class="upload-history-list">${renderPanelUploadHistory(panel.key)}</div>
                     </div>
                   </article>
                 `,
@@ -369,34 +382,35 @@ function renderUploadPanels(panels) {
     const textPreview = article.querySelector(".upload-text-preview");
 
     fileInput?.addEventListener("change", () => {
-      const file = fileInput.files?.[0];
-      if (!file) {
-        fileName.textContent = "No file selected.";
+      const files = Array.from(fileInput.files || []);
+      if (!files.length) {
+        fileName.textContent = "No files selected.";
         fileView.innerHTML = "";
         textPreview.textContent = "No extracted text available yet.";
         return;
       }
 
-      fileName.textContent = `Selected: ${file.name}`;
-      renderClientPreview(file, fileView, textPreview);
+      fileName.textContent = describeSelectedFiles(files);
+      renderClientPreview(files, fileView, textPreview);
     });
 
     form?.addEventListener("submit", async (event) => {
       event.preventDefault();
-      if (!fileInput.files?.length) {
-        setNotice(result, "Choose a file first.", true);
+      const files = Array.from(fileInput.files || []);
+      if (!files.length) {
+        setNotice(result, "Choose at least one file first.", true);
         return;
       }
 
       const formData = new FormData();
-      formData.append("document", fileInput.files[0]);
+      files.forEach((file) => formData.append("document", file));
       formData.append("panelKey", panel.key);
       formData.append("kind", "REQUIREMENT");
       if (latestRecordContext?.profileId) {
         formData.append("profileId", latestRecordContext.profileId);
       }
 
-      setNotice(result, "Uploading...");
+      setNotice(result, files.length === 1 ? "Uploading 1 file..." : `Uploading ${files.length} files...`);
       try {
         const response = await fetch(buildApiUrl("/api/documents/extract"), {
           method: "POST",
@@ -404,8 +418,8 @@ function renderUploadPanels(panels) {
           credentials: "include",
         });
         const data = await readJson(response);
-        setNotice(result, `${panel.title} upload stored successfully. ${data.analysis?.summary ?? "Analysis completed."}`);
-        updateUploadedPreview(data, fileInput.files[0], fileView, textPreview);
+        setNotice(result, buildUploadNotice(panel.title, data));
+        updateUploadedPreview(data, files, fileName, fileView, textPreview);
         await loadEmployeeDashboard();
       } catch (error) {
         setNotice(result, toErrorMessage(error), true);
@@ -676,6 +690,30 @@ function renderUploadLogChip(log) {
   `;
 }
 
+function renderPanelUploadHistory(panelKey) {
+  const uploads = employeeUploads
+    .filter((item) => item.metadata?.panelKey === panelKey)
+    .sort((left, right) => new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime());
+
+  if (!uploads.length) {
+    return '<div class="notice">No saved files for this panel yet.</div>';
+  }
+
+  return uploads
+    .map(
+      (item) => `
+        <article class="upload-history-item">
+          <div class="upload-history-header">
+            <strong>${escapeHtml(item.originalName)}</strong>
+            <span>${escapeHtml(formatDatabaseValue(item.createdAt))}</span>
+          </div>
+          <p>${escapeHtml(item.metadata?.analysisSummary || "Stored with no extracted summary yet.")}</p>
+        </article>
+      `,
+    )
+    .join("");
+}
+
 function renderDatabaseOverview(data) {
   if (!databaseViewer) {
     return;
@@ -813,41 +851,60 @@ function buildFacultyPayload() {
   };
 }
 
-function renderClientPreview(file, fileView, textPreview) {
+function renderClientPreview(files, fileView, textPreview) {
   fileView.innerHTML = "";
+  const previewMessages = [];
 
-  if (file.type.startsWith("image/")) {
-    const img = document.createElement("img");
-    img.className = "upload-image-preview";
-    img.alt = file.name;
-    img.src = URL.createObjectURL(file);
-    fileView.appendChild(img);
-    textPreview.textContent = "Waiting for OCR after upload.";
-    return;
-  }
+  files.forEach((file) => {
+    if (file.type.startsWith("image/")) {
+      const img = document.createElement("img");
+      img.className = "upload-image-preview";
+      img.alt = file.name;
+      img.src = URL.createObjectURL(file);
+      fileView.appendChild(img);
+      previewMessages.push(`${file.name}: waiting for OCR after upload.`);
+      return;
+    }
 
-  if (file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf")) {
+    if (file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf")) {
+      const tag = document.createElement("div");
+      tag.className = "upload-file-tag";
+      tag.textContent = `${file.name}: PDF selected. Extracted text preview will appear after upload.`;
+      fileView.appendChild(tag);
+      previewMessages.push(`${file.name}: waiting for PDF extraction after upload.`);
+      return;
+    }
+
     const tag = document.createElement("div");
     tag.className = "upload-file-tag";
-    tag.textContent = "PDF selected. Extracted text preview will appear after upload.";
+    if (/\.(csv|xls|xlsx)$/i.test(file.name)) {
+      tag.textContent = `${file.name}: spreadsheet selected. Upload is not supported for this panel.`;
+      previewMessages.push(`${file.name}: spreadsheet uploads are not supported.`);
+    } else {
+      tag.textContent = `${file.name}: preview not available for this file type.`;
+      previewMessages.push(`${file.name}: preview not available for this file type.`);
+    }
     fileView.appendChild(tag);
-    textPreview.textContent = "Waiting for PDF extraction after upload.";
-    return;
-  }
+  });
 
-  if (/\.(csv|xls|xlsx)$/i.test(file.name)) {
-    const tag = document.createElement("div");
-    tag.className = "upload-file-tag";
-    tag.textContent = "Spreadsheet selected. Parsed preview will appear when available.";
-    fileView.appendChild(tag);
-    textPreview.textContent = "Waiting for file analysis after upload.";
-    return;
-  }
-
-  textPreview.textContent = "Preview not available for this file type.";
+  textPreview.textContent = previewMessages.join("\n");
 }
 
-function updateUploadedPreview(data, file, fileView, textPreview) {
+function updateUploadedPreview(data, files, fileName, fileView, textPreview) {
+  fileName.textContent = describeUploadedFiles(data, files);
+  renderClientPreview(files, fileView, textPreview);
+
+  const successLines = (Array.isArray(data.results) ? data.results : [])
+    .map((item) => `${item.originalName}: ${item.analysis?.summary || "Uploaded successfully."}`);
+  const failureLines = (Array.isArray(data.failures) ? data.failures : []).map(
+    (item) => `${item.originalName}: ${item.error}`,
+  );
+
+  if (successLines.length || failureLines.length) {
+    textPreview.textContent = [...successLines, ...failureLines].join("\n\n");
+    return;
+  }
+
   if (data.textPreview) {
     textPreview.textContent = `Extracted text preview:\n\n${data.textPreview}`;
     return;
@@ -858,9 +915,7 @@ function updateUploadedPreview(data, file, fileView, textPreview) {
     return;
   }
 
-  if (file) {
-    textPreview.textContent = `${file.name} uploaded successfully.`;
-  }
+  textPreview.textContent = `${files.length} file(s) uploaded successfully.`;
 }
 
 function groupPanelsByKra(panels) {
@@ -1064,6 +1119,44 @@ function formatDatabaseValue(value) {
 
 function toErrorMessage(error) {
   return error instanceof Error ? error.message : String(error);
+}
+
+function describeSelectedFiles(files) {
+  if (!files.length) {
+    return "No files selected.";
+  }
+  if (files.length === 1) {
+    return `Selected: ${files[0].name}`;
+  }
+  return `Selected ${files.length} files: ${files.map((file) => file.name).join(", ")}`;
+}
+
+function describeUploadedFiles(data, files) {
+  const successfulUploads = Array.isArray(data.results) ? data.results : [];
+  if (successfulUploads.length) {
+    if (successfulUploads.length === 1) {
+      return `Uploaded: ${successfulUploads[0].originalName}`;
+    }
+    return `Uploaded ${successfulUploads.length} files: ${successfulUploads.map((item) => item.originalName).join(", ")}`;
+  }
+  return describeSelectedFiles(files);
+}
+
+function buildUploadNotice(panelTitle, data) {
+  const successCount = Number(data.summary?.successCount ?? (Array.isArray(data.results) ? data.results.length : 0));
+  const failureCount = Number(data.summary?.failureCount ?? (Array.isArray(data.failures) ? data.failures.length : 0));
+  const firstSummary =
+    Array.isArray(data.results) && data.results[0]?.analysis?.summary
+      ? ` ${data.results[0].analysis.summary}`
+      : data.analysis?.summary
+        ? ` ${data.analysis.summary}`
+        : "";
+
+  if (failureCount > 0) {
+    return `${panelTitle} stored ${successCount} file(s); ${failureCount} failed.${firstSummary}`;
+  }
+
+  return `${panelTitle} stored ${successCount} file(s) successfully.${firstSummary}`;
 }
 
 function escapeHtml(value) {

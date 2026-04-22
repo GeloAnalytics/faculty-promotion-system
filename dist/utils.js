@@ -5,6 +5,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.findGuidelinePdfPath = exports.extractGuidelineReference = exports.findClosestTqeBenchmarks = exports.summarizeTqeReferenceData = exports.loadTqeReferenceData = exports.inferPromotionOutcome = exports.runThesisWorkflow = exports.generateRecommendations = exports.compareModels = exports.selectSignificantFeatures = exports.buildFeatureVector = exports.analyzeDocumentContent = exports.extractDocumentInsights = void 0;
 const types_1 = require("./types");
+const uploadPanels_1 = require("./uploadPanels");
 const node_fs_1 = __importDefault(require("node:fs"));
 const node_path_1 = __importDefault(require("node:path"));
 const featureLabels = {
@@ -62,14 +63,7 @@ exports.extractDocumentInsights = extractDocumentInsights;
 const analyzeDocumentContent = (text, panelKey, source) => {
     const extraction = (0, exports.extractDocumentInsights)(text);
     const normalizedText = text.toLowerCase();
-    const categoryMap = {
-        kra_instruction: ['teaching effectiveness', 'curriculum', 'thesis', 'mentorship', 'instruction'],
-        kra_research: ['research', 'inventions', 'creative works', 'publication', 'patent'],
-        kra_extension: ['extension', 'community', 'service to the community', 'outreach'],
-        kra_professional_development: ['professional development', 'training', 'seminar', 'certification'],
-        tallied_points: ['total', 'points', 'rating', 'score', 'summary'],
-    };
-    const detectedCategories = categoryMap[panelKey].filter((term) => normalizedText.includes(term));
+    const detectedCategories = uploadPanels_1.uploadPanelKeywordMap[panelKey].filter((term) => normalizedText.includes(term));
     const keywordHits = [
         'teaching effectiveness',
         'curriculum',
@@ -328,16 +322,9 @@ function extractScore(text, regex) {
     return value ? Number.parseFloat(value) : undefined;
 }
 function buildDocumentSummary(panelKey, detectedFields, detectedCategories, textLength) {
-    const panelLabels = {
-        kra_instruction: 'Instruction',
-        kra_research: 'Research, Invention, and Creative Work',
-        kra_extension: 'Extension Services',
-        kra_professional_development: 'Professional Development',
-        tallied_points: 'Tallied Points',
-    };
     const fieldCount = detectedFields.length;
     const categoryCount = detectedCategories.length;
-    return `${panelLabels[panelKey]} analysis detected ${fieldCount} score field(s), ${categoryCount} panel-aligned category match(es), and ${textLength} extracted characters.`;
+    return `${uploadPanels_1.uploadPanelLabelMap[panelKey]} analysis detected ${fieldCount} score field(s), ${categoryCount} panel-aligned category match(es), and ${textLength} extracted characters.`;
 }
 function calculateBaseProbability(features) {
     const weightedSum = features.highestEducationalAttainmentLevel * 0.12 +

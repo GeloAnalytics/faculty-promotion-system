@@ -344,10 +344,11 @@ app.get('/api/reference/guidelines', async (_req: Request, res: Response) => {
 app.post(
   '/api/documents/extract',
   requireRole(UserRole.EMPLOYEE, UserRole.ADMIN),
-  upload.single('document'),
+  upload.array('document', 10),
   async (req: Request, res: Response) => {
-    if (!req.file) {
-      return res.status(400).json({ error: 'No document uploaded' });
+    const uploadedFiles = Array.isArray(req.files) ? req.files : [];
+    if (!uploadedFiles.length) {
+      return res.status(400).json({ error: 'No documents uploaded' });
     }
 
     try {
@@ -356,91 +357,52 @@ app.post(
       const panelDefinition = findUploadPanelDefinition(panelKey);
       const requestedProfileId =
         typeof req.body.profileId === 'string' && req.body.profileId.trim() ? req.body.profileId : null;
-      const mimeType = req.file.mimetype.toLowerCase();
-      const fileName = req.file.originalname;
-      const isCsv = /\.csv$/i.test(fileName);
-      const isSpreadsheet = /\.(xlsx|xls)$/i.test(fileName);
-      const linkage = await resolveUploadProfileLink(req.user!.id, fileName, requestedProfileId);
-      const profileId = linkage.profileId;
+      const results: ProcessedUploadResult[] = [];
+      const failures: Array<{ originalName: string; error: string }> = [];
 
-      if (isSpreadsheet || isCsv) {
+      for (const file of uploadedFiles) {
+        try {
+          const result = await processUploadedDocument({
+            file,
+            ownerUserId: req.user!.id,
+            requestedProfileId,
+            kind,
+            panelKey,
+            panelTitle: panelDefinition.title,
+            ocrConfig,
+          });
+          results.push(result);
+        } catch (error) {
+          failures.push({
+            originalName: file.originalname,
+            error: describeUploadProcessingError(error),
+          });
+        }
+      }
+
+      if (!results.length) {
         return res.status(400).json({
-          error: 'Spreadsheet and CSV uploads are no longer supported in the criterion-based upload panels',
+          error: failures[0]?.error ?? 'No documents could be processed',
+          failures,
         });
       }
 
-      if (mimeType === 'application/pdf' || fileName.toLowerCase().endsWith('.pdf')) {
-        const data = await pdf(req.file.buffer);
-        const analysis = analyzeDocumentContent(data.text, panelKey, 'pdf');
-
-        const savedDocument = await prisma.uploadedDocument.create({
-          data: {
-            ownerUserId: req.user!.id,
-            profileId,
-            kind,
-            originalName: fileName,
-            mimeType: req.file.mimetype,
-            extractedText: data.text,
-            extractionMetadata: toPrismaJson({
-              panelKey,
-              panelTitle: panelDefinition.title,
-              storedForTraining: true,
-              analysis,
-              linkage,
-            }),
-          },
-        });
-
-        return res.json({
-          fileType: 'pdf',
-          documentId: savedDocument.id,
-          panelKey,
-          profileId,
-          linkage,
-          textPreview: data.text.slice(0, 1000),
-          analysis,
-        });
-      }
-
-      if (mimeType.startsWith('image/') || /\.(png|jpg|jpeg|bmp|tif|tiff)$/i.test(fileName)) {
-        const ocrResult = await extractImageTextWithOcr(req.file.buffer, fileName, ocrConfig);
-        const extractedText = ocrResult.text.trim();
-        const analysis = analyzeDocumentContent(extractedText, panelKey, 'image');
-
-        const savedDocument = await prisma.uploadedDocument.create({
-          data: {
-            ownerUserId: req.user!.id,
-            profileId,
-            kind,
-            originalName: fileName,
-            mimeType: req.file.mimetype,
-            extractedText,
-            extractionMetadata: toPrismaJson({
-              panelKey,
-              panelTitle: panelDefinition.title,
-              storedForTraining: true,
-              ocr: {
-                provider: ocrResult.provider,
-                lineCount: ocrResult.lineCount,
-              },
-              analysis,
-              linkage,
-            }),
-          },
-        });
-
-        return res.json({
-          fileType: 'image',
-          documentId: savedDocument.id,
-          panelKey,
-          profileId,
-          linkage,
-          textPreview: extractedText.slice(0, 1000),
-          analysis,
-        });
-      }
-
-      return res.status(400).json({ error: 'Unsupported document type' });
+      return res.json({
+        fileType: results[0].fileType,
+        documentId: results[0].documentId,
+        panelKey,
+        profileId: results[0].profileId,
+        linkage: results[0].linkage,
+        textPreview: results[0].textPreview,
+        analysis: results[0].analysis,
+        results,
+        failures,
+        summary: {
+          requestedCount: uploadedFiles.length,
+          successCount: results.length,
+          failureCount: failures.length,
+        },
+      });
     } catch (error) {
       return handleRequestError(res, error);
     }
@@ -1144,6 +1106,123 @@ function findUploadPanelDefinition(panelKey: UploadPanelDefinition['key']) {
   return uploadPanels.find((panel) => panel.key === panelKey) ?? uploadPanels[0];
 }
 
+async function processUploadedDocument(args: {
+  file: Express.Multer.File;
+  ownerUserId: string;
+  requestedProfileId: string | null;
+  kind: DocumentKind;
+  panelKey: UploadPanelDefinition['key'];
+  panelTitle: string;
+  ocrConfig: OcrConfig;
+}): Promise<ProcessedUploadResult> {
+  const { file, ownerUserId, requestedProfileId, kind, panelKey, panelTitle, ocrConfig } = args;
+  const mimeType = file.mimetype.toLowerCase();
+  const fileName = file.originalname;
+  const isCsv = /\.csv$/i.test(fileName);
+  const isSpreadsheet = /\.(xlsx|xls)$/i.test(fileName);
+
+  if (isSpreadsheet || isCsv) {
+    throw new Error('Spreadsheet and CSV uploads are no longer supported in the criterion-based upload panels');
+  }
+
+  const linkage = await resolveUploadProfileLink(ownerUserId, fileName, requestedProfileId);
+  const profileId = linkage.profileId;
+
+  if (mimeType === 'application/pdf' || fileName.toLowerCase().endsWith('.pdf')) {
+    const data = await pdf(file.buffer);
+    const analysis = analyzeDocumentContent(data.text, panelKey, 'pdf');
+
+    const savedDocument = await prisma.uploadedDocument.create({
+      data: {
+        ownerUserId,
+        profileId,
+        kind,
+        originalName: fileName,
+        mimeType: file.mimetype,
+        extractedText: data.text,
+        extractionMetadata: toPrismaJson({
+          panelKey,
+          panelTitle,
+          storedForTraining: true,
+          analysis,
+          linkage,
+        }),
+      },
+    });
+
+    return {
+      originalName: fileName,
+      fileType: 'pdf',
+      documentId: savedDocument.id,
+      panelKey,
+      profileId,
+      linkage,
+      textPreview: data.text.slice(0, 1000),
+      analysis,
+    };
+  }
+
+  if (mimeType.startsWith('image/') || /\.(png|jpg|jpeg|bmp|tif|tiff)$/i.test(fileName)) {
+    const ocrResult = await extractImageTextWithOcr(file.buffer, fileName, ocrConfig);
+    const extractedText = ocrResult.text.trim();
+    const analysis = analyzeDocumentContent(extractedText, panelKey, 'image');
+
+    const savedDocument = await prisma.uploadedDocument.create({
+      data: {
+        ownerUserId,
+        profileId,
+        kind,
+        originalName: fileName,
+        mimeType: file.mimetype,
+        extractedText,
+        extractionMetadata: toPrismaJson({
+          panelKey,
+          panelTitle,
+          storedForTraining: true,
+          ocr: {
+            provider: ocrResult.provider,
+            lineCount: ocrResult.lineCount,
+          },
+          analysis,
+          linkage,
+        }),
+      },
+    });
+
+    return {
+      originalName: fileName,
+      fileType: 'image',
+      documentId: savedDocument.id,
+      panelKey,
+      profileId,
+      linkage,
+      textPreview: extractedText.slice(0, 1000),
+      analysis,
+    };
+  }
+
+  throw new Error('Unsupported document type');
+}
+
+function describeUploadProcessingError(error: unknown) {
+  if (error instanceof z.ZodError) {
+    return 'Invalid request payload';
+  }
+
+  if (error instanceof Prisma.PrismaClientKnownRequestError) {
+    return 'Database request failed';
+  }
+
+  if (error instanceof Error) {
+    if (/powershell|ocr/i.test(error.message)) {
+      return 'OCR processing failed';
+    }
+    return error.message;
+  }
+
+  return 'Unexpected server error';
+}
+
 function hashPassword(password: string, salt: string): string {
   return crypto.pbkdf2Sync(password, salt, 120000, 64, 'sha512').toString('hex');
 }
@@ -1174,6 +1253,17 @@ type ParsedDocumentMetadata = {
   completenessScore: number | null;
   qualityScore: number | null;
   linkage: string | null;
+};
+
+type ProcessedUploadResult = {
+  originalName: string;
+  fileType: 'pdf' | 'image';
+  documentId: string;
+  panelKey: UploadPanelDefinition['key'];
+  profileId: string | null;
+  linkage: Awaited<ReturnType<typeof resolveUploadProfileLink>>;
+  textPreview: string;
+  analysis: ReturnType<typeof analyzeDocumentContent>;
 };
 
 type EvaluatorAssessment = {
