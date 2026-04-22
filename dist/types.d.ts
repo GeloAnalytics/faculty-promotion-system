@@ -4,7 +4,8 @@ export type FeatureVector = Record<FeatureKey, number>;
 export type AppUserRole = 'ADMIN' | 'EMPLOYEE' | 'EVALUATOR';
 export type UploadDocumentKind = 'REQUIREMENT' | 'GUIDELINE' | 'TRAINING_SUPPORT';
 export type TrainingStatus = 'DRAFT' | 'LABELED' | 'VALIDATED';
-export type UploadPanelKey = 'kra_instruction' | 'kra_research' | 'kra_extension' | 'kra_professional_development' | 'tallied_points';
+export type UploadPanelKey = 'kra1_teaching_effectiveness' | 'kra1_curriculum_instructional_materials' | 'kra1_thesis_dissertation_mentorship' | 'kra2_research_outputs' | 'kra2_inventions' | 'kra2_creative_works' | 'kra3_service_to_institution' | 'kra3_service_to_community' | 'kra3_extension_involvement' | 'kra4_professional_organizations' | 'kra4_continuing_development' | 'kra4_awards_recognition' | 'kra4_academic_experience' | 'kra4_industry_experience';
+export type UploadPanelAudience = 'ALL_FACULTY' | 'NEW_ENTRANTS_ONLY';
 export interface PersonalData {
     employeeId?: string;
     fullName: string;
@@ -148,8 +149,15 @@ export interface TrainingExampleSubmission {
 }
 export interface UploadPanelDefinition {
     key: UploadPanelKey;
+    kraTitle: string;
     title: string;
     description: string;
     acceptedFormats: string[];
+    maxScore: number;
+    appliesTo: UploadPanelAudience;
+    audienceLabel?: string;
+    sharedCapKey?: string;
+    sharedCapLabel?: string;
+    sharedCapMaxScore?: number;
 }
 //# sourceMappingURL=types.d.ts.map

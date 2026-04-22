@@ -365,6 +365,43 @@ select {
   overflow: auto;
 }
 
+.upload-history {
+  display: grid;
+  gap: 10px;
+}
+
+.upload-history-list {
+  display: grid;
+  gap: 10px;
+}
+
+.upload-history-item {
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: #fffdf9;
+  border: 1px solid var(--border);
+  display: grid;
+  gap: 6px;
+}
+
+.upload-history-item p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.upload-history-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: baseline;
+}
+
+.upload-history-header span {
+  color: var(--muted);
+  font-size: 0.84rem;
+}
+
 .database-viewer {
   display: grid;
   gap: 16px;
