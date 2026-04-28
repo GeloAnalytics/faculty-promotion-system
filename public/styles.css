@@ -394,12 +394,35 @@ select {
   display: flex;
   justify-content: space-between;
   gap: 12px;
-  align-items: baseline;
+  align-items: flex-start;
+}
+
+.upload-history-title {
+  display: grid;
+  gap: 4px;
 }
 
 .upload-history-header span {
   color: var(--muted);
   font-size: 0.84rem;
+}
+
+.upload-log-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.delete-upload-button {
+  padding: 8px 12px;
+  min-width: 88px;
+  justify-content: center;
+}
+
+.delete-upload-button[disabled] {
+  opacity: 0.7;
+  cursor: progress;
 }
 
 .database-viewer {

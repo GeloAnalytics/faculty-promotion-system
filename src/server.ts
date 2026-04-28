@@ -59,11 +59,13 @@ const envSchema = z.object({
 
 const env = envSchema.parse(process.env);
 const isProduction = env.NODE_ENV === 'production';
+const MAX_UPLOAD_SIZE_MB = 50;
+const MAX_UPLOAD_SIZE_BYTES = MAX_UPLOAD_SIZE_MB * 1024 * 1024;
 const app = express();
 const prisma = new PrismaClient();
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 15 * 1024 * 1024 },
+  limits: { fileSize: MAX_UPLOAD_SIZE_BYTES },
 });
 const repoRoot = process.cwd();
 const tqeCsvPath = path.join(repoRoot, 'TQE.csv');
@@ -402,6 +404,44 @@ app.post(
           successCount: results.length,
           failureCount: failures.length,
         },
+      });
+    } catch (error) {
+      return handleRequestError(res, error);
+    }
+  },
+);
+
+app.delete(
+  '/api/documents/:documentId',
+  requireRole(UserRole.EMPLOYEE, UserRole.EVALUATOR, UserRole.ADMIN),
+  async (req: Request, res: Response) => {
+    try {
+      const document = await prisma.uploadedDocument.findUnique({
+        where: { id: req.params.documentId },
+        select: {
+          id: true,
+          ownerUserId: true,
+          originalName: true,
+        },
+      });
+
+      if (!document) {
+        return res.status(404).json({ error: 'Uploaded document not found' });
+      }
+
+      if (req.user!.role === UserRole.EMPLOYEE && document.ownerUserId !== req.user!.id) {
+        return res.status(403).json({ error: 'You can only delete your own uploaded documents' });
+      }
+
+      await prisma.uploadedDocument.delete({
+        where: { id: document.id },
+      });
+
+      return res.json({
+        deleted: true,
+        documentId: document.id,
+        originalName: document.originalName,
+        message: `${document.originalName} was deleted successfully`,
       });
     } catch (error) {
       return handleRequestError(res, error);
@@ -1562,6 +1602,21 @@ function handleRequestError(res: Response, error: unknown) {
   if (error instanceof Prisma.PrismaClientKnownRequestError) {
     return res.status(400).json({
       error: 'Database request failed',
+      code: error.code,
+      details: error.message,
+    });
+  }
+
+  if (error instanceof multer.MulterError) {
+    if (error.code === 'LIMIT_FILE_SIZE') {
+      return res.status(400).json({
+        error: `Uploaded file exceeds the ${MAX_UPLOAD_SIZE_MB} MB limit`,
+        code: error.code,
+      });
+    }
+
+    return res.status(400).json({
+      error: 'Upload request failed',
       code: error.code,
       details: error.message,
     });

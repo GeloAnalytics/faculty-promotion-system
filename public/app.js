@@ -33,6 +33,10 @@ let uploadPanelCatalog = [];
 let employeeUploads = [];
 const latestTrainingItemById = new Map();
 
+uploadPanelGrid?.addEventListener("click", handleDeleteUploadClick);
+employeeLogs?.addEventListener("click", handleDeleteUploadClick);
+reviewQueue?.addEventListener("click", handleDeleteUploadClick);
+
 document.querySelectorAll("[data-scroll-target]").forEach((button) => {
   button.addEventListener("click", () => {
     const target = document.querySelector(button.dataset.scrollTarget);
@@ -592,6 +596,7 @@ function renderEmployeeUploads(uploads, errorMessage) {
             <th>Summary</th>
             <th>Linked</th>
             <th>Created</th>
+            <th>Actions</th>
           </tr>
         </thead>
         <tbody>
@@ -604,6 +609,7 @@ function renderEmployeeUploads(uploads, errorMessage) {
                   <td>${escapeHtml(item.metadata?.analysisSummary || "Stored with no extracted summary yet.")}</td>
                   <td>${escapeHtml(item.metadata?.linkage || (item.profileId ? "profile-linked" : "pending"))}</td>
                   <td>${escapeHtml(formatDatabaseValue(item.createdAt))}</td>
+                  <td>${renderDeleteUploadButton(item, "employee")}</td>
                 </tr>
               `,
             )
@@ -682,7 +688,10 @@ function renderReviewQueue(items) {
 function renderUploadLogChip(log) {
   return `
     <article class="upload-log-chip">
-      <strong>${escapeHtml(log.originalName)}</strong>
+      <div class="upload-log-header">
+        <strong>${escapeHtml(log.originalName)}</strong>
+        ${renderDeleteUploadButton(log, "evaluator")}
+      </div>
       <span>${escapeHtml(log.metadata?.panelTitle || log.metadata?.panelKey || "unassigned panel")}</span>
       <p>${escapeHtml(log.metadata?.analysisSummary || "Stored without extracted summary.")}</p>
       <small>${escapeHtml(formatDatabaseValue(log.createdAt))}</small>
@@ -704,8 +713,11 @@ function renderPanelUploadHistory(panelKey) {
       (item) => `
         <article class="upload-history-item">
           <div class="upload-history-header">
-            <strong>${escapeHtml(item.originalName)}</strong>
-            <span>${escapeHtml(formatDatabaseValue(item.createdAt))}</span>
+            <div class="upload-history-title">
+              <strong>${escapeHtml(item.originalName)}</strong>
+              <span>${escapeHtml(formatDatabaseValue(item.createdAt))}</span>
+            </div>
+            ${renderDeleteUploadButton(item, "employee")}
           </div>
           <p>${escapeHtml(item.metadata?.analysisSummary || "Stored with no extracted summary yet.")}</p>
         </article>
@@ -1157,6 +1169,71 @@ function buildUploadNotice(panelTitle, data) {
   }
 
   return `${panelTitle} stored ${successCount} file(s) successfully.${firstSummary}`;
+}
+
+function renderDeleteUploadButton(item, refreshTarget) {
+  return `
+    <button
+      class="button button-secondary delete-upload-button"
+      type="button"
+      data-document-id="${escapeHtml(item.id)}"
+      data-refresh-target="${escapeHtml(refreshTarget)}"
+      data-file-name="${escapeHtml(item.originalName || "this file")}"
+    >
+      Delete
+    </button>
+  `;
+}
+
+async function handleDeleteUploadClick(event) {
+  if (!(event.target instanceof Element)) {
+    return;
+  }
+
+  const button = event.target.closest(".delete-upload-button");
+  if (!button) {
+    return;
+  }
+
+  const documentId = button.dataset.documentId || "";
+  const fileName = button.dataset.fileName || "this file";
+  const refreshTarget = button.dataset.refreshTarget || portal;
+  if (!documentId) {
+    return;
+  }
+
+  if (!window.confirm(`Delete ${fileName}? This cannot be undone.`)) {
+    return;
+  }
+
+  const originalLabel = button.textContent;
+  button.disabled = true;
+  button.textContent = "Deleting...";
+
+  try {
+    const data = await apiFetch(buildApiUrl(`/api/documents/${documentId}`), {
+      method: "DELETE",
+    });
+
+    if (refreshTarget === "evaluator") {
+      setNotice(trainingResult, data.message || `${fileName} deleted successfully.`);
+      await loadEvaluatorWorkspace();
+      return;
+    }
+
+    setNotice(facultyResult, data.message || `${fileName} deleted successfully.`);
+    await loadEmployeeWorkspace();
+  } catch (error) {
+    button.disabled = false;
+    button.textContent = originalLabel;
+
+    if (refreshTarget === "evaluator") {
+      setNotice(trainingResult, toErrorMessage(error), true);
+      return;
+    }
+
+    setNotice(facultyResult, toErrorMessage(error), true);
+  }
 }
 
 function escapeHtml(value) {
