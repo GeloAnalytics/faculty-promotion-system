@@ -6,6 +6,20 @@ This system is now primarily a **training-data collection and storage platform**
 
 The machine learning model is still present in the codebase as a future feature, but it is intentionally **inactive** at runtime.
 
+## Repository Validation Notes (April 23, 2026)
+
+This document contains older descriptions that no longer fully match the live repository.
+
+The current code confirms the following:
+
+- The runtime is still collection-first, not prediction-first.
+- Feature selection, model comparison, and prediction endpoints are intentionally disabled in [src/server.ts](/c:/Users/PC/faculty-promotion-system/src/server.ts:466), [src/server.ts](/c:/Users/PC/faculty-promotion-system/src/server.ts:473), and [src/server.ts](/c:/Users/PC/faculty-promotion-system/src/server.ts:480).
+- Upload handling is now **criterion-based**, with detailed NBC 461-style panels defined in [src/uploadPanels.ts](/c:/Users/PC/faculty-promotion-system/src/uploadPanels.ts:3), not the older five-panel plus tallied-points layout described below.
+- The current upload pipeline accepts **PDF and image files only** in [src/server.ts](/c:/Users/PC/faculty-promotion-system/src/server.ts:1109). Spreadsheet and CSV uploads are currently rejected in [src/server.ts](/c:/Users/PC/faculty-promotion-system/src/server.ts:1125).
+- The repository still includes placeholder analytics logic for feature ranking, model comparison, and recommendations in [src/utils.ts](/c:/Users/PC/faculty-promotion-system/src/utils.ts:162), [src/utils.ts](/c:/Users/PC/faculty-promotion-system/src/utils.ts:188), and [src/utils.ts](/c:/Users/PC/faculty-promotion-system/src/utils.ts:210), but that logic is not active in the runtime workflow.
+
+Use these notes as the authoritative status when this file conflicts with the current source code.
+
 Current runtime status:
 
 - User authentication is active.
@@ -26,7 +40,8 @@ Current runtime status:
 - Model prediction is inactive.
 - Model comparison is inactive.
 - Feature-selection endpoint is inactive.
-- Excel/CSV parsing is partially implemented.
+- Criterion-based PDF/image evidence uploads are active.
+- Excel/CSV tallied-point ingestion is not active in the current runtime.
 
 ## Short Answer To Your Question
 
@@ -45,7 +60,7 @@ It can currently:
 - save extracted PDF text
 - save OCR text from image uploads
 - save manual labels for promotion outcome
-- organize uploads by the five required upload panels
+- organize uploads by detailed criterion-based upload panels
 - show employee-specific draft points and upload history
 - show evaluator-side per-employee review logs
 - display database counts and recent records in the UI after sign-in
@@ -61,14 +76,12 @@ What it does properly right now:
 - It stores PDF extraction metadata and extracted text.
 - It stores image OCR text and analysis metadata.
 - It organizes uploaded files by panel/category.
-- It restricts the `Tallied Points` panel to spreadsheet-like files (`csv`, `xls`, `xlsx`).
-- It reads CSV files as text and stores them for training-data preparation.
-- It generates structured document-analysis summaries for PDF, image, and CSV uploads.
+- It generates structured document-analysis summaries for PDF and image uploads.
 
 What it does **not** do yet:
 
-- It does not parse Excel files.
-- It does not normalize CSV tallied points into structured database rows.
+- It does not currently accept CSV, XLS, or XLSX uploads in the active document extraction flow.
+- It does not normalize tallied-point spreadsheets into structured database rows.
 - It does not classify or normalize document contents into exact NBC 461 fields.
 - It does not yet turn uploaded evidence into a complete rule-based scoring engine.
 
@@ -93,13 +106,12 @@ This includes:
 
 Implemented in [src/server.ts](/c:/Users/PC/faculty-promotion-system/src/server.ts:67).
 
-The five configured panels are:
+The current configured panels are criterion-based and defined in [src/uploadPanels.ts](/c:/Users/PC/faculty-promotion-system/src/uploadPanels.ts:3), including:
 
-1. `kra_instruction`
-2. `kra_research`
-3. `kra_extension`
-4. `kra_professional_development`
-5. `tallied_points`
+1. KRA 1 teaching effectiveness, curriculum/instructional materials, and thesis/dissertation mentorship
+2. KRA 2 research outputs, inventions, and creative works
+3. KRA 3 service to institution, service to community, and extension involvement
+4. KRA 4 professional organizations, continuing development, awards/recognition, academic experience, and industry experience
 
 ### Model inactive status
 

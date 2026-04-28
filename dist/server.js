@@ -31,11 +31,13 @@ const envSchema = zod_1.z.object({
 });
 const env = envSchema.parse(process.env);
 const isProduction = env.NODE_ENV === 'production';
+const MAX_UPLOAD_SIZE_MB = 50;
+const MAX_UPLOAD_SIZE_BYTES = MAX_UPLOAD_SIZE_MB * 1024 * 1024;
 const app = (0, express_1.default)();
 const prisma = new client_1.PrismaClient();
 const upload = (0, multer_1.default)({
     storage: multer_1.default.memoryStorage(),
-    limits: { fileSize: 15 * 1024 * 1024 },
+    limits: { fileSize: MAX_UPLOAD_SIZE_BYTES },
 });
 const repoRoot = process.cwd();
 const tqeCsvPath = node_path_1.default.join(repoRoot, 'TQE.csv');
@@ -1299,6 +1301,19 @@ function handleRequestError(res, error) {
     if (error instanceof client_1.Prisma.PrismaClientKnownRequestError) {
         return res.status(400).json({
             error: 'Database request failed',
+            code: error.code,
+            details: error.message,
+        });
+    }
+    if (error instanceof multer_1.default.MulterError) {
+        if (error.code === 'LIMIT_FILE_SIZE') {
+            return res.status(400).json({
+                error: `Uploaded file exceeds the ${MAX_UPLOAD_SIZE_MB} MB limit`,
+                code: error.code,
+            });
+        }
+        return res.status(400).json({
+            error: 'Upload request failed',
             code: error.code,
             details: error.message,
         });

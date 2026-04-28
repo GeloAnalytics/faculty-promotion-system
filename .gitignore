@@ -4,3 +4,8 @@ dist/
 .prisma/
 *.log
 .local-pg/
+data/exports/
+ml/artifacts/
+ml/reports/
+__pycache__/
+*.pyc
