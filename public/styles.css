@@ -407,13 +407,6 @@ select {
   font-size: 0.84rem;
 }
 
-.upload-log-header {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  align-items: flex-start;
-}
-
 .delete-upload-button {
   padding: 8px 12px;
   min-width: 88px;
@@ -423,6 +416,57 @@ select {
 .delete-upload-button[disabled] {
   opacity: 0.7;
   cursor: progress;
+}
+
+.delete-manager {
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: rgba(255, 253, 249, 0.8);
+  overflow: hidden;
+}
+
+.delete-manager summary {
+  cursor: pointer;
+  list-style: none;
+  padding: 12px 14px;
+  font-weight: 700;
+  color: var(--accent-strong);
+}
+
+.delete-manager summary::-webkit-details-marker {
+  display: none;
+}
+
+.delete-manager[open] summary {
+  border-bottom: 1px solid var(--border);
+  background: var(--accent-soft);
+}
+
+.delete-manager-list {
+  display: grid;
+  gap: 10px;
+  padding: 12px 14px;
+}
+
+.delete-manager-item {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: #fffdf9;
+}
+
+.delete-manager-copy {
+  display: grid;
+  gap: 4px;
+}
+
+.delete-manager-copy span {
+  color: var(--muted);
+  font-size: 0.84rem;
 }
 
 .database-viewer {

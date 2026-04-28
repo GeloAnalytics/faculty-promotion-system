@@ -32,9 +32,7 @@ let latestRecordContext = null;
 let uploadPanelCatalog = [];
 let employeeUploads = [];
 const latestTrainingItemById = new Map();
-
 uploadPanelGrid?.addEventListener("click", handleDeleteUploadClick);
-employeeLogs?.addEventListener("click", handleDeleteUploadClick);
 reviewQueue?.addEventListener("click", handleDeleteUploadClick);
 
 document.querySelectorAll("[data-scroll-target]").forEach((button) => {
@@ -360,6 +358,7 @@ function renderUploadPanels(panels) {
                     <div class="upload-history">
                       <div class="upload-preview-label">Saved files for this panel</div>
                       <div class="upload-history-list">${renderPanelUploadHistory(panel.key)}</div>
+                      ${renderPanelDeleteManager(panel.key)}
                     </div>
                   </article>
                 `,
@@ -596,7 +595,6 @@ function renderEmployeeUploads(uploads, errorMessage) {
             <th>Summary</th>
             <th>Linked</th>
             <th>Created</th>
-            <th>Actions</th>
           </tr>
         </thead>
         <tbody>
@@ -609,7 +607,6 @@ function renderEmployeeUploads(uploads, errorMessage) {
                   <td>${escapeHtml(item.metadata?.analysisSummary || "Stored with no extracted summary yet.")}</td>
                   <td>${escapeHtml(item.metadata?.linkage || (item.profileId ? "profile-linked" : "pending"))}</td>
                   <td>${escapeHtml(formatDatabaseValue(item.createdAt))}</td>
-                  <td>${renderDeleteUploadButton(item, "employee")}</td>
                 </tr>
               `,
             )
@@ -656,6 +653,7 @@ function renderReviewQueue(items) {
               <div class="review-log-list">
                 ${uploads.length ? uploads.map(renderUploadLogChip).join("") : '<div class="notice">No uploads linked yet.</div>'}
               </div>
+              ${renderEvaluatorDeleteManager(item)}
               <div class="review-card-actions">
                 <button class="button button-secondary queue-score-button" type="button" data-training-id="${escapeHtml(latestTrainingId)}" ${latestTrainingId ? "" : "disabled"}>
                   Score Latest Record
@@ -688,10 +686,7 @@ function renderReviewQueue(items) {
 function renderUploadLogChip(log) {
   return `
     <article class="upload-log-chip">
-      <div class="upload-log-header">
-        <strong>${escapeHtml(log.originalName)}</strong>
-        ${renderDeleteUploadButton(log, "evaluator")}
-      </div>
+      <strong>${escapeHtml(log.originalName)}</strong>
       <span>${escapeHtml(log.metadata?.panelTitle || log.metadata?.panelKey || "unassigned panel")}</span>
       <p>${escapeHtml(log.metadata?.analysisSummary || "Stored without extracted summary.")}</p>
       <small>${escapeHtml(formatDatabaseValue(log.createdAt))}</small>
@@ -717,7 +712,6 @@ function renderPanelUploadHistory(panelKey) {
               <strong>${escapeHtml(item.originalName)}</strong>
               <span>${escapeHtml(formatDatabaseValue(item.createdAt))}</span>
             </div>
-            ${renderDeleteUploadButton(item, "employee")}
           </div>
           <p>${escapeHtml(item.metadata?.analysisSummary || "Stored with no extracted summary yet.")}</p>
         </article>
@@ -1186,6 +1180,65 @@ function renderDeleteUploadButton(item, refreshTarget) {
     >
       Delete
     </button>
+  `;
+}
+
+function renderPanelDeleteManager(panelKey) {
+  const uploads = employeeUploads
+    .filter((item) => item.metadata?.panelKey === panelKey)
+    .sort((left, right) => new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime());
+
+  if (!uploads.length) {
+    return "";
+  }
+
+  return `
+    <details class="delete-manager">
+      <summary>Manage files in this panel</summary>
+      <div class="delete-manager-list">
+        ${uploads
+          .map(
+            (item) => `
+              <div class="delete-manager-item">
+                <div class="delete-manager-copy">
+                  <strong>${escapeHtml(item.originalName)}</strong>
+                  <span>${escapeHtml(formatDatabaseValue(item.createdAt))}</span>
+                </div>
+                ${renderDeleteUploadButton(item, "employee")}
+              </div>
+            `,
+          )
+          .join("")}
+      </div>
+    </details>
+  `;
+}
+
+function renderEvaluatorDeleteManager(item) {
+  const uploads = Array.isArray(item?.uploadLogs) ? item.uploadLogs : [];
+  if (!uploads.length) {
+    return "";
+  }
+
+  return `
+    <details class="delete-manager">
+      <summary>Manage uploaded files</summary>
+      <div class="delete-manager-list">
+        ${uploads
+          .map(
+            (upload) => `
+              <div class="delete-manager-item">
+                <div class="delete-manager-copy">
+                  <strong>${escapeHtml(upload.originalName)}</strong>
+                  <span>${escapeHtml(upload.metadata?.panelTitle || upload.metadata?.panelKey || "unassigned panel")}</span>
+                </div>
+                ${renderDeleteUploadButton(upload, "evaluator")}
+              </div>
+            `,
+          )
+          .join("")}
+      </div>
+    </details>
   `;
 }
 
