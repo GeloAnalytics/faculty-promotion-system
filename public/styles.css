@@ -439,6 +439,10 @@ select {
   padding: 24px;
 }
 
+.modal-shell[hidden] {
+  display: none !important;
+}
+
 .modal-backdrop {
   position: absolute;
   inset: 0;
