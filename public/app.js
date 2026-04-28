@@ -31,11 +31,12 @@ let currentUser = null;
 let latestRecordContext = null;
 let uploadPanelCatalog = [];
 let employeeUploads = [];
+let reviewQueueItems = [];
 const latestTrainingItemById = new Map();
+let deleteModalState = null;
 
-uploadPanelGrid?.addEventListener("click", handleDeleteUploadClick);
-employeeLogs?.addEventListener("click", handleDeleteUploadClick);
-reviewQueue?.addEventListener("click", handleDeleteUploadClick);
+uploadPanelGrid?.addEventListener("click", handleOpenDeleteModalClick);
+reviewQueue?.addEventListener("click", handleOpenDeleteModalClick);
 
 document.querySelectorAll("[data-scroll-target]").forEach((button) => {
   button.addEventListener("click", () => {
@@ -138,6 +139,7 @@ trainingForm?.addEventListener("submit", async (event) => {
 bootstrap();
 
 async function bootstrap() {
+  ensureDeleteModal();
   setAuthMode("login");
   await Promise.all([loadHealth(), refreshSession()]);
 
@@ -280,8 +282,10 @@ async function loadReviewQueue() {
 
   try {
     const data = await apiFetch(buildApiUrl("/api/evaluator/review-queue"), { method: "GET" });
-    renderReviewQueue(data.items || []);
+    reviewQueueItems = Array.isArray(data.items) ? data.items : [];
+    renderReviewQueue(reviewQueueItems);
   } catch (error) {
+    reviewQueueItems = [];
     reviewQueue.innerHTML = `<div class="notice notice-error">${escapeHtml(toErrorMessage(error))}</div>`;
   }
 }
@@ -358,7 +362,18 @@ function renderUploadPanels(panels) {
                       <div class="upload-text-preview">No extracted text available yet.</div>
                     </div>
                     <div class="upload-history">
-                      <div class="upload-preview-label">Saved files for this panel</div>
+                      <div class="upload-history-toolbar">
+                        <div class="upload-preview-label">Saved files for this panel</div>
+                        <button
+                          class="button button-secondary upload-manage-button"
+                          type="button"
+                          data-action="open-delete-modal"
+                          data-delete-scope="employee-panel"
+                          data-panel-key="${escapeHtml(panel.key)}"
+                        >
+                          Manage Files
+                        </button>
+                      </div>
                       <div class="upload-history-list">${renderPanelUploadHistory(panel.key)}</div>
                     </div>
                   </article>
@@ -596,7 +611,6 @@ function renderEmployeeUploads(uploads, errorMessage) {
             <th>Summary</th>
             <th>Linked</th>
             <th>Created</th>
-            <th>Actions</th>
           </tr>
         </thead>
         <tbody>
@@ -609,7 +623,6 @@ function renderEmployeeUploads(uploads, errorMessage) {
                   <td>${escapeHtml(item.metadata?.analysisSummary || "Stored with no extracted summary yet.")}</td>
                   <td>${escapeHtml(item.metadata?.linkage || (item.profileId ? "profile-linked" : "pending"))}</td>
                   <td>${escapeHtml(formatDatabaseValue(item.createdAt))}</td>
-                  <td>${renderDeleteUploadButton(item, "employee")}</td>
                 </tr>
               `,
             )
@@ -653,6 +666,17 @@ function renderReviewQueue(items) {
               <p class="card-copy">Approximate total from uploaded data: ${escapeHtml(String(item.draftPoints?.overallEstimate ?? 0))}</p>
               <p class="card-copy">Coverage: ${escapeHtml(String(item.draftPoints?.evidenceCoverage?.uploadedPanelCount ?? 0))} / ${escapeHtml(String(item.draftPoints?.evidenceCoverage?.expectedPanelCount ?? 0))} panels</p>
               <p class="card-copy">Latest evaluator total: ${escapeHtml(String(latestTrainingItem?.evaluatorAssessment?.totalScore ?? 0))}</p>
+              <div class="review-card-toolbar">
+                <button
+                  class="button button-secondary upload-manage-button"
+                  type="button"
+                  data-action="open-delete-modal"
+                  data-delete-scope="evaluator-profile"
+                  data-profile-id="${escapeHtml(item.id)}"
+                >
+                  Manage Uploaded Files
+                </button>
+              </div>
               <div class="review-log-list">
                 ${uploads.length ? uploads.map(renderUploadLogChip).join("") : '<div class="notice">No uploads linked yet.</div>'}
               </div>
@@ -688,10 +712,7 @@ function renderReviewQueue(items) {
 function renderUploadLogChip(log) {
   return `
     <article class="upload-log-chip">
-      <div class="upload-log-header">
-        <strong>${escapeHtml(log.originalName)}</strong>
-        ${renderDeleteUploadButton(log, "evaluator")}
-      </div>
+      <strong>${escapeHtml(log.originalName)}</strong>
       <span>${escapeHtml(log.metadata?.panelTitle || log.metadata?.panelKey || "unassigned panel")}</span>
       <p>${escapeHtml(log.metadata?.analysisSummary || "Stored without extracted summary.")}</p>
       <small>${escapeHtml(formatDatabaseValue(log.createdAt))}</small>
@@ -717,7 +738,6 @@ function renderPanelUploadHistory(panelKey) {
               <strong>${escapeHtml(item.originalName)}</strong>
               <span>${escapeHtml(formatDatabaseValue(item.createdAt))}</span>
             </div>
-            ${renderDeleteUploadButton(item, "employee")}
           </div>
           <p>${escapeHtml(item.metadata?.analysisSummary || "Stored with no extracted summary yet.")}</p>
         </article>
@@ -1175,63 +1195,214 @@ function buildUploadNotice(panelTitle, data) {
   return `${panelTitle} stored ${successCount} file(s) successfully.${firstSummary}`;
 }
 
-function renderDeleteUploadButton(item, refreshTarget) {
-  return `
-    <button
-      class="button button-secondary delete-upload-button"
-      type="button"
-      data-document-id="${escapeHtml(item.id)}"
-      data-refresh-target="${escapeHtml(refreshTarget)}"
-      data-file-name="${escapeHtml(item.originalName || "this file")}"
-    >
-      Delete
-    </button>
+function ensureDeleteModal() {
+  if (document.querySelector(".modal-shell")) {
+    return;
+  }
+
+  const shell = document.createElement("div");
+  shell.className = "modal-shell";
+  shell.hidden = true;
+  shell.innerHTML = `
+    <div class="modal-backdrop" data-action="close-delete-modal"></div>
+    <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="delete-modal-title">
+      <div class="modal-header">
+        <div>
+          <p class="section-kicker">Upload Management</p>
+          <h3 id="delete-modal-title">Delete uploaded file</h3>
+        </div>
+        <button class="button button-ghost" type="button" data-action="close-delete-modal">Close</button>
+      </div>
+      <p class="card-copy" id="delete-modal-description">Select the file you want to remove.</p>
+      <label class="field">
+        <span>Saved files</span>
+        <select id="delete-modal-select"></select>
+      </label>
+      <div id="delete-modal-summary" class="notice">Choose a file to delete.</div>
+      <div class="modal-actions">
+        <button class="button button-secondary" type="button" data-action="close-delete-modal">Cancel</button>
+        <button class="button button-primary" type="button" id="delete-modal-confirm">Delete Selected File</button>
+      </div>
+    </div>
   `;
+
+  document.body.appendChild(shell);
+  shell.addEventListener("click", handleDeleteModalShellClick);
+  shell.querySelector("#delete-modal-confirm")?.addEventListener("click", confirmDeleteFromModal);
+  shell.querySelector("#delete-modal-select")?.addEventListener("change", syncDeleteModalSummary);
 }
 
-async function handleDeleteUploadClick(event) {
+function handleOpenDeleteModalClick(event) {
   if (!(event.target instanceof Element)) {
     return;
   }
 
-  const button = event.target.closest(".delete-upload-button");
+  const button = event.target.closest("[data-action='open-delete-modal']");
   if (!button) {
     return;
   }
 
-  const documentId = button.dataset.documentId || "";
-  const fileName = button.dataset.fileName || "this file";
-  const refreshTarget = button.dataset.refreshTarget || portal;
-  if (!documentId) {
+  openDeleteModal(button.dataset);
+}
+
+function openDeleteModal(dataset) {
+  ensureDeleteModal();
+
+  const shell = document.querySelector(".modal-shell");
+  const select = byId("delete-modal-select");
+  const description = byId("delete-modal-description");
+  const confirmButton = byId("delete-modal-confirm");
+  if (!shell || !select || !description || !confirmButton) {
     return;
   }
 
-  if (!window.confirm(`Delete ${fileName}? This cannot be undone.`)) {
+  const documents = getDeleteModalDocuments(dataset);
+  if (!documents.length) {
+    description.textContent = "There are no uploaded files available to delete in this section.";
+    select.innerHTML = "";
+    confirmButton.disabled = true;
+    setNotice(byId("delete-modal-summary"), "No files found for deletion.", true);
+    deleteModalState = { documents: [], refreshTarget: dataset.deleteScope || portal };
+    shell.hidden = false;
+    document.body.classList.add("modal-open");
     return;
   }
 
-  const originalLabel = button.textContent;
-  button.disabled = true;
-  button.textContent = "Deleting...";
+  select.innerHTML = documents
+    .map(
+      (item) => `
+        <option value="${escapeHtml(item.id)}">
+          ${escapeHtml(item.originalName)} - ${escapeHtml(item.label)}
+        </option>
+      `,
+    )
+    .join("");
+
+  description.textContent =
+    dataset.deleteScope === "evaluator-profile"
+      ? "Select the uploaded file you want to remove from this employee profile."
+      : "Select the uploaded file you want to remove from this upload panel.";
+
+  confirmButton.disabled = false;
+  deleteModalState = {
+    documents,
+    refreshTarget: dataset.deleteScope === "evaluator-profile" ? "evaluator" : "employee",
+  };
+  syncDeleteModalSummary();
+  shell.hidden = false;
+  document.body.classList.add("modal-open");
+}
+
+function getDeleteModalDocuments(dataset) {
+  if (dataset.deleteScope === "evaluator-profile") {
+    const item = reviewQueueItems.find((entry) => entry.id === dataset.profileId);
+    const uploads = Array.isArray(item?.uploadLogs) ? item.uploadLogs : [];
+    return uploads.map((upload) => ({
+      id: upload.id,
+      originalName: upload.originalName,
+      label: `${upload.metadata?.panelTitle || upload.metadata?.panelKey || "Unassigned"} • ${formatDatabaseValue(upload.createdAt)}`,
+    }));
+  }
+
+  if (dataset.deleteScope === "employee-panel") {
+    return employeeUploads
+      .filter((item) => item.metadata?.panelKey === dataset.panelKey)
+      .sort((left, right) => new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime())
+      .map((item) => ({
+        id: item.id,
+        originalName: item.originalName,
+        label: `${formatDatabaseValue(item.createdAt)}`,
+      }));
+  }
+
+  return [];
+}
+
+function syncDeleteModalSummary() {
+  const select = byId("delete-modal-select");
+  const summary = byId("delete-modal-summary");
+  if (!select || !summary) {
+    return;
+  }
+
+  const selected = deleteModalState?.documents?.find((item) => item.id === select.value) ?? deleteModalState?.documents?.[0];
+  if (!selected) {
+    setNotice(summary, "No files found for deletion.", true);
+    return;
+  }
+
+  setNotice(summary, `Selected file: ${selected.originalName}`);
+}
+
+function handleDeleteModalShellClick(event) {
+  if (!(event.target instanceof Element)) {
+    return;
+  }
+
+  const actionTarget = event.target.closest("[data-action='close-delete-modal']");
+  if (actionTarget) {
+    closeDeleteModal();
+  }
+}
+
+function closeDeleteModal() {
+  const shell = document.querySelector(".modal-shell");
+  const confirmButton = byId("delete-modal-confirm");
+  if (!shell) {
+    return;
+  }
+
+  shell.hidden = true;
+  document.body.classList.remove("modal-open");
+  if (confirmButton) {
+    confirmButton.disabled = false;
+    confirmButton.textContent = "Delete Selected File";
+  }
+  deleteModalState = null;
+}
+
+async function confirmDeleteFromModal() {
+  const select = byId("delete-modal-select");
+  const summary = byId("delete-modal-summary");
+  const confirmButton = byId("delete-modal-confirm");
+  if (!select || !summary || !confirmButton) {
+    return;
+  }
+
+  const selected = deleteModalState?.documents?.find((item) => item.id === select.value);
+  if (!selected) {
+    setNotice(summary, "Select a file first.", true);
+    return;
+  }
+
+  if (!window.confirm(`Delete ${selected.originalName}? This cannot be undone.`)) {
+    return;
+  }
+
+  const originalLabel = confirmButton.textContent;
+  confirmButton.disabled = true;
+  confirmButton.textContent = "Deleting...";
 
   try {
-    const data = await apiFetch(buildApiUrl(`/api/documents/${documentId}`), {
+    const data = await apiFetch(buildApiUrl(`/api/documents/${selected.id}`), {
       method: "DELETE",
     });
 
-    if (refreshTarget === "evaluator") {
-      setNotice(trainingResult, data.message || `${fileName} deleted successfully.`);
+    if (deleteModalState?.refreshTarget === "evaluator") {
+      setNotice(trainingResult, data.message || `${selected.originalName} deleted successfully.`);
       await loadEvaluatorWorkspace();
-      return;
+    } else {
+      setNotice(facultyResult, data.message || `${selected.originalName} deleted successfully.`);
+      await loadEmployeeWorkspace();
     }
 
-    setNotice(facultyResult, data.message || `${fileName} deleted successfully.`);
-    await loadEmployeeWorkspace();
+    closeDeleteModal();
   } catch (error) {
-    button.disabled = false;
-    button.textContent = originalLabel;
+    confirmButton.disabled = false;
+    confirmButton.textContent = originalLabel;
+    setNotice(summary, toErrorMessage(error), true);
 
-    if (refreshTarget === "evaluator") {
+    if (deleteModalState?.refreshTarget === "evaluator") {
       setNotice(trainingResult, toErrorMessage(error), true);
       return;
     }
