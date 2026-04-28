@@ -343,6 +343,36 @@ app.post('/api/documents/extract', requireRole(client_1.UserRole.EMPLOYEE, clien
         return handleRequestError(res, error);
     }
 });
+app.delete('/api/documents/:documentId', requireRole(client_1.UserRole.EMPLOYEE, client_1.UserRole.EVALUATOR, client_1.UserRole.ADMIN), async (req, res) => {
+    try {
+        const document = await prisma.uploadedDocument.findUnique({
+            where: { id: req.params.documentId },
+            select: {
+                id: true,
+                ownerUserId: true,
+                originalName: true,
+            },
+        });
+        if (!document) {
+            return res.status(404).json({ error: 'Uploaded document not found' });
+        }
+        if (req.user.role === client_1.UserRole.EMPLOYEE && document.ownerUserId !== req.user.id) {
+            return res.status(403).json({ error: 'You can only delete your own uploaded documents' });
+        }
+        await prisma.uploadedDocument.delete({
+            where: { id: document.id },
+        });
+        return res.json({
+            deleted: true,
+            documentId: document.id,
+            originalName: document.originalName,
+            message: `${document.originalName} was deleted successfully`,
+        });
+    }
+    catch (error) {
+        return handleRequestError(res, error);
+    }
+});
 app.post('/api/faculty/ingest', requireRole(client_1.UserRole.EMPLOYEE, client_1.UserRole.ADMIN), async (req, res) => {
     try {
         const payload = facultyIngestionSchema.parse(req.body);
