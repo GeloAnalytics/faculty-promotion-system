@@ -1329,6 +1329,13 @@ function handleRequestError(res, error) {
         });
     }
     if (error instanceof client_1.Prisma.PrismaClientKnownRequestError) {
+        if (error.code === 'P2025') {
+            return res.status(404).json({
+                error: 'Requested record was not found',
+                code: error.code,
+                details: error.message,
+            });
+        }
         return res.status(400).json({
             error: 'Database request failed',
             code: error.code,

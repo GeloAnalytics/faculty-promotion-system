@@ -1091,7 +1091,11 @@ async function apiFetch(url, options, sendJson = true) {
 async function readJson(response) {
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
-    throw new Error(data.error || data.details || `Request failed with status ${response.status}`);
+    const errorMessage =
+      typeof data.error === "string" && typeof data.details === "string" && data.error !== data.details
+        ? `${data.error}: ${data.details}`
+        : data.error || data.details || `Request failed with status ${response.status}`;
+    throw new Error(errorMessage);
   }
   return data;
 }
