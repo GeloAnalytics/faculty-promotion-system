@@ -192,6 +192,9 @@ def main() -> None:
     with (report_dir / "experiment_summary.json").open("w", encoding="utf-8") as handle:
         json.dump(summary, handle, indent=2)
 
+    with (report_dir / "results_summary.md").open("w", encoding="utf-8") as handle:
+        handle.write(build_results_summary_markdown(summary, results_df, test_metrics, feature_importance_df))
+
     feature_importance_df.to_csv(report_dir / "feature_importance.csv", index=False)
     permutation_importance_df.to_csv(report_dir / "permutation_importance.csv", index=False)
     pd.DataFrame(test_metrics["confusionMatrix"]).to_csv(report_dir / "test_confusion_matrix.csv", index=False, header=False)
@@ -226,6 +229,7 @@ def main() -> None:
     if cv_results:
         print(f"Cross-validation report: {report_dir / 'cross_validation_metrics.csv'}")
     print(f"Experiment summary: {report_dir / 'experiment_summary.json'}")
+    print(f"Readable summary: {report_dir / 'results_summary.md'}")
     print(f"Test confusion matrix: {report_dir / 'test_confusion_matrix.csv'}")
     print(f"Feature importance report: {report_dir / 'feature_importance.csv'}")
     print(f"Permutation importance report: {report_dir / 'permutation_importance.csv'}")
@@ -366,8 +370,16 @@ def build_shap_reports(
             n=min(len(background_frame), 100),
             random_state=0,
         )
-        explainer = shap.Explainer(model, background_sample)
-        shap_values = explainer(X)
+        evaluation_frame = X.head(min(len(X), 25)).copy()
+        evaluation_labels = y.iloc[: len(evaluation_frame)]
+
+        try:
+            explainer = shap.Explainer(model, background_sample)
+            shap_values = explainer(evaluation_frame)
+        except Exception:
+            explainer = shap.KernelExplainer(model.predict_proba, background_sample)
+            shap_values = explainer(evaluation_frame)
+
         normalized_values = normalize_shap_values(shap_values.values)
 
         global_report = (
@@ -382,10 +394,10 @@ def build_shap_reports(
         )
 
         local_report = build_local_shap_explanation_report(
-            X,
-            y,
-            model.predict(X),
-            model.predict_proba(X)[:, 1],
+            evaluation_frame,
+            evaluation_labels,
+            model.predict(evaluation_frame),
+            model.predict_proba(evaluation_frame)[:, 1],
             normalized_values,
             feature_columns,
         )
@@ -446,6 +458,56 @@ def build_local_shap_explanation_report(
         )
 
     return pd.DataFrame(rows)
+
+
+def build_results_summary_markdown(
+    summary: dict,
+    validation_results: pd.DataFrame,
+    test_metrics: dict,
+    feature_importance_df: pd.DataFrame,
+) -> str:
+    top_features = feature_importance_df.head(5).to_dict(orient="records")
+    ranking_lines = [
+        f"| {row['model']} | {row['validation_accuracy']:.4f} | {row['validation_precision']:.4f} | "
+        f"{row['validation_recall']:.4f} | {row['validation_f1']:.4f} | {row['validation_roc_auc']:.4f} |"
+        for _, row in validation_results.iterrows()
+    ]
+    feature_lines = [
+        f"| {item['feature']} | {float(item['importance']):.6f} |"
+        for item in top_features
+    ]
+
+    return "\n".join(
+        [
+            "# Objective 3 to 5 Boosting Results",
+            "",
+            f"- Dataset rows: {summary['rowCount']}",
+            f"- Split: train={summary['split']['train']}, validation={summary['split']['validation']}, test={summary['split']['test']}",
+            f"- Best model: {summary['bestModel']}",
+            "",
+            "## Validation Ranking",
+            "",
+            "| Model | Accuracy | Precision | Recall | F1 | ROC-AUC |",
+            "| --- | ---: | ---: | ---: | ---: | ---: |",
+            *ranking_lines,
+            "",
+            "## Best Model Test Metrics",
+            "",
+            f"- Accuracy: {test_metrics['accuracy']:.4f}",
+            f"- Precision: {test_metrics['precision']:.4f}",
+            f"- Recall: {test_metrics['recall']:.4f}",
+            f"- F1: {test_metrics['f1']:.4f}",
+            f"- ROC-AUC: {test_metrics['rocAuc']:.4f}",
+            f"- Confusion matrix: {test_metrics['confusionMatrix']}",
+            "",
+            "## Objective 5 Feature Signals",
+            "",
+            "| Feature | Importance |",
+            "| --- | ---: |",
+            *feature_lines,
+            "",
+        ]
+    )
 
 
 if __name__ == "__main__":

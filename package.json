@@ -8,6 +8,7 @@
     "build": "tsc",
     "start": "node dist/server.js",
     "ml:export-dataset": "tsx scripts/export-training-dataset.ts",
+    "ml:build-fallback-dataset": "tsx scripts/build-objective-305-dataset.ts",
     "ml:train-boosting": "python ml/train_boosting_models.py",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
