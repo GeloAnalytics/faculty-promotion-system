@@ -1288,11 +1288,13 @@ function verifySessionToken(token) {
     if (!payload || !signature) {
         return null;
     }
-    const expected = node_crypto_1.default.createHmac('sha256', env.AUTH_SECRET).update(payload).digest('base64url');
-    if (!node_crypto_1.default.timingSafeEqual(Buffer.from(signature), Buffer.from(expected))) {
-        return null;
-    }
     try {
+        const expected = node_crypto_1.default.createHmac('sha256', env.AUTH_SECRET).update(payload).digest('base64url');
+        const signatureBuffer = Buffer.from(signature);
+        const expectedBuffer = Buffer.from(expected);
+        if (signatureBuffer.length !== expectedBuffer.length || !node_crypto_1.default.timingSafeEqual(signatureBuffer, expectedBuffer)) {
+            return null;
+        }
         const parsed = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8'));
         if (parsed.exp < Date.now()) {
             return null;

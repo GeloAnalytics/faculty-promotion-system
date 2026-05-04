@@ -96,7 +96,10 @@ facultyForm?.addEventListener("submit", async (event) => {
     setNotice(
       facultyResult,
       `Faculty record saved. Profile ID: ${data.profileId}. You can now upload evidence files to the matching panels.`,
+      false,
+      true,
     );
+    collapseFacultyForm();
     await loadEmployeeWorkspace();
   } catch (error) {
     setNotice(facultyResult, toErrorMessage(error), true);
@@ -321,14 +324,38 @@ function renderUploadPanels(panels) {
   }
 
   const groupedPanels = groupPanelsByKra(panels);
-  uploadPanelGrid.innerHTML = groupedPanels
+  const totalPanels = panels.length;
+  const uploadedPanels = panels.filter((p) => hasPanelUploads(p.key)).length;
+  const progressPct = totalPanels ? Math.round((uploadedPanels / totalPanels) * 100) : 0;
+
+  const progressBar = `
+    <div class="upload-progress-strip">
+      <div class="upload-progress-info">
+        <span class="upload-progress-label">Upload Progress</span>
+        <span class="upload-progress-count">${uploadedPanels} / ${totalPanels} panels completed</span>
+      </div>
+      <div class="upload-progress-track">
+        <div class="upload-progress-fill" style="width:${progressPct}%"></div>
+      </div>
+    </div>
+  `;
+
+  uploadPanelGrid.innerHTML = progressBar + groupedPanels
     .map(
-      ([kraTitle, items]) => `
-        <section class="upload-group">
-          <div class="upload-group-heading">
-            <h3>${escapeHtml(kraTitle)}</h3>
-            <p class="card-copy">${escapeHtml(describePanelAudience(items))}</p>
-          </div>
+      ([kraTitle, items]) => {
+        const kraUploaded = items.filter((p) => hasPanelUploads(p.key)).length;
+        const kraComplete = kraUploaded === items.length;
+        return `
+        <details class="upload-group-collapsible${kraComplete ? ' kra-complete' : ''}" ${kraComplete ? '' : 'open'}>
+          <summary class="upload-group-summary">
+            <div class="upload-group-heading">
+              <h3>${escapeHtml(kraTitle)}</h3>
+              <p class="card-copy">${escapeHtml(describePanelAudience(items))}</p>
+            </div>
+            <span class="kra-progress-chip${kraComplete ? ' kra-progress-done' : ''}">
+              ${kraComplete ? '✓ Complete' : `${kraUploaded}/${items.length}`}
+            </span>
+          </summary>
           <div class="upload-panel-grid">
             ${items
               .map(
@@ -336,37 +363,58 @@ function renderUploadPanels(panels) {
                   <article class="card upload-card" data-panel-key="${escapeHtml(panel.key)}">
                     <div class="upload-card-header">
                       <h4>${escapeHtml(panel.title)}</h4>
-                      <span class="upload-score-cap">Max ${escapeHtml(String(panel.maxScore))} pts</span>
+                      <div class="upload-card-badges">
+                        <span class="upload-status-badge" data-status="${hasPanelUploads(panel.key) ? 'uploaded' : 'pending'}">
+                          ${hasPanelUploads(panel.key) ? '\u2713 Uploaded' : '\u25cb Pending'}
+                        </span>
+                        <span class="upload-score-cap">Max ${escapeHtml(String(panel.maxScore))} pts</span>
+                      </div>
                     </div>
                     ${panel.audienceLabel ? `<p class="upload-audience-chip">${escapeHtml(panel.audienceLabel)}</p>` : ""}
                     <p class="card-copy">${escapeHtml(panel.description)}</p>
-                    <p class="card-copy">Accepted: ${escapeHtml(panel.acceptedFormats.join(", "))}</p>
                     <form class="stack-form upload-panel-form" data-panel-key="${escapeHtml(panel.key)}">
                       <label class="field">
                         <span>Select file(s)</span>
-                        <input type="file" name="document" multiple required />
+                        <input type="file" name="document" multiple required accept="${escapeHtml(panel.acceptedFormats.map(f => '.' + f).join(','))}" />
                       </label>
-                      <button class="button button-primary" type="submit">Upload Evidence</button>
+                      <div class="naming-guide">
+                        <span class="naming-guide-icon">📝</span>
+                        <div class="naming-guide-text">
+                          <strong>File naming format</strong>
+                          <code>Surname_Firstname_${escapeHtml(panel.key.split('_').slice(-1)[0])}.pdf</code>
+                          <br>Example: <code>DelaCruz_Juan_${escapeHtml(panel.key.split('_').slice(-1)[0])}.pdf</code>
+                        </div>
+                      </div>
+                      <div class="naming-validation" data-panel-key="${escapeHtml(panel.key)}"></div>
+                      <button class="button button-primary upload-submit-btn" type="submit">
+                        <span class="upload-btn-label">Upload Evidence</span>
+                        <span class="upload-btn-spinner" style="display:none">Uploading…</span>
+                      </button>
                     </form>
-                    <div class="notice panel-result">No files uploaded yet.</div>
-                    <div class="upload-preview">
-                      <div class="upload-preview-label">Uploaded file preview</div>
-                      <div class="upload-file-name">No files selected.</div>
-                      <div class="upload-file-view"></div>
-                      <div class="upload-text-preview">No extracted text available yet.</div>
-                    </div>
-                    <div class="upload-history">
-                      <div class="upload-preview-label">Saved files for this panel</div>
-                      <div class="upload-history-list">${renderPanelUploadHistory(panel.key)}</div>
-                      ${renderPanelDeleteManager(panel.key)}
-                    </div>
+                    <div class="notice panel-result">${hasPanelUploads(panel.key) ? getPanelUploadCount(panel.key) + ' file(s) uploaded.' : 'No files uploaded yet.'}</div>
+                    <details class="upload-details">
+                      <summary>Preview &amp; file details</summary>
+                      <div class="upload-details-content">
+                        <div class="upload-preview">
+                          <div class="upload-file-name">No files selected.</div>
+                          <div class="upload-file-view"></div>
+                          <div class="upload-text-preview"></div>
+                        </div>
+                        <div class="upload-history">
+                          <div class="upload-preview-label">Saved files for this panel</div>
+                          <div class="upload-history-list">${renderPanelUploadHistory(panel.key)}</div>
+                          ${renderPanelDeleteManager(panel.key)}
+                        </div>
+                      </div>
+                    </details>
                   </article>
                 `,
               )
               .join("")}
           </div>
-        </section>
-      `,
+        </details>
+      `;
+      },
     )
     .join("");
 
@@ -384,17 +432,24 @@ function renderUploadPanels(panels) {
     const fileView = article.querySelector(".upload-file-view");
     const textPreview = article.querySelector(".upload-text-preview");
 
+    const namingValidation = article.querySelector(".naming-validation");
+    const submitBtn = form?.querySelector(".upload-submit-btn");
+    const btnLabel = submitBtn?.querySelector(".upload-btn-label");
+    const btnSpinner = submitBtn?.querySelector(".upload-btn-spinner");
+
     fileInput?.addEventListener("change", () => {
       const files = Array.from(fileInput.files || []);
       if (!files.length) {
         fileName.textContent = "No files selected.";
         fileView.innerHTML = "";
         textPreview.textContent = "No extracted text available yet.";
+        if (namingValidation) namingValidation.innerHTML = "";
         return;
       }
 
       fileName.textContent = describeSelectedFiles(files);
       renderClientPreview(files, fileView, textPreview);
+      validateFileNames(files, panel, namingValidation);
     });
 
     form?.addEventListener("submit", async (event) => {
@@ -405,6 +460,18 @@ function renderUploadPanels(panels) {
         return;
       }
 
+      for (const file of files) {
+        const parts = file.name.replace(/\.[^/.]+$/, "").split("_");
+        if (parts.length < 3) {
+          setNotice(result, `File "${file.name}" does not follow the required naming convention. Expected format: Surname_Firstname_DocumentType.pdf (e.g. DelaCruz_Juan_IPCR.pdf)`, true);
+          return;
+        }
+      }
+
+      // Proactive session check before upload
+      const sessionOk = await ensureSession();
+      if (!sessionOk) return;
+
       const formData = new FormData();
       files.forEach((file) => formData.append("document", file));
       formData.append("panelKey", panel.key);
@@ -413,7 +480,9 @@ function renderUploadPanels(panels) {
         formData.append("profileId", latestRecordContext.profileId);
       }
 
-      setNotice(result, files.length === 1 ? "Uploading 1 file..." : `Uploading ${files.length} files...`);
+      // Set button to loading state
+      setUploadButtonLoading(submitBtn, btnLabel, btnSpinner, true);
+      setNotice(result, files.length === 1 ? "Uploading 1 file…" : `Uploading ${files.length} files…`);
       try {
         const response = await fetch(buildApiUrl("/api/documents/extract"), {
           method: "POST",
@@ -421,11 +490,17 @@ function renderUploadPanels(panels) {
           credentials: "include",
         });
         const data = await readJson(response);
-        setNotice(result, buildUploadNotice(panel.title, data));
+        setNotice(result, buildUploadNotice(panel.title, data), false, true);
         updateUploadedPreview(data, files, fileName, fileView, textPreview);
+        const detailsEl = article.querySelector(".upload-details");
+        if (detailsEl) { detailsEl.open = true; }
+        showToast(`✓ ${panel.title} — uploaded successfully`, "success");
         await loadEmployeeDashboard();
       } catch (error) {
         setNotice(result, toErrorMessage(error), true);
+        showToast(`Upload failed: ${toErrorMessage(error)}`, "error");
+      } finally {
+        setUploadButtonLoading(submitBtn, btnLabel, btnSpinner, false);
       }
     });
   });
@@ -1055,12 +1130,76 @@ function prettyRole(role) {
   return role || "Guest";
 }
 
-function setNotice(element, message, isError = false) {
+function setNotice(element, message, isError = false, isSuccess = false) {
   if (!element) {
     return;
   }
   element.textContent = message;
   element.classList.toggle("notice-error", isError);
+  element.classList.toggle("notice-success", isSuccess && !isError);
+}
+
+// ── Toast Notification System ──
+function showToast(message, type = "success") {
+  let container = document.getElementById("toast-container");
+  if (!container) {
+    container = document.createElement("div");
+    container.id = "toast-container";
+    container.className = "toast-container";
+    document.body.appendChild(container);
+  }
+  const toast = document.createElement("div");
+  toast.className = `toast toast-${type}`;
+  toast.innerHTML = `<span class="toast-icon">${type === "success" ? "✓" : "✕"}</span><span class="toast-msg">${escapeHtml(message)}</span>`;
+  container.appendChild(toast);
+  requestAnimationFrame(() => toast.classList.add("toast-visible"));
+  setTimeout(() => {
+    toast.classList.remove("toast-visible");
+    toast.classList.add("toast-exit");
+    toast.addEventListener("transitionend", () => toast.remove());
+  }, 4000);
+}
+
+// ── Proactive Session Check ──
+async function ensureSession() {
+  try {
+    await apiFetch(buildApiUrl("/api/auth/me"), { method: "GET" });
+    return true;
+  } catch {
+    showToast("Your session has expired. Redirecting to login…", "error");
+    setTimeout(() => window.location.assign("/"), 1500);
+    return false;
+  }
+}
+
+// ── Upload Button Loading State ──
+function setUploadButtonLoading(btn, labelEl, spinnerEl, loading) {
+  if (!btn) return;
+  btn.disabled = loading;
+  btn.classList.toggle("button-loading", loading);
+  if (labelEl) labelEl.style.display = loading ? "none" : "";
+  if (spinnerEl) spinnerEl.style.display = loading ? "inline" : "none";
+}
+
+// ── Real-time File Name Validation ──
+function validateFileNames(files, panel, validationEl) {
+  if (!validationEl) return;
+  const panelSuffix = panel.key.split("_").slice(-1)[0];
+  const results = files.map((file) => {
+    const stem = file.name.replace(/\.[^/.]+$/, "");
+    const parts = stem.split("_");
+    const valid = parts.length >= 3;
+    return { name: file.name, valid, suggestion: `Surname_Firstname_${panelSuffix}.pdf` };
+  });
+  const allValid = results.every((r) => r.valid);
+  validationEl.innerHTML = results
+    .map((r) =>
+      r.valid
+        ? `<div class="naming-check naming-ok"><span>✓</span> ${escapeHtml(r.name)} — naming looks good</div>`
+        : `<div class="naming-check naming-warn"><span>⚠</span> ${escapeHtml(r.name)} — rename to <code>${escapeHtml(r.suggestion)}</code></div>`,
+    )
+    .join("");
+  validationEl.className = `naming-validation ${allValid ? "naming-all-ok" : "naming-has-warn"}`;
 }
 
 function buildApiUrl(path) {
@@ -1085,6 +1224,11 @@ async function apiFetch(url, options, sendJson = true) {
 async function readJson(response) {
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
+    if (response.status === 401) {
+      showToast("Your session has expired. Redirecting to login…", "error");
+      setTimeout(() => window.location.assign("/"), 1500);
+      throw new Error("Session expired — please log in again");
+    }
     const errorMessage =
       typeof data.error === "string" && typeof data.details === "string" && data.error !== data.details
         ? `${data.error}: ${data.details}`
@@ -1306,4 +1450,28 @@ function normalizeApiBaseUrl(value) {
   }
 
   return String(value).replace(/\/+$/, "");
+}
+
+function hasPanelUploads(panelKey) {
+  return employeeUploads.some((item) => item.metadata?.panelKey === panelKey);
+}
+
+function getPanelUploadCount(panelKey) {
+  return employeeUploads.filter((item) => item.metadata?.panelKey === panelKey).length;
+}
+
+function collapseFacultyForm() {
+  const toggle = byId("faculty-form-toggle");
+  const savedIndicator = byId("faculty-form-saved");
+
+  if (toggle) {
+    toggle.removeAttribute("open");
+  }
+
+  if (savedIndicator) {
+    const name = valueOf("fullName") || "Faculty";
+    const eid = valueOf("employeeId");
+    savedIndicator.textContent = `${name}${eid ? ` (${eid})` : ""} — Record saved. Expand above to edit.`;
+    savedIndicator.style.display = "flex";
+  }
 }

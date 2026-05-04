@@ -303,6 +303,8 @@ app.post('/api/auth/logout', (_req: Request, res: Response) => {
 });
 
 app.get('/api/auth/me', requireAuth, (req: Request, res: Response) => {
+  // Sliding-window: re-issue session cookie on every /me check to extend expiry
+  setSessionCookie(res, req.user!);
   res.json({
     user: req.user,
     homePath: getHomePathForRole(req.user!.role),
@@ -1547,12 +1549,15 @@ function verifySessionToken(token: string): SessionUser | null {
     return null;
   }
 
-  const expected = crypto.createHmac('sha256', env.AUTH_SECRET).update(payload).digest('base64url');
-  if (!crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected))) {
-    return null;
-  }
-
   try {
+    const expected = crypto.createHmac('sha256', env.AUTH_SECRET).update(payload).digest('base64url');
+    const signatureBuffer = Buffer.from(signature);
+    const expectedBuffer = Buffer.from(expected);
+
+    if (signatureBuffer.length !== expectedBuffer.length || !crypto.timingSafeEqual(signatureBuffer, expectedBuffer)) {
+      return null;
+    }
+
     const parsed = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8')) as {
       sub: string;
       email: string;

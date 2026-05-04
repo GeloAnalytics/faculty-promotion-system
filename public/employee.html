@@ -31,6 +31,15 @@
             </div>
           </div>
         </header>
+
+        <nav class="section-nav" id="section-nav">
+          <a class="nav-chip" href="#faculty-panel">Faculty Record</a>
+          <a class="nav-chip" href="#draft-points-panel">Scoring</a>
+          <a class="nav-chip" href="#upload-panels">Upload Evidence</a>
+          <a class="nav-chip" href="#employee-profiles-panel">Profiles</a>
+          <a class="nav-chip" href="#employee-logs-panel">Upload Logs</a>
+        </nav>
+
         <section class="panel panel-wide" id="faculty-panel">
           <div class="panel-heading">
             <div>
@@ -38,6 +47,11 @@
               <h2>Create or update the base employee record</h2>
             </div>
           </div>
+          <details class="faculty-form-toggle" id="faculty-form-toggle" open>
+            <summary>
+              <span>Edit faculty record fields</span>
+              <span class="toggle-chevron">▶</span>
+            </summary>
           <form id="faculty-form" class="stack-form">
             <div class="field-row">
               <label class="field">
@@ -109,6 +123,8 @@
             </label>
             <button class="button button-primary" type="submit">Save Faculty Record</button>
           </form>
+          </details>
+          <div id="faculty-form-saved" class="faculty-form-summary" style="display:none"></div>
           <div id="faculty-result" class="notice">No faculty record saved yet.</div>
         </section>
 
@@ -134,28 +150,38 @@
           <div id="upload-panel-grid" class="upload-groups"></div>
         </section>
 
-        <section class="panel">
-          <div class="panel-heading">
-            <div>
-              <p class="section-kicker">Saved Profiles</p>
-              <h2>Your faculty records</h2>
+        <section class="panel" id="employee-profiles-panel">
+          <details class="collapsible-section">
+            <summary>
+              <div class="panel-heading" style="margin-bottom:0">
+                <div>
+                  <p class="section-kicker">Saved Profiles</p>
+                  <h2>Your faculty records</h2>
+                </div>
+              </div>
+              <span class="section-toggle-icon">▶</span>
+            </summary>
+            <div id="employee-profiles" class="database-viewer">
+              <div class="notice">Saved faculty profiles will appear here.</div>
             </div>
-          </div>
-          <div id="employee-profiles" class="database-viewer">
-            <div class="notice">Saved faculty profiles will appear here.</div>
-          </div>
+          </details>
         </section>
 
-        <section class="panel">
-          <div class="panel-heading">
-            <div>
-              <p class="section-kicker">Upload Logs</p>
-              <h2>Your recent uploaded files</h2>
+        <section class="panel" id="employee-logs-panel">
+          <details class="collapsible-section">
+            <summary>
+              <div class="panel-heading" style="margin-bottom:0">
+                <div>
+                  <p class="section-kicker">Upload Logs</p>
+                  <h2>Your recent uploaded files</h2>
+                </div>
+              </div>
+              <span class="section-toggle-icon">▶</span>
+            </summary>
+            <div id="employee-logs" class="database-viewer">
+              <div class="notice">Uploaded file logs will appear here.</div>
             </div>
-          </div>
-          <div id="employee-logs" class="database-viewer">
-            <div class="notice">Uploaded file logs will appear here.</div>
-          </div>
+          </details>
         </section>
       </main>
     </div>
