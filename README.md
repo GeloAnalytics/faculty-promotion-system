@@ -4,14 +4,15 @@ A Full-stack TypeScript application for faculty promotion analysis with PDF evid
 
 ## Architecture
 
-* **Frontend:** Vanilla JS/HTML/CSS with role-based routing (Employee vs. Evaluator).
-* **Backend:** Express.js + Prisma + PostgreSQL.
+* **Frontend:** Vue 3 + Vite Single Page Application (SPA) with role-based Vue Router (`/employee` vs `/evaluator`).
+* **Backend:** Express.js MVC Architecture (Controllers, Routes, Middlewares, Validations) + Prisma + PostgreSQL.
+* **Authentication:** Stateless JSON Web Tokens (JWT) via `Authorization: Bearer <token>` headers.
 * **Document Processing:** PDF parsing (`pdf-parse`) and Image OCR (Windows OCR / HTTP API).
 * **Machine Learning:** Scikit-learn + XGBoost/AdaBoost for promotion outcome prediction.
 
 ## System Workflow
 
-1. **Authentication:** Users create accounts and log in. Role-based routing sends them to the appropriate workspace (`/employee` or `/evaluator`).
+1. **Authentication:** Users create accounts and log in via JWT. Role-based routing sends them to the appropriate workspace (`/employee` or `/evaluator`).
 2. **Data Collection:** Faculty profile data and performance review scores are submitted.
 3. **Evidence Upload:** Users upload PDFs and images representing evidence for their Key Result Areas (KRAs). 
 4. **OCR & Analysis:** The backend extracts text, scores the documents for completeness and quality, and flags keyword matches.
@@ -27,17 +28,23 @@ The project implements **Boosting Machine Learning Algorithms** to evaluate and 
 
 ## Deployment Notes
 
-* **Frontend:** The `public` folder is configured for deployment on Netlify or similar static hosting. Use `public/config.js` to point to the remote backend.
+* **Frontend:** The `frontend` directory is configured for deployment on Netlify or similar static hosting. Update your build commands to run `npm run build` inside the `frontend` folder.
 * **Backend:** Must be hosted on a Node-capable environment (Render, Railway, Fly.io, etc.) because it relies on persistent state and file processing.
 * **Database:** Connect a managed PostgreSQL database (Neon, Supabase, etc.) and run `npm run db:deploy` during build.
 * **OCR Provider:** In production, specify an HTTP OCR provider (like OCR.space) by setting `OCR_PROVIDER=http` and configuring the API keys in your `.env`.
 
 ## Development Commands
 
-- `npm run dev`: Start the local development server.
+**Backend:**
+- `npm run dev`: Start the local development Express server.
 - `npm run build`: Compile TypeScript.
+- `npm run db:migrate`: Run database migrations.
+- `npm run db:studio`: Open Prisma Studio.
+
+**Frontend:**
+- `cd frontend && npm run dev`: Start the Vite dev server.
+
+**Machine Learning:**
 - `npm run ml:build-fallback-dataset`: Build a mock training dataset for testing.
 - `npm run ml:export-dataset`: Export PostgreSQL data for ML training.
 - `npm run ml:train-boosting`: Train and evaluate the Boosting models.
-- `npm run db:migrate`: Run database migrations.
-- `npm run db:studio`: Open Prisma Studio.
