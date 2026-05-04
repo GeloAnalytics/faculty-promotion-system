@@ -854,6 +854,8 @@ select {
   font-family: "Space Grotesk", monospace;
   font-size: 0.78rem;
   font-weight: 600;
+  word-break: break-all;
+  white-space: normal;
 }
 
 /* ── Upload Status Badge ── */
@@ -1278,6 +1280,8 @@ select {
   font-family: "Space Grotesk", monospace;
   font-size: 0.76rem;
   font-weight: 600;
+  word-break: break-all;
+  white-space: normal;
 }
 
 .naming-ok {
