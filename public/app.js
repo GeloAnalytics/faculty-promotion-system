@@ -1218,8 +1218,6 @@ async function ensureSession() {
     await apiFetch(buildApiUrl("/api/auth/me"), { method: "GET" });
     return true;
   } catch {
-    showToast("Your session has expired. Redirecting to login…", "error");
-    setTimeout(() => window.location.assign("/"), 1500);
     return false;
   }
 }
@@ -1277,8 +1275,10 @@ async function readJson(response) {
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
     if (response.status === 401) {
-      showToast("Your session has expired. Redirecting to login…", "error");
-      setTimeout(() => window.location.assign("/"), 1500);
+      if (window.location.pathname !== "/") {
+        showToast("Your session has expired. Redirecting to login…", "error");
+        setTimeout(() => window.location.assign("/"), 1500);
+      }
       throw new Error("Session expired — please log in again");
     }
     const errorMessage =
