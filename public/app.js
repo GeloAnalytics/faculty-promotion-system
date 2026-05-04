@@ -20,6 +20,7 @@ const databaseViewer = byId("database-viewer");
 const trainingCriteria = byId("training-criteria");
 const trainingScoreTotal = byId("training-score-total");
 const workspaceGreeting = byId("workspace-greeting");
+const uploadedFilesViewer = byId("uploaded-files-viewer");
 const showLoginButton = byId("show-login");
 const showRegisterButton = byId("show-register");
 const nameField = byId("name-field");
@@ -34,6 +35,7 @@ let employeeUploads = [];
 const latestTrainingItemById = new Map();
 uploadPanelGrid?.addEventListener("click", handleDeleteUploadClick);
 reviewQueue?.addEventListener("click", handleDeleteUploadClick);
+uploadedFilesViewer?.addEventListener("click", handleDeleteUploadClick);
 
 document.querySelectorAll("[data-scroll-target]").forEach((button) => {
   button.addEventListener("click", () => {
@@ -200,6 +202,7 @@ async function refreshSession() {
 async function loadEmployeeWorkspace() {
   await Promise.all([loadUploadPanelCatalog(), loadEmployeeDashboard()]);
   renderUploadPanels(uploadPanelCatalog);
+  renderUploadedFilesSection(uploadPanelCatalog);
 }
 
 async function loadEvaluatorWorkspace() {
@@ -256,6 +259,7 @@ async function loadEmployeeDashboard() {
     renderEmployeeUploads(employeeUploads);
     if (uploadPanelCatalog.length) {
       renderUploadPanels(uploadPanelCatalog);
+      renderUploadedFilesSection(uploadPanelCatalog);
     }
 
     if (data.latestProfile?.id) {
@@ -268,6 +272,7 @@ async function loadEmployeeDashboard() {
     renderEmployeeUploads([], toErrorMessage(error));
     if (uploadPanelCatalog.length) {
       renderUploadPanels(uploadPanelCatalog);
+      renderUploadedFilesSection(uploadPanelCatalog);
     }
   }
 }
@@ -392,21 +397,6 @@ function renderUploadPanels(panels) {
                       </button>
                     </form>
                     <div class="notice panel-result">${hasPanelUploads(panel.key) ? getPanelUploadCount(panel.key) + ' file(s) uploaded.' : 'No files uploaded yet.'}</div>
-                    <details class="upload-details">
-                      <summary>Preview &amp; file details</summary>
-                      <div class="upload-details-content">
-                        <div class="upload-preview">
-                          <div class="upload-file-name">No files selected.</div>
-                          <div class="upload-file-view"></div>
-                          <div class="upload-text-preview"></div>
-                        </div>
-                        <div class="upload-history">
-                          <div class="upload-preview-label">Saved files for this panel</div>
-                          <div class="upload-history-list">${renderPanelUploadHistory(panel.key)}</div>
-                          ${renderPanelDeleteManager(panel.key)}
-                        </div>
-                      </div>
-                    </details>
                   </article>
                 `,
               )
@@ -428,10 +418,6 @@ function renderUploadPanels(panels) {
     const form = article.querySelector(".upload-panel-form");
     const result = article.querySelector(".panel-result");
     const fileInput = form?.querySelector('input[type="file"]');
-    const fileName = article.querySelector(".upload-file-name");
-    const fileView = article.querySelector(".upload-file-view");
-    const textPreview = article.querySelector(".upload-text-preview");
-
     const namingValidation = article.querySelector(".naming-validation");
     const submitBtn = form?.querySelector(".upload-submit-btn");
     const btnLabel = submitBtn?.querySelector(".upload-btn-label");
@@ -439,16 +425,8 @@ function renderUploadPanels(panels) {
 
     fileInput?.addEventListener("change", () => {
       const files = Array.from(fileInput.files || []);
-      if (!files.length) {
-        fileName.textContent = "No files selected.";
-        fileView.innerHTML = "";
-        textPreview.textContent = "No extracted text available yet.";
-        if (namingValidation) namingValidation.innerHTML = "";
-        return;
-      }
-
-      fileName.textContent = describeSelectedFiles(files);
-      renderClientPreview(files, fileView, textPreview);
+      if (namingValidation) namingValidation.innerHTML = "";
+      if (!files.length) return;
       validateFileNames(files, panel, namingValidation);
     });
 
@@ -491,11 +469,10 @@ function renderUploadPanels(panels) {
         });
         const data = await readJson(response);
         setNotice(result, buildUploadNotice(panel.title, data), false, true);
-        updateUploadedPreview(data, files, fileName, fileView, textPreview);
-        const detailsEl = article.querySelector(".upload-details");
-        if (detailsEl) { detailsEl.open = true; }
         showToast(`✓ ${panel.title} — uploaded successfully`, "success");
         await loadEmployeeDashboard();
+        renderUploadPanels(uploadPanelCatalog);
+        renderUploadedFilesSection(uploadPanelCatalog);
       } catch (error) {
         setNotice(result, toErrorMessage(error), true);
         showToast(`Upload failed: ${toErrorMessage(error)}`, "error");
@@ -504,6 +481,81 @@ function renderUploadPanels(panels) {
       }
     });
   });
+}
+
+function renderUploadedFilesSection(panels) {
+  if (!uploadedFilesViewer) return;
+
+  if (!employeeUploads.length) {
+    uploadedFilesViewer.innerHTML = '<div class="notice">No files uploaded yet. Upload evidence in the panels above and they will appear here.</div>';
+    return;
+  }
+
+  const groupedPanels = groupPanelsByKra(panels);
+  const ungrouped = employeeUploads.filter((u) => !u.metadata?.panelKey || !panels.some((p) => p.key === u.metadata?.panelKey));
+
+  uploadedFilesViewer.innerHTML = groupedPanels
+    .map(([kraTitle, items]) => {
+      const kraFiles = items.flatMap((panel) =>
+        employeeUploads
+          .filter((u) => u.metadata?.panelKey === panel.key)
+          .map((u) => ({ ...u, panelTitle: panel.title }))
+      );
+      if (!kraFiles.length) return "";
+      return `
+        <div class="uploaded-files-group">
+          <div class="uploaded-files-group-header">
+            <h3>${escapeHtml(kraTitle)}</h3>
+            <span class="kra-progress-chip">${kraFiles.length} file${kraFiles.length !== 1 ? "s" : ""}</span>
+          </div>
+          <div class="uploaded-files-list">
+            ${kraFiles.map((item) => `
+              <div class="uploaded-file-row">
+                <div class="uploaded-file-info">
+                  <strong>${escapeHtml(item.originalName)}</strong>
+                  <span class="uploaded-file-panel">${escapeHtml(item.panelTitle)}</span>
+                  <span class="uploaded-file-date">${escapeHtml(formatDatabaseValue(item.createdAt))}</span>
+                </div>
+                <button
+                  class="button button-secondary delete-upload-button"
+                  type="button"
+                  data-document-id="${escapeHtml(item.id)}"
+                  data-refresh-target="employee"
+                  data-file-name="${escapeHtml(item.originalName || "this file")}"
+                >Delete</button>
+              </div>
+            `).join("")}
+          </div>
+        </div>
+      `;
+    })
+    .join("")
+    + (ungrouped.length ? `
+      <div class="uploaded-files-group">
+        <div class="uploaded-files-group-header">
+          <h3>Other Files</h3>
+          <span class="kra-progress-chip">${ungrouped.length} file${ungrouped.length !== 1 ? "s" : ""}</span>
+        </div>
+        <div class="uploaded-files-list">
+          ${ungrouped.map((item) => `
+            <div class="uploaded-file-row">
+              <div class="uploaded-file-info">
+                <strong>${escapeHtml(item.originalName)}</strong>
+                <span class="uploaded-file-panel">${escapeHtml(item.metadata?.panelTitle || "Unassigned")}</span>
+                <span class="uploaded-file-date">${escapeHtml(formatDatabaseValue(item.createdAt))}</span>
+              </div>
+              <button
+                class="button button-secondary delete-upload-button"
+                type="button"
+                data-document-id="${escapeHtml(item.id)}"
+                data-refresh-target="employee"
+                data-file-name="${escapeHtml(item.originalName || "this file")}"
+              >Delete</button>
+            </div>
+          `).join("")}
+        </div>
+      </div>
+    ` : "");
 }
 
 function renderEvaluatorCriteria(panels) {
