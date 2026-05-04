@@ -247,7 +247,7 @@ select {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
   gap: 16px;
-  align-items: start;
+  align-items: stretch;
 }
 
 .upload-group,
@@ -275,6 +275,16 @@ select {
   padding: 16px;
 }
 
+.upload-card {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.upload-panel-form {
+  margin-top: auto;
+}
+
 .card-copy {
   color: var(--muted);
   line-height: 1.5;
@@ -284,12 +294,41 @@ select {
   display: flex;
   justify-content: space-between;
   gap: 12px;
-  align-items: baseline;
+  align-items: flex-start;
 }
 
 .upload-card-header h4 {
   margin: 0;
   font-size: 1.05rem;
+}
+
+.upload-card-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.upload-status-badge {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.upload-status-badge[data-status="uploaded"] {
+  background: #d1fae5;
+  color: #065f46;
+}
+
+.upload-status-badge[data-status="pending"] {
+  background: #e5e7eb;
+  color: #4b5563;
 }
 
 .upload-score-cap,
@@ -303,6 +342,7 @@ select {
   color: var(--accent-strong);
   font-size: 0.78rem;
   font-weight: 700;
+  white-space: nowrap;
 }
 
 .upload-audience-chip {
