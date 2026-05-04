@@ -215,3 +215,35 @@ export interface UploadPanelDefinition {
   sharedCapLabel?: string;
   sharedCapMaxScore?: number;
 }
+
+export type ProfileLinkCandidate = {
+  id: string;
+  name: string;
+  employeeId: string | null;
+};
+
+export type ProfileLinkResult = {
+  profileId: string | null;
+  matchedBy: 'explicit' | 'filename' | 'unmatched';
+  matchedName: string | null;
+  matchedEmployeeId: string | null;
+};
+
+export type ProcessedUploadResult = {
+  originalName: string;
+  fileType: 'pdf' | 'image';
+  documentId: string;
+  panelKey: UploadPanelDefinition['key'];
+  profileId: string | null;
+  linkage: ProfileLinkResult;
+  textPreview: string;
+  analysis: DocumentAnalysisResult;
+};
+
+declare global {
+  namespace Express {
+    interface Request {
+      user?: SessionUser;
+    }
+  }
+}

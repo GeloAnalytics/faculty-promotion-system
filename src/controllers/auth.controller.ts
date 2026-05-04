@@ -1,0 +1,119 @@
+import { Request, Response } from 'express';
+import crypto from 'node:crypto';
+import jwt from 'jsonwebtoken';
+import { prisma } from '../config/db';
+import { env, isProduction } from '../config/env';
+import { registerSchema, loginSchema } from '../validations/auth.validation';
+import { hashPassword, verifyPassword } from '../utils/crypto';
+import { UserRole } from '@prisma/client';
+import { SessionUser } from '../types';
+
+function toSessionUser(user: { id: string; email: string; fullName: string; role: UserRole }): SessionUser {
+  return {
+    id: user.id,
+    email: user.email,
+    fullName: user.fullName,
+    role: user.role,
+  };
+}
+
+function getHomePathForRole(role: UserRole | SessionUser['role']) {
+  return role === UserRole.EVALUATOR ? '/evaluator' : '/employee';
+}
+
+function generateToken(user: SessionUser): string {
+  return jwt.sign(
+    {
+      sub: user.id,
+      email: user.email,
+      fullName: user.fullName,
+      role: user.role,
+    },
+    env.AUTH_SECRET,
+    { expiresIn: '7d' }
+  );
+}
+
+function setCookieFallback(res: Response, token: string) {
+  const parts = [
+    `fps_session=${token}`,
+    'Path=/',
+    'HttpOnly',
+    'SameSite=Lax',
+    `Max-Age=${7 * 24 * 60 * 60}`,
+  ];
+
+  if (isProduction) {
+    parts.push('Secure');
+  }
+
+  res.setHeader('Set-Cookie', parts.join('; '));
+}
+
+function clearCookieFallback(res: Response) {
+  const parts = ['fps_session=', 'Path=/', 'HttpOnly', 'SameSite=Lax', 'Max-Age=0'];
+  if (isProduction) {
+    parts.push('Secure');
+  }
+  res.setHeader('Set-Cookie', parts.join('; '));
+}
+
+export const register = async (req: Request, res: Response) => {
+  const payload = registerSchema.parse(req.body);
+  const existingUser = await prisma.user.findUnique({ where: { email: payload.email.toLowerCase() } });
+
+  if (existingUser) {
+    return res.status(409).json({ error: 'An account with that email already exists' });
+  }
+
+  const passwordSalt = crypto.randomBytes(16).toString('hex');
+  const passwordHash = hashPassword(payload.password, passwordSalt);
+
+  const user = await prisma.user.create({
+    data: {
+      fullName: payload.fullName,
+      email: payload.email.toLowerCase(),
+      passwordHash,
+      passwordSalt,
+      role: payload.role,
+    },
+  });
+
+  const sessionUser = toSessionUser(user);
+  const token = generateToken(sessionUser);
+  setCookieFallback(res, token); // Fallback for transition
+
+  return res.status(201).json({ user: sessionUser, token, homePath: getHomePathForRole(sessionUser.role) });
+};
+
+export const login = async (req: Request, res: Response) => {
+  const payload = loginSchema.parse(req.body);
+  const user = await prisma.user.findUnique({ where: { email: payload.email.toLowerCase() } });
+
+  if (!user || !user.accountActive || !verifyPassword(payload.password, user.passwordSalt, user.passwordHash)) {
+    return res.status(401).json({ error: 'Invalid email or password' });
+  }
+
+  const sessionUser = toSessionUser(user);
+  const token = generateToken(sessionUser);
+  setCookieFallback(res, token);
+
+  return res.json({ user: sessionUser, token, homePath: getHomePathForRole(sessionUser.role) });
+};
+
+export const logout = async (_req: Request, res: Response) => {
+  clearCookieFallback(res);
+  res.status(204).send();
+};
+
+export const me = async (req: Request, res: Response) => {
+  // Sliding-window: re-issue token/cookie
+  const token = generateToken(req.user!);
+  setCookieFallback(res, token);
+  
+  res.json({
+    user: req.user,
+    token, // Send new token for frontend to update
+    homePath: getHomePathForRole(req.user!.role),
+  });
+};
