@@ -6,8 +6,8 @@ import { catchAsync } from '../utils/catchAsync';
 
 const router = Router();
 
-router.get('/employee', requireAuth, requireRole(UserRole.EMPLOYEE, UserRole.ADMIN), catchAsync(getEmployeeDashboard));
+router.get('/employee/dashboard', requireAuth, requireRole(UserRole.EMPLOYEE, UserRole.ADMIN), catchAsync(getEmployeeDashboard));
 router.get('/evaluator/review-queue', requireAuth, requireRole(UserRole.EVALUATOR, UserRole.ADMIN), catchAsync(getEvaluatorQueue));
-router.get('/:profileId', requireAuth, requireRole(UserRole.EVALUATOR, UserRole.ADMIN), catchAsync(getDashboardProfile));
+router.get('/dashboard/:profileId', requireAuth, requireRole(UserRole.EVALUATOR, UserRole.ADMIN), catchAsync(getDashboardProfile));
 
 export default router;

@@ -45,15 +45,11 @@ router.use('/reference', referenceRoutes);
 router.use('/config', configRoutes);
 router.use('/documents', documentRoutes);
 router.use('/faculty', facultyRoutes);
-router.use('/analysis', facultyRoutes);
-router.use('/models', facultyRoutes);
-router.use('/predictions', facultyRoutes);
+
 router.use('/training', trainingRoutes);
 router.use('/admin', adminRoutes);
 
 // Fix for dashboard paths
-router.use('/dashboard', dashboardRoutes); // this handles /api/dashboard/:profileId
-router.use('/employee/dashboard', dashboardRoutes); // wait, dashboard route exports /employee, so router.use('/', dashboardRoutes)
-router.use('/', dashboardRoutes); // mounts /employee, /evaluator/review-queue, /:profileId
+router.use('/', dashboardRoutes); // mounts /employee/dashboard, /evaluator/review-queue, /dashboard/:profileId
 
 export default router;
