@@ -21,7 +21,7 @@ export const getEmployeeDashboard = async (req: Request, res: Response) => {
           },
         },
         trainingItems: {
-          orderBy: { createdAt: 'desc' },
+          orderBy: { updatedAt: 'desc' },
           select: {
             id: true,
             status: true,
@@ -63,7 +63,9 @@ export const getEmployeeDashboard = async (req: Request, res: Response) => {
     }),
   ]);
 
-  const latestProfile = profiles[0] ?? null;
+  const latestProfileWithAssessment = profiles.find((profile) => getLatestEvaluatorBackedTrainingItem(profile.trainingItems));
+  const latestProfile = latestProfileWithAssessment ?? profiles[0] ?? null;
+  const latestTrainingItem = latestProfile ? getLatestEvaluatorBackedTrainingItem(latestProfile.trainingItems) ?? latestProfile.trainingItems[0] : null;
   const draftPoints = buildDraftPointSummary(
     latestProfile
       ? {
@@ -72,10 +74,10 @@ export const getEmployeeDashboard = async (req: Request, res: Response) => {
         }
       : null,
     latestProfile?.documents ?? documents.filter((document) => document.profileId === latestProfile?.id),
-    latestProfile?.trainingItems[0]
+    latestTrainingItem
       ? {
-          assessment: parseEvaluatorAssessment(latestProfile.trainingItems[0].notes),
-          status: latestProfile.trainingItems[0].status,
+          assessment: parseEvaluatorAssessment(latestTrainingItem.notes),
+          status: latestTrainingItem.status,
         }
       : undefined,
   );
@@ -110,10 +112,12 @@ export const getEmployeeDashboard = async (req: Request, res: Response) => {
           semester: profile.semester,
         },
         profile.documents,
-        profile.trainingItems[0]
+        getLatestEvaluatorBackedTrainingItem(profile.trainingItems) ?? profile.trainingItems[0]
           ? {
-              assessment: parseEvaluatorAssessment(profile.trainingItems[0].notes),
-              status: profile.trainingItems[0].status,
+              assessment: parseEvaluatorAssessment(
+                (getLatestEvaluatorBackedTrainingItem(profile.trainingItems) ?? profile.trainingItems[0])!.notes,
+              ),
+              status: (getLatestEvaluatorBackedTrainingItem(profile.trainingItems) ?? profile.trainingItems[0])!.status,
             }
           : undefined,
       ),
@@ -190,6 +194,7 @@ export const getEvaluatorQueue = async (_req: Request, res: Response) => {
 
   return res.json({
     items: profiles.map((profile) => ({
+      latestEvaluatorTrainingItem: getLatestEvaluatorBackedTrainingItem(profile.trainingItems) ?? profile.trainingItems[0] ?? null,
       id: profile.id,
       name: profile.name,
       employeeId: profile.employeeId,
@@ -202,10 +207,12 @@ export const getEvaluatorQueue = async (_req: Request, res: Response) => {
           semester: profile.semester,
         },
         profile.documents,
-        profile.trainingItems[0]
+        getLatestEvaluatorBackedTrainingItem(profile.trainingItems) ?? profile.trainingItems[0]
           ? {
-              assessment: parseEvaluatorAssessment(profile.trainingItems[0].notes),
-              status: profile.trainingItems[0].status,
+              assessment: parseEvaluatorAssessment(
+                (getLatestEvaluatorBackedTrainingItem(profile.trainingItems) ?? profile.trainingItems[0])!.notes,
+              ),
+              status: (getLatestEvaluatorBackedTrainingItem(profile.trainingItems) ?? profile.trainingItems[0])!.status,
             }
           : undefined,
       ),
@@ -231,3 +238,9 @@ export const getEvaluatorQueue = async (_req: Request, res: Response) => {
     })),
   });
 };
+
+function getLatestEvaluatorBackedTrainingItem(
+  trainingItems: Array<{ status: string; notes: string | null; updatedAt: Date; createdAt: Date }>,
+) {
+  return trainingItems.find((item) => item.status === 'LABELED' || item.status === 'VALIDATED') ?? null;
+}
