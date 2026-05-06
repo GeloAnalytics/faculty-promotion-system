@@ -382,15 +382,6 @@ function renderUploadPanels(panels) {
                         <span>Select file(s)</span>
                         <input type="file" name="document" multiple required accept="${escapeHtml(panel.acceptedFormats.map(f => '.' + f).join(','))}" />
                       </label>
-                      <div class="naming-guide">
-                        <span class="naming-guide-icon">📝</span>
-                        <div class="naming-guide-text">
-                          <strong>File naming format</strong>
-                          <code>Surname_Firstname_${escapeHtml(panel.key.split('_').slice(-1)[0])}.pdf</code>
-                          <br>Example: <code>DelaCruz_Juan_${escapeHtml(panel.key.split('_').slice(-1)[0])}.pdf</code>
-                        </div>
-                      </div>
-                      <div class="naming-validation" data-panel-key="${escapeHtml(panel.key)}"></div>
                       <button class="button button-primary upload-submit-btn" type="submit">
                         <span class="upload-btn-label">Upload Evidence</span>
                         <span class="upload-btn-spinner" style="display:none">Uploading…</span>
@@ -418,17 +409,9 @@ function renderUploadPanels(panels) {
     const form = article.querySelector(".upload-panel-form");
     const result = article.querySelector(".panel-result");
     const fileInput = form?.querySelector('input[type="file"]');
-    const namingValidation = article.querySelector(".naming-validation");
     const submitBtn = form?.querySelector(".upload-submit-btn");
     const btnLabel = submitBtn?.querySelector(".upload-btn-label");
     const btnSpinner = submitBtn?.querySelector(".upload-btn-spinner");
-
-    fileInput?.addEventListener("change", () => {
-      const files = Array.from(fileInput.files || []);
-      if (namingValidation) namingValidation.innerHTML = "";
-      if (!files.length) return;
-      validateFileNames(files, panel, namingValidation);
-    });
 
     form?.addEventListener("submit", async (event) => {
       event.preventDefault();
@@ -436,14 +419,6 @@ function renderUploadPanels(panels) {
       if (!files.length) {
         setNotice(result, "Choose at least one file first.", true);
         return;
-      }
-
-      for (const file of files) {
-        const parts = file.name.replace(/\.[^/.]+$/, "").split("_");
-        if (parts.length < 3) {
-          setNotice(result, `File "${file.name}" does not follow the required naming convention. Expected format: Surname_Firstname_DocumentType.pdf (e.g. DelaCruz_Juan_IPCR.pdf)`, true);
-          return;
-        }
       }
 
       // Proactive session check before upload
@@ -1239,27 +1214,6 @@ function setUploadButtonLoading(btn, labelEl, spinnerEl, loading) {
   btn.classList.toggle("button-loading", loading);
   if (labelEl) labelEl.style.display = loading ? "none" : "";
   if (spinnerEl) spinnerEl.style.display = loading ? "inline" : "none";
-}
-
-// ── Real-time File Name Validation ──
-function validateFileNames(files, panel, validationEl) {
-  if (!validationEl) return;
-  const panelSuffix = panel.key.split("_").slice(-1)[0];
-  const results = files.map((file) => {
-    const stem = file.name.replace(/\.[^/.]+$/, "");
-    const parts = stem.split("_");
-    const valid = parts.length >= 3;
-    return { name: file.name, valid, suggestion: `Surname_Firstname_${panelSuffix}.pdf` };
-  });
-  const allValid = results.every((r) => r.valid);
-  validationEl.innerHTML = results
-    .map((r) =>
-      r.valid
-        ? `<div class="naming-check naming-ok"><span>✓</span> ${escapeHtml(r.name)} — naming looks good</div>`
-        : `<div class="naming-check naming-warn"><span>⚠</span> ${escapeHtml(r.name)} — rename to <code>${escapeHtml(r.suggestion)}</code></div>`,
-    )
-    .join("");
-  validationEl.className = `naming-validation ${allValid ? "naming-all-ok" : "naming-has-warn"}`;
 }
 
 function buildApiUrl(path) {
