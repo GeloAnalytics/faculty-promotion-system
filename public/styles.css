@@ -349,32 +349,6 @@ select {
   margin-top: 8px;
 }
 
-.upload-preview {
-  margin-top: 14px;
-  padding-top: 14px;
-  border-top: 1px solid var(--border);
-  display: grid;
-  gap: 10px;
-}
-
-.upload-preview-label {
-  font-size: 0.85rem;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--accent);
-  font-family: "Space Grotesk", sans-serif;
-}
-
-.upload-file-name {
-  color: var(--text);
-  font-weight: 600;
-}
-
-.upload-file-view {
-  display: grid;
-  gap: 10px;
-}
-
 .upload-image-preview {
   width: 100%;
   max-height: 240px;
@@ -391,18 +365,6 @@ select {
   background: var(--accent-soft);
   color: var(--accent-strong);
   font-size: 0.92rem;
-}
-
-.upload-text-preview {
-  white-space: pre-wrap;
-  line-height: 1.5;
-  color: var(--muted);
-  padding: 12px 14px;
-  border-radius: 14px;
-  background: #fffdf9;
-  border: 1px solid var(--border);
-  max-height: 220px;
-  overflow: auto;
 }
 
 .upload-history {
@@ -894,45 +856,6 @@ select {
   display: flex;
   gap: 6px;
   align-items: center;
-}
-
-.upload-details {
-  border: none;
-  margin-top: 8px;
-}
-
-.upload-details summary {
-  cursor: pointer;
-  list-style: none;
-  padding: 8px 12px;
-  border-radius: 10px;
-  background: rgba(13, 107, 87, 0.04);
-  color: var(--accent-strong);
-  font-size: 0.84rem;
-  font-weight: 600;
-  transition: background 0.18s ease;
-  user-select: none;
-}
-
-.upload-details summary::-webkit-details-marker {
-  display: none;
-}
-
-.upload-details summary::before {
-  content: "\25B8 ";
-  font-size: 0.78rem;
-}
-
-.upload-details[open] summary::before {
-  content: "\25BE ";
-}
-
-.upload-details summary:hover {
-  background: rgba(13, 107, 87, 0.08);
-}
-
-.upload-details-content {
-  padding-top: 10px;
 }
 
 /* ── Sticky Section Nav ── */

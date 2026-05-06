@@ -635,8 +635,13 @@ function renderEmployeeDraftPoints(draftPoints, summary, errorMessage) {
     <div class="card workspace-summary-card">
       <p class="card-copy">${escapeHtml(draftPoints.note || "")}</p>
       <p class="card-copy">Current rank: ${escapeHtml(promotionDraft.currentRank || "Not set")}</p>
-      <p class="card-copy">Your draft rank: ${escapeHtml(promotionDraft.suggestedRank || "Pending evaluator review")}</p>
+      <p class="card-copy">Official draft rank: ${escapeHtml(promotionDraft.suggestedRank || "Pending evaluator review")}</p>
+      <p class="card-copy">Projected rank from score: ${escapeHtml(promotionDraft.projectedRank || "Pending evaluator review")}</p>
       <p class="card-copy">Latest evaluator total: ${escapeHtml(formatOptionalNumber(promotionDraft.evaluatorTotalScore, "Pending"))}</p>
+      <p class="card-copy">Official weighted score: ${escapeHtml(formatOptionalNumber(promotionDraft.weightedScore, "Pending"))}</p>
+      <p class="card-copy">Sub-rank increments: ${escapeHtml(formatOptionalNumber(promotionDraft.subrankIncrements, "Pending"))}</p>
+      <p class="card-copy">Applied weight profile: ${escapeHtml(promotionDraft.appliedWeightProfile || "Pending")}</p>
+      ${promotionDraft.pendingRequirement ? `<p class="card-copy">Pending requirement: ${escapeHtml(promotionDraft.pendingRequirement)}</p>` : ""}
       <p class="card-copy">${escapeHtml(promotionDraft.note || "")}</p>
       <p class="card-copy">Uploaded panels: ${escapeHtml(String(draftPoints.evidenceCoverage?.uploadedPanelCount ?? 0))} / ${escapeHtml(String(draftPoints.evidenceCoverage?.expectedPanelCount ?? 0))}</p>
       <p class="card-copy">Workflow coverage: ${escapeHtml(String(draftPoints.evidenceCoverage?.workflowCoveragePercent ?? 0))}%</p>
@@ -668,7 +673,8 @@ function renderEmployeeProfiles(profiles) {
               </div>
               <p class="card-copy">Semester: ${escapeHtml(profile.semester || "-")}</p>
               <p class="card-copy">Current rank: ${escapeHtml(profile.draftPoints?.promotionDraft?.currentRank || "Not set")}</p>
-              <p class="card-copy">Draft rank: ${escapeHtml(profile.draftPoints?.promotionDraft?.suggestedRank || "Pending evaluator review")}</p>
+              <p class="card-copy">Official draft rank: ${escapeHtml(profile.draftPoints?.promotionDraft?.suggestedRank || "Pending evaluator review")}</p>
+              <p class="card-copy">Projected rank: ${escapeHtml(profile.draftPoints?.promotionDraft?.projectedRank || "Pending evaluator review")}</p>
               <p class="card-copy">Documents linked: ${escapeHtml(String(profile.documentCount || 0))}</p>
               <p class="card-copy">Approximate total: ${escapeHtml(String(profile.draftPoints?.overallEstimate ?? 0))}</p>
             </article>
@@ -757,10 +763,15 @@ function renderReviewQueue(items) {
               <p class="card-copy">Submitted by: ${escapeHtml(item.createdBy?.fullName || "-")} (${escapeHtml(item.createdBy?.email || "-")})</p>
               <p class="card-copy">Semester: ${escapeHtml(item.semester || "-")}</p>
               <p class="card-copy">Current rank: ${escapeHtml(item.draftPoints?.promotionDraft?.currentRank || "Not set")}</p>
-              <p class="card-copy">Draft rank recommendation: ${escapeHtml(item.draftPoints?.promotionDraft?.suggestedRank || "Pending evaluator review")}</p>
+              <p class="card-copy">Official draft rank: ${escapeHtml(item.draftPoints?.promotionDraft?.suggestedRank || "Pending evaluator review")}</p>
+              <p class="card-copy">Projected rank from score: ${escapeHtml(item.draftPoints?.promotionDraft?.projectedRank || "Pending evaluator review")}</p>
               <p class="card-copy">Approximate total from uploaded data: ${escapeHtml(String(item.draftPoints?.overallEstimate ?? 0))}</p>
               <p class="card-copy">Coverage: ${escapeHtml(String(item.draftPoints?.evidenceCoverage?.uploadedPanelCount ?? 0))} / ${escapeHtml(String(item.draftPoints?.evidenceCoverage?.expectedPanelCount ?? 0))} panels</p>
               <p class="card-copy">Latest evaluator total: ${escapeHtml(formatOptionalNumber(item.draftPoints?.promotionDraft?.evaluatorTotalScore, "Pending"))}</p>
+              <p class="card-copy">Official weighted score: ${escapeHtml(formatOptionalNumber(item.draftPoints?.promotionDraft?.weightedScore, "Pending"))}</p>
+              <p class="card-copy">Sub-rank increments: ${escapeHtml(formatOptionalNumber(item.draftPoints?.promotionDraft?.subrankIncrements, "Pending"))}</p>
+              <p class="card-copy">Applied weight profile: ${escapeHtml(item.draftPoints?.promotionDraft?.appliedWeightProfile || "Pending")}</p>
+              ${item.draftPoints?.promotionDraft?.pendingRequirement ? `<p class="card-copy">Pending requirement: ${escapeHtml(item.draftPoints.promotionDraft.pendingRequirement)}</p>` : ""}
               <p class="card-copy">${escapeHtml(item.draftPoints?.promotionDraft?.note || "")}</p>
               <div class="review-log-list">
                 ${uploads.length ? uploads.map(renderUploadLogChip).join("") : '<div class="notice">No uploads linked yet.</div>'}
@@ -967,73 +978,6 @@ function buildFacultyPayload() {
     promotionHistory: [],
     notes: valueOf("analysis-notes"),
   };
-}
-
-function renderClientPreview(files, fileView, textPreview) {
-  fileView.innerHTML = "";
-  const previewMessages = [];
-
-  files.forEach((file) => {
-    if (file.type.startsWith("image/")) {
-      const img = document.createElement("img");
-      img.className = "upload-image-preview";
-      img.alt = file.name;
-      img.src = URL.createObjectURL(file);
-      fileView.appendChild(img);
-      previewMessages.push(`${file.name}: waiting for OCR after upload.`);
-      return;
-    }
-
-    if (file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf")) {
-      const tag = document.createElement("div");
-      tag.className = "upload-file-tag";
-      tag.textContent = `${file.name}: PDF selected. Extracted text preview will appear after upload.`;
-      fileView.appendChild(tag);
-      previewMessages.push(`${file.name}: waiting for PDF extraction after upload.`);
-      return;
-    }
-
-    const tag = document.createElement("div");
-    tag.className = "upload-file-tag";
-    if (/\.(csv|xls|xlsx)$/i.test(file.name)) {
-      tag.textContent = `${file.name}: spreadsheet selected. Upload is not supported for this panel.`;
-      previewMessages.push(`${file.name}: spreadsheet uploads are not supported.`);
-    } else {
-      tag.textContent = `${file.name}: preview not available for this file type.`;
-      previewMessages.push(`${file.name}: preview not available for this file type.`);
-    }
-    fileView.appendChild(tag);
-  });
-
-  textPreview.textContent = previewMessages.join("\n");
-}
-
-function updateUploadedPreview(data, files, fileName, fileView, textPreview) {
-  fileName.textContent = describeUploadedFiles(data, files);
-  renderClientPreview(files, fileView, textPreview);
-
-  const successLines = (Array.isArray(data.results) ? data.results : [])
-    .map((item) => `${item.originalName}: ${item.analysis?.summary || "Uploaded successfully."}`);
-  const failureLines = (Array.isArray(data.failures) ? data.failures : []).map(
-    (item) => `${item.originalName}: ${item.error}`,
-  );
-
-  if (successLines.length || failureLines.length) {
-    textPreview.textContent = [...successLines, ...failureLines].join("\n\n");
-    return;
-  }
-
-  if (data.textPreview) {
-    textPreview.textContent = `Extracted text preview:\n\n${data.textPreview}`;
-    return;
-  }
-
-  if (data.analysis?.summary) {
-    textPreview.textContent = data.analysis.summary;
-    return;
-  }
-
-  textPreview.textContent = `${files.length} file(s) uploaded successfully.`;
 }
 
 function groupPanelsByKra(panels) {
