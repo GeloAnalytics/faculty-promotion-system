@@ -6,7 +6,7 @@ export const personalDataSchema = z.object({
   age: z.number().nonnegative().optional(),
   sex: z.string().trim().optional(),
   civilStatus: z.string().trim().optional(),
-  academicRank: z.string().trim().optional(),
+  academicRank: z.string().trim().min(1, 'Academic rank is required'),
   yearsInService: z.number().nonnegative().optional(),
   highestEducationalAttainment: z.string().trim().optional(),
   department: z.string().trim().optional(),

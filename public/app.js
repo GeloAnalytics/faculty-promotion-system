@@ -642,6 +642,7 @@ function renderEmployeeDraftPoints(draftPoints, summary, errorMessage) {
     { label: "IPCR Avg.", value: draftPoints.categories?.ipcrAverage ?? 0 },
     { label: "Approx. Total", value: draftPoints.overallEstimate ?? 0 },
   ];
+  const promotionDraft = draftPoints.promotionDraft || {};
 
   employeePoints.innerHTML = `
     <div class="database-counts compact-counts">
@@ -658,6 +659,10 @@ function renderEmployeeDraftPoints(draftPoints, summary, errorMessage) {
     </div>
     <div class="card workspace-summary-card">
       <p class="card-copy">${escapeHtml(draftPoints.note || "")}</p>
+      <p class="card-copy">Current rank: ${escapeHtml(promotionDraft.currentRank || "Not set")}</p>
+      <p class="card-copy">Your draft rank: ${escapeHtml(promotionDraft.suggestedRank || "Pending evaluator review")}</p>
+      <p class="card-copy">Latest evaluator total: ${escapeHtml(formatOptionalNumber(promotionDraft.evaluatorTotalScore, "Pending"))}</p>
+      <p class="card-copy">${escapeHtml(promotionDraft.note || "")}</p>
       <p class="card-copy">Uploaded panels: ${escapeHtml(String(draftPoints.evidenceCoverage?.uploadedPanelCount ?? 0))} / ${escapeHtml(String(draftPoints.evidenceCoverage?.expectedPanelCount ?? 0))}</p>
       <p class="card-copy">Workflow coverage: ${escapeHtml(String(draftPoints.evidenceCoverage?.workflowCoveragePercent ?? 0))}%</p>
       <p class="card-copy">Average document completeness: ${escapeHtml(String(draftPoints.evidenceCoverage?.documentCompletenessAverage ?? 0))}%</p>
@@ -687,6 +692,8 @@ function renderEmployeeProfiles(profiles) {
                 <span class="training-example-status">${escapeHtml(profile.employeeId || "No Employee ID")}</span>
               </div>
               <p class="card-copy">Semester: ${escapeHtml(profile.semester || "-")}</p>
+              <p class="card-copy">Current rank: ${escapeHtml(profile.draftPoints?.promotionDraft?.currentRank || "Not set")}</p>
+              <p class="card-copy">Draft rank: ${escapeHtml(profile.draftPoints?.promotionDraft?.suggestedRank || "Pending evaluator review")}</p>
               <p class="card-copy">Documents linked: ${escapeHtml(String(profile.documentCount || 0))}</p>
               <p class="card-copy">Approximate total: ${escapeHtml(String(profile.draftPoints?.overallEstimate ?? 0))}</p>
             </article>
@@ -774,9 +781,12 @@ function renderReviewQueue(items) {
               </div>
               <p class="card-copy">Submitted by: ${escapeHtml(item.createdBy?.fullName || "-")} (${escapeHtml(item.createdBy?.email || "-")})</p>
               <p class="card-copy">Semester: ${escapeHtml(item.semester || "-")}</p>
+              <p class="card-copy">Current rank: ${escapeHtml(item.draftPoints?.promotionDraft?.currentRank || "Not set")}</p>
+              <p class="card-copy">Draft rank recommendation: ${escapeHtml(item.draftPoints?.promotionDraft?.suggestedRank || "Pending evaluator review")}</p>
               <p class="card-copy">Approximate total from uploaded data: ${escapeHtml(String(item.draftPoints?.overallEstimate ?? 0))}</p>
               <p class="card-copy">Coverage: ${escapeHtml(String(item.draftPoints?.evidenceCoverage?.uploadedPanelCount ?? 0))} / ${escapeHtml(String(item.draftPoints?.evidenceCoverage?.expectedPanelCount ?? 0))} panels</p>
-              <p class="card-copy">Latest evaluator total: ${escapeHtml(String(latestTrainingItem?.evaluatorAssessment?.totalScore ?? 0))}</p>
+              <p class="card-copy">Latest evaluator total: ${escapeHtml(formatOptionalNumber(item.draftPoints?.promotionDraft?.evaluatorTotalScore, "Pending"))}</p>
+              <p class="card-copy">${escapeHtml(item.draftPoints?.promotionDraft?.note || "")}</p>
               <div class="review-log-list">
                 ${uploads.length ? uploads.map(renderUploadLogChip).join("") : '<div class="notice">No uploads linked yet.</div>'}
               </div>
@@ -1321,6 +1331,10 @@ function formatDatabaseValue(value) {
   }
 
   return String(value);
+}
+
+function formatOptionalNumber(value, fallback = "-") {
+  return typeof value === "number" && Number.isFinite(value) ? String(value) : fallback;
 }
 
 function toErrorMessage(error) {
