@@ -758,13 +758,19 @@ function renderReviewQueue(items) {
           const uploads = Array.isArray(item.uploadLogs) ? item.uploadLogs : [];
           const latestTrainingItem = item.latestTrainingItem || null;
           const latestTrainingId = latestTrainingItem?.id || item.latestTrainingExampleId || "";
+          const promotionDraft = item.draftPoints?.promotionDraft || {};
+          const reviewRankLabel = promotionDraft.basis === "evaluator" ? "Evaluator-backed rank" : "Approximate rank";
+          const reviewRankValue = promotionDraft.suggestedRank || promotionDraft.projectedRank || "Pending";
           if (latestTrainingId && latestTrainingItem) {
             latestTrainingItemById.set(latestTrainingId, latestTrainingItem);
           }
           return `
             <article class="card review-card">
               <div class="training-example-header">
-                <strong>${escapeHtml(item.name || "Unnamed employee")}</strong>
+                <div class="review-card-identity">
+                  <strong>${escapeHtml(item.name || "Unnamed employee")}</strong>
+                  <span class="review-rank-chip">${escapeHtml(reviewRankLabel)}: ${escapeHtml(reviewRankValue)}</span>
+                </div>
                 <span class="training-example-status">${escapeHtml(item.employeeId || "No Employee ID")}</span>
               </div>
               <p class="card-copy">Submitted by: ${escapeHtml(item.createdBy?.fullName || "-")} (${escapeHtml(item.createdBy?.email || "-")})</p>
