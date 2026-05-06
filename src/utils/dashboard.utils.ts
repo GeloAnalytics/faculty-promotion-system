@@ -12,11 +12,18 @@ type PromotionDraftSnapshot = {
   evaluatorTotalScore: number | null;
   weightedScore: number | null;
   subrankIncrements: number | null;
-  basis: 'evaluator' | 'pending-review';
-  status: 'ready' | 'pending' | 'needs-exact-rank' | 'pending-professor-accreditation' | 'pending-cup-certification';
+  basis: 'employee-inputs' | 'evaluator' | 'pending-review';
+  status:
+    | 'ready'
+    | 'preliminary'
+    | 'pending'
+    | 'needs-exact-rank'
+    | 'pending-professor-accreditation'
+    | 'pending-cup-certification';
   currentRankGroup: string | null;
   appliedWeightProfile: string | null;
   pendingRequirement: string | null;
+  confidence: 'low' | 'medium' | 'high' | null;
   note: string;
 };
 
@@ -96,6 +103,16 @@ export function buildDraftPointSummary(
     typeof personalData.highestEducationalAttainment === 'string'
       ? personalData.highestEducationalAttainment
       : null,
+    {
+      instruction,
+      research,
+      extension,
+      professionalDevelopment,
+      ipcrAverage,
+      coverage,
+      averagedCompleteness,
+      uploadedPanelCount: uploadedPanels.size,
+    },
     latestEvaluation?.assessment ?? null,
     latestEvaluation?.status ?? null,
   );
@@ -126,6 +143,16 @@ export function buildDraftPointSummary(
 function buildPromotionDraftSnapshot(
   academicRank: string | null,
   highestEducationalAttainment: string | null,
+  approximateInputs: {
+    instruction: number;
+    research: number;
+    extension: number;
+    professionalDevelopment: number;
+    ipcrAverage: number;
+    coverage: number;
+    averagedCompleteness: number;
+    uploadedPanelCount: number;
+  },
   assessment: EvaluatorAssessmentSnapshot | null,
   trainingStatus: string | null,
 ): PromotionDraftSnapshot {
@@ -135,37 +162,49 @@ function buildPromotionDraftSnapshot(
     assessment !== null &&
     Number.isFinite(assessment.totalScore);
 
-  if (!hasEvaluatorScore) {
-    return {
-      currentRank,
-      suggestedRank: null,
-      projectedRank: null,
-      evaluatorTotalScore: null,
-      weightedScore: null,
-      subrankIncrements: null,
-      basis: 'pending-review',
-      status: 'pending',
-      currentRankGroup: currentRank ? getRankGroupLabel(currentRank) : null,
-      appliedWeightProfile: null,
-      pendingRequirement: null,
-      note: 'Draft rank will appear after evaluator scoring is completed.',
-    };
-  }
-
   if (!currentRank || getAcademicRankIndex(currentRank) < 0) {
     return {
       currentRank,
       suggestedRank: null,
       projectedRank: null,
-      evaluatorTotalScore: roundScore(assessment.totalScore),
+      evaluatorTotalScore: hasEvaluatorScore ? roundScore(assessment?.totalScore ?? 0) : null,
       weightedScore: null,
       subrankIncrements: null,
-      basis: 'evaluator',
+      basis: hasEvaluatorScore ? 'evaluator' : 'employee-inputs',
       status: 'needs-exact-rank',
       currentRankGroup: null,
       appliedWeightProfile: null,
       pendingRequirement: 'Enter the exact current sub-rank, such as Instructor III or Assistant Professor II.',
-      note: 'The official NBC 461 draft-rank computation needs an exact current sub-rank before ranking can be determined.',
+      confidence: null,
+      note: hasEvaluatorScore
+        ? 'Evaluator scoring is available, but the official NBC 461 draft-rank computation still needs an exact current sub-rank.'
+        : 'A preliminary rank estimate can appear after you provide an exact current sub-rank, such as Instructor III or Assistant Professor II.',
+    };
+  }
+
+  const approximateKraTotals = computeApproximateKraTotals(approximateInputs);
+  const preliminaryConfidence = derivePreliminaryConfidence(
+    approximateInputs.coverage,
+    approximateInputs.averagedCompleteness,
+    approximateInputs.uploadedPanelCount,
+  );
+
+  if (!hasEvaluatorScore) {
+    const approximateOutcome = resolveOfficialRankOutcome(currentRank, approximateKraTotals, highestEducationalAttainment);
+    return {
+      currentRank,
+      suggestedRank: approximateOutcome.suggestedRank,
+      projectedRank: approximateOutcome.projectedRank,
+      evaluatorTotalScore: null,
+      weightedScore: approximateOutcome.weightedScore,
+      subrankIncrements: approximateOutcome.subrankIncrements,
+      basis: 'employee-inputs',
+      status: approximateOutcome.status === 'ready' ? 'preliminary' : approximateOutcome.status,
+      currentRankGroup: approximateOutcome.rankGroupLabel,
+      appliedWeightProfile: approximateOutcome.appliedWeightProfile,
+      pendingRequirement: approximateOutcome.pendingRequirement,
+      confidence: preliminaryConfidence,
+      note: buildPreliminaryRankNote(approximateOutcome.note, preliminaryConfidence),
     };
   }
 
@@ -186,7 +225,8 @@ function buildPromotionDraftSnapshot(
     currentRankGroup: rankOutcome.rankGroupLabel,
     appliedWeightProfile: rankOutcome.appliedWeightProfile,
     pendingRequirement: rankOutcome.pendingRequirement,
-    note: rankOutcome.note,
+    confidence: 'high',
+    note: `${rankOutcome.note} This evaluator-backed result takes priority over the preliminary employee-side estimate.`,
   };
 }
 
@@ -314,6 +354,50 @@ function computeKraTotals(criterionScores: Record<string, number>) {
   };
 }
 
+function computeApproximateKraTotals(inputs: {
+  instruction: number;
+  research: number;
+  extension: number;
+  professionalDevelopment: number;
+  ipcrAverage: number;
+  coverage: number;
+  averagedCompleteness: number;
+}) {
+  const coverageBoost = clampScore(inputs.coverage * 100);
+  const completenessBoost = clampScore(inputs.averagedCompleteness * 100);
+  const instruction = clampScore(inputs.instruction);
+  const research = clampScore(Math.max(inputs.research * 20, coverageBoost * 0.75, completenessBoost * 0.55));
+  const extension = clampScore(Math.max(inputs.extension * 20, coverageBoost * 0.7, completenessBoost * 0.5));
+  const professionalDevelopment = clampScore(
+    Math.max(inputs.professionalDevelopment / 60 * 100, coverageBoost * 0.6, completenessBoost * 0.45),
+  );
+
+  return {
+    instruction: clampScore(instruction * 0.75 + clampScore(inputs.ipcrAverage * 20) * 0.25),
+    research,
+    extension,
+    professionalDevelopment,
+  };
+}
+
+function derivePreliminaryConfidence(coverage: number, averagedCompleteness: number, uploadedPanelCount: number) {
+  const coveragePct = coverage * 100;
+  const completenessPct = averagedCompleteness * 100;
+
+  if (uploadedPanelCount >= 8 && coveragePct >= 60 && completenessPct >= 60) {
+    return 'high';
+  }
+  if (uploadedPanelCount >= 4 && coveragePct >= 30 && completenessPct >= 35) {
+    return 'medium';
+  }
+  return 'low';
+}
+
+function buildPreliminaryRankNote(baseNote: string, confidence: 'low' | 'medium' | 'high') {
+  const confidenceLabel = confidence.charAt(0).toUpperCase() + confidence.slice(1);
+  return `Preliminary estimate from employee inputs and uploaded evidence. Confidence: ${confidenceLabel}. ${baseNote} Evaluator scoring, when available, will strengthen and refine this result.`;
+}
+
 function resolveOfficialRankOutcome(
   currentRank: string,
   kraTotals: { instruction: number; research: number; extension: number; professionalDevelopment: number },
@@ -427,6 +511,10 @@ function computeWeightedScore(
       kraTotals.extension * weights.extension +
       kraTotals.professionalDevelopment * weights.professionalDevelopment,
   );
+}
+
+function clampScore(value: number) {
+  return Math.max(0, Math.min(100, roundScore(value)));
 }
 
 function getSubrankIncrement(score: number) {
