@@ -27,6 +27,7 @@ export const getEmployeeDashboard = async (req: Request, res: Response) => {
             status: true,
             labelPromoted: true,
             datasetSplit: true,
+            notes: true,
             createdAt: true,
             updatedAt: true,
           },
@@ -55,6 +56,7 @@ export const getEmployeeDashboard = async (req: Request, res: Response) => {
         status: true,
         labelPromoted: true,
         datasetSplit: true,
+        notes: true,
         createdAt: true,
         updatedAt: true,
       },
@@ -70,6 +72,12 @@ export const getEmployeeDashboard = async (req: Request, res: Response) => {
         }
       : null,
     latestProfile?.documents ?? documents.filter((document) => document.profileId === latestProfile?.id),
+    latestProfile?.trainingItems[0]
+      ? {
+          assessment: parseEvaluatorAssessment(latestProfile.trainingItems[0].notes),
+          status: latestProfile.trainingItems[0].status,
+        }
+      : undefined,
   );
 
   return res.json({
@@ -102,6 +110,12 @@ export const getEmployeeDashboard = async (req: Request, res: Response) => {
           semester: profile.semester,
         },
         profile.documents,
+        profile.trainingItems[0]
+          ? {
+              assessment: parseEvaluatorAssessment(profile.trainingItems[0].notes),
+              status: profile.trainingItems[0].status,
+            }
+          : undefined,
       ),
     })),
     uploads: documents.map((document) => ({
@@ -188,6 +202,12 @@ export const getEvaluatorQueue = async (_req: Request, res: Response) => {
           semester: profile.semester,
         },
         profile.documents,
+        profile.trainingItems[0]
+          ? {
+              assessment: parseEvaluatorAssessment(profile.trainingItems[0].notes),
+              status: profile.trainingItems[0].status,
+            }
+          : undefined,
       ),
       uploadLogs: profile.documents.map((document) => ({
         id: document.id,

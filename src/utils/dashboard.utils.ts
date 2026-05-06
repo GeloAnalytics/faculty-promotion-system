@@ -1,5 +1,18 @@
 import { uploadPanels } from '../uploadPanels';
 
+type EvaluatorAssessmentSnapshot = {
+  totalScore: number;
+};
+
+type PromotionDraftSnapshot = {
+  currentRank: string | null;
+  suggestedRank: string | null;
+  evaluatorTotalScore: number | null;
+  basis: 'evaluator' | 'pending-review';
+  status: 'ready' | 'pending';
+  note: string;
+};
+
 type ParsedDocumentMetadata = {
   panelKey: string | null;
   panelTitle: string | null;
@@ -33,6 +46,7 @@ export function summarizeDocumentMetadata(value: unknown): ParsedDocumentMetadat
 export function buildDraftPointSummary(
   profile: { features: unknown; semester: string | null } | null,
   documents: Array<{ extractionMetadata: unknown }>,
+  latestEvaluation?: { assessment: EvaluatorAssessmentSnapshot | null; status: string | null },
 ) {
   const featureEnvelope = readJsonObject(profile?.features);
   const rawInput = readJsonObject(featureEnvelope.rawInput);
@@ -70,6 +84,11 @@ export function buildDraftPointSummary(
   const coverage = uploadPanels.length ? uploadedPanels.size / uploadPanels.length : 0;
   const averagedCompleteness = completenessSamples ? completenessTotal / completenessSamples : 0;
   const overallEstimate = instruction + research + extension + professionalDevelopment + ipcrAverage;
+  const promotionDraft = buildPromotionDraftSnapshot(
+    typeof personalData.academicRank === 'string' ? personalData.academicRank : null,
+    latestEvaluation?.assessment ?? null,
+    latestEvaluation?.status ?? null,
+  );
 
   return {
     note: 'Approximate estimate only. Evaluator review is still required for the official score.',
@@ -90,7 +109,96 @@ export function buildDraftPointSummary(
       documentCompletenessAverage: roundScore(averagedCompleteness * 100),
       workflowCoveragePercent: roundScore(coverage * 100),
     },
+    promotionDraft,
   };
+}
+
+function buildPromotionDraftSnapshot(
+  academicRank: string | null,
+  assessment: EvaluatorAssessmentSnapshot | null,
+  trainingStatus: string | null,
+): PromotionDraftSnapshot {
+  const currentRank = normalizeAcademicRank(academicRank);
+  const hasEvaluatorScore =
+    (trainingStatus === 'LABELED' || trainingStatus === 'VALIDATED') &&
+    assessment !== null &&
+    Number.isFinite(assessment.totalScore);
+
+  if (!hasEvaluatorScore) {
+    return {
+      currentRank,
+      suggestedRank: null,
+      evaluatorTotalScore: null,
+      basis: 'pending-review',
+      status: 'pending',
+      note: 'Draft rank will appear after evaluator scoring is completed.',
+    };
+  }
+
+  const evaluatorTotalScore = roundScore(assessment.totalScore);
+  const scoreBasedRank = getRankFromScore(evaluatorTotalScore);
+  const currentRankIndex = currentRank ? getAcademicRankIndex(currentRank) : null;
+  const scoreRankIndex = getAcademicRankIndex(scoreBasedRank);
+  const suggestedRank =
+    currentRankIndex !== null && scoreRankIndex < currentRankIndex ? currentRank : scoreBasedRank;
+
+  return {
+    currentRank,
+    suggestedRank,
+    evaluatorTotalScore,
+    basis: 'evaluator',
+    status: 'ready',
+    note: 'Draft rank is based on the latest evaluator-scored total and should still undergo committee confirmation.',
+  };
+}
+
+const academicRankLadder = [
+  'Instructor I',
+  'Instructor II',
+  'Instructor III',
+  'Assistant Professor I',
+  'Assistant Professor II',
+  'Assistant Professor III',
+  'Assistant Professor IV',
+  'Associate Professor I',
+  'Associate Professor II',
+  'Associate Professor III',
+  'Associate Professor IV',
+  'Associate Professor V',
+  'Professor I',
+  'Professor II',
+  'Professor III',
+  'Professor IV',
+  'Professor V',
+  'Professor VI',
+];
+
+const academicRankAliases = academicRankLadder.reduce<Record<string, string>>((aliases, rank) => {
+  aliases[normalizeRankKey(rank)] = rank;
+  aliases[normalizeRankKey(rank.replace(/\bI\b/g, '1').replace(/\bII\b/g, '2').replace(/\bIII\b/g, '3').replace(/\bIV\b/g, '4').replace(/\bV\b/g, '5').replace(/\bVI\b/g, '6'))] = rank;
+  return aliases;
+}, {});
+
+function normalizeAcademicRank(rank: string | null) {
+  if (!rank) {
+    return null;
+  }
+
+  return academicRankAliases[normalizeRankKey(rank)] ?? rank.trim();
+}
+
+function normalizeRankKey(rank: string) {
+  return rank.trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
+function getAcademicRankIndex(rank: string) {
+  return academicRankLadder.findIndex((entry) => entry === rank);
+}
+
+function getRankFromScore(score: number) {
+  const boundedScore = Math.max(0, Math.min(score, 500));
+  const ladderIndex = Math.min(Math.floor(boundedScore / 25), academicRankLadder.length - 1);
+  return academicRankLadder[ladderIndex];
 }
 
 function readJsonObject(value: unknown): Record<string, unknown> {
