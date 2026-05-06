@@ -1,50 +1,161 @@
 # Faculty Promotion System
 
-A Full-stack TypeScript application for faculty promotion analysis with PDF evidence upload, OCR, and Machine Learning prediction (NBC 461 aligned).
+Faculty Promotion System is a full-stack TypeScript application for collecting faculty promotion records, uploading documentary evidence, extracting text from PDFs and images, and supporting evaluator-led promotion review aligned with NBC 461-style workflows.
+
+## Current Status
+
+- The production-facing app is currently served from the `public/` vanilla JavaScript portal.
+- The `frontend/` Vue 3 app exists as an in-progress migration and is not yet the main runtime UI.
+- OCR and PDF parsing support evidence extraction, but evaluator scoring remains the primary basis for draft rank outputs.
+- The system now includes a server-side promotion draft snapshot that exposes current rank, evaluator-backed score, weighted score, projected rank, and pending requirements when applicable.
 
 ## Architecture
 
-* **Frontend:** Vue 3 + Vite Single Page Application (SPA) with role-based Vue Router (`/employee` vs `/evaluator`).
-* **Backend:** Express.js MVC Architecture (Controllers, Routes, Middlewares, Validations) + Prisma + PostgreSQL.
-* **Authentication:** Stateless JSON Web Tokens (JWT) via `Authorization: Bearer <token>` headers.
-* **Document Processing:** PDF parsing (`pdf-parse`) and Image OCR (Windows OCR / HTTP API).
-* **Machine Learning:** Scikit-learn + XGBoost/AdaBoost for promotion outcome prediction.
+- **Backend:** Express + TypeScript + Prisma + PostgreSQL
+- **Frontend in use:** Static HTML/CSS/JavaScript from `public/`
+- **Frontend migration target:** Vue 3 + Vite in `frontend/`
+- **Authentication:** JWT-backed session handling via `Authorization` header or `fps_session` cookie
+- **Document processing:** `pdf-parse` for PDFs and OCR for uploaded images
+- **Machine learning workspace:** Python training scripts for offline experimentation and dataset export
 
-## System Workflow
+## Core Features
 
-1. **Authentication:** Users create accounts and log in via JWT. Role-based routing sends them to the appropriate workspace (`/employee` or `/evaluator`).
-2. **Data Collection:** Faculty profile data and performance review scores are submitted.
-3. **Evidence Upload:** Users upload PDFs and images representing evidence for their Key Result Areas (KRAs). 
-4. **OCR & Analysis:** The backend extracts text, scores the documents for completeness and quality, and flags keyword matches.
-5. **Prediction & Insights (ML):** A trained Boosting model (AdaBoost) evaluates the structured features and OCR outputs to predict promotion readiness. The system provides decision support and actionable policy insights based on feature importance.
+- Employee account registration and login
+- Role-based employee and evaluator workspaces
+- Faculty profile capture with academic rank and performance fields
+- Criterion-based evidence uploads grouped by KRA
+- PDF text extraction and image OCR
+- Upload-to-profile linkage using explicit profile selection or filename matching fallback
+- Evaluator scoring workflow and review queue
+- Employee-side approximate evidence coverage summary
+- Server-side promotion draft snapshot based on evaluator-backed scoring
+- Admin and training-data support endpoints
 
-## Machine Learning Pipeline
+## Promotion Draft Snapshot
 
-The project implements **Boosting Machine Learning Algorithms** to evaluate and rank features correlated with successful promotions.
+The dashboard layer computes a `promotionDraft` summary on the server. Depending on available data, it can include:
 
-- **Models Evaluated:** AdaBoost, Gradient Boosting, XGBoost.
-- **Features Used:** Age, years in service, educational attainment, teaching effectiveness, research outputs, extension services, IPCR average, professional development hours, document completeness, and document quality.
-- **Training Strategy:** We export validated faculty data to CSV (`npm run ml:export-dataset`), train the models using Python (`npm run ml:train-boosting`), and persist the best model artifacts.
+- current academic rank
+- official draft rank
+- projected rank from weighted score
+- latest evaluator total score
+- weighted score and sub-rank increments
+- applied weight profile
+- pending requirements such as missing exact rank input or eligibility constraints
+
+If evaluator scoring is not yet complete, the draft remains pending instead of showing a misleading rank recommendation.
+
+## Request Flow
+
+1. Users register or log in.
+2. Employees create or update a faculty profile.
+3. Employees upload PDF or image evidence to criterion-specific KRA panels.
+4. The backend parses PDFs or runs OCR on images and stores extracted text plus metadata.
+5. Evaluators review employee submissions and assign criterion scores.
+6. Dashboard utilities compute evidence coverage summaries and evaluator-backed draft rank outputs.
+
+## Project Structure
+
+```text
+.
+|-- src/                 # Express app, routes, controllers, Prisma-backed logic
+|-- public/              # Active employee/evaluator portal UI
+|-- frontend/            # Vue migration work-in-progress
+|-- prisma/              # Prisma schema and migrations
+|-- scripts/             # Dataset export and utility scripts
+|-- ml/                  # Python ML training code and artifacts
+|-- uploads/             # Local upload/output workspace if used in development
+|-- dist/                # Compiled backend output
+```
+
+## API Areas
+
+- `POST /api/auth/register`
+- `POST /api/auth/login`
+- `POST /api/auth/logout`
+- `GET /api/auth/me`
+- `POST /api/documents/extract`
+- `DELETE /api/documents/:documentId`
+- `GET /api/employee/dashboard`
+- `GET /api/evaluator/review-queue`
+- `GET /api/dashboard/:profileId`
+- `GET /api/health`
+
+## Environment Variables
+
+Use `.env.example` as the starting point.
+
+```env
+DATABASE_URL="postgresql://user:pass@localhost:5432/faculty_promotion?schema=public"
+PORT=3000
+NODE_ENV="development"
+AUTH_SECRET="change-this-to-a-long-random-production-secret"
+CORS_ORIGIN="http://localhost:3000"
+TRUST_PROXY=1
+OCR_PROVIDER="windows"
+OCR_API_URL="https://api.ocr.space/parse/image"
+OCR_API_KEY=""
+OCR_API_KEY_HEADER="Authorization"
+OCR_FILE_FIELD_NAME="file"
+OCR_TIMEOUT_MS=30000
+```
+
+## Development
+
+### Backend
+
+- `npm install`
+- `npm run db:generate`
+- `npm run db:migrate`
+- `npm run dev`
+
+The backend serves the active portals at:
+
+- `http://localhost:3000/employee`
+- `http://localhost:3000/evaluator`
+
+### Frontend Migration App
+
+- `cd frontend`
+- `npm install`
+- `npm run dev`
+
+Use this only for migration or exploratory UI work unless the team explicitly switches runtime ownership to Vue.
+
+## Build and Runtime Commands
+
+- `npm run dev` - start the backend in watch mode
+- `npm run build` - compile TypeScript to `dist/`
+- `npm run start` - run the compiled backend
+- `npm run db:migrate` - apply development migrations
+- `npm run db:deploy` - apply deploy-safe migrations
+- `npm run db:push` - push Prisma schema changes directly
+- `npm run db:studio` - open Prisma Studio
+
+## Machine Learning Commands
+
+- `npm run ml:build-fallback-dataset` - build a fallback/mock dataset
+- `npm run ml:export-dataset` - export validated data for ML training
+- `npm run ml:train-boosting` - train boosting models from the `ml/` workspace
+
+## Upload Behavior
+
+- Supported evidence types are PDFs and common image formats.
+- Spreadsheet and CSV uploads are rejected in criterion-based upload panels.
+- The old PDF naming-convention requirement is no longer enforced as an upload restriction.
+- Filename matching may still be used as a fallback for linking uploads to a faculty profile when explicit profile linkage is unavailable.
 
 ## Deployment Notes
 
-* **Frontend:** The `frontend` directory is configured for deployment on Netlify or similar static hosting. Update your build commands to run `npm run build` inside the `frontend` folder.
-* **Backend:** Must be hosted on a Node-capable environment (Render, Railway, Fly.io, etc.) because it relies on persistent state and file processing.
-* **Database:** Connect a managed PostgreSQL database (Neon, Supabase, etc.) and run `npm run db:deploy` during build.
-* **OCR Provider:** In production, specify an HTTP OCR provider (like OCR.space) by setting `OCR_PROVIDER=http` and configuring the API keys in your `.env`.
+- Host the backend on a Node-capable platform such as Render, Railway, or Fly.io.
+- Provision PostgreSQL and run `npm run db:deploy` during deployment.
+- Configure CORS and `TRUST_PROXY` according to your hosting setup.
+- For production OCR, set `OCR_PROVIDER=http` and provide the corresponding API credentials.
+- If you deploy the active UI from this repository today, serve the backend and `public/` assets together.
 
-## Development Commands
+## Known Gaps
 
-**Backend:**
-- `npm run dev`: Start the local development Express server.
-- `npm run build`: Compile TypeScript.
-- `npm run db:migrate`: Run database migrations.
-- `npm run db:studio`: Open Prisma Studio.
-
-**Frontend:**
-- `cd frontend && npm run dev`: Start the Vite dev server.
-
-**Machine Learning:**
-- `npm run ml:build-fallback-dataset`: Build a mock training dataset for testing.
-- `npm run ml:export-dataset`: Export PostgreSQL data for ML training.
-- `npm run ml:train-boosting`: Train and evaluate the Boosting models.
+- The Vue frontend is not yet the main app experience.
+- Promotion draft rules are advisory and still need continued validation against official institutional policy.
+- Audit-ready explanations and fuller committee approval workflows are still future work.
+- Automated tests are limited and should be expanded around rank normalization and promotion-draft rules.
