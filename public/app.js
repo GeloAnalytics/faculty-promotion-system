@@ -619,9 +619,22 @@ function renderEmployeeDraftPoints(draftPoints, summary, errorMessage) {
   ];
   const promotionDraft = draftPoints.promotionDraft || {};
   const isEvaluatorBacked = promotionDraft.basis === "evaluator";
-  const rankLabel = isEvaluatorBacked ? "Evaluator-backed draft rank" : "Preliminary rank estimate";
-  const projectedLabel = isEvaluatorBacked ? "Projected rank from evaluator score" : "Projected rank from uploads and inputs";
-  const weightedLabel = isEvaluatorBacked ? "Official weighted score" : "Approximate weighted score";
+  const isPendingReview = promotionDraft.basis === "pending-review";
+  const rankLabel = isEvaluatorBacked
+    ? "Evaluator-backed draft rank"
+    : isPendingReview
+      ? "Draft rank status"
+      : "Preliminary rank estimate";
+  const projectedLabel = isEvaluatorBacked
+    ? "Projected rank from evaluator score"
+    : isPendingReview
+      ? "Projected rank"
+      : "Projected rank from uploads and inputs";
+  const weightedLabel = isEvaluatorBacked
+    ? "Official weighted score"
+    : isPendingReview
+      ? "Weighted score"
+      : "Approximate weighted score";
 
   employeePoints.innerHTML = `
     <div class="database-counts compact-counts">
@@ -759,7 +772,12 @@ function renderReviewQueue(items) {
           const latestTrainingItem = item.latestTrainingItem || null;
           const latestTrainingId = latestTrainingItem?.id || item.latestTrainingExampleId || "";
           const promotionDraft = item.draftPoints?.promotionDraft || {};
-          const reviewRankLabel = promotionDraft.basis === "evaluator" ? "Evaluator-backed rank" : "Approximate rank";
+          const reviewRankLabel =
+            promotionDraft.basis === "evaluator"
+              ? "Evaluator-backed rank"
+              : promotionDraft.basis === "pending-review"
+                ? "Rank status"
+                : "Approximate rank";
           const reviewRankValue = promotionDraft.suggestedRank || promotionDraft.projectedRank || "Pending";
           if (latestTrainingId && latestTrainingItem) {
             latestTrainingItemById.set(latestTrainingId, latestTrainingItem);
@@ -776,12 +794,12 @@ function renderReviewQueue(items) {
               <p class="card-copy">Submitted by: ${escapeHtml(item.createdBy?.fullName || "-")} (${escapeHtml(item.createdBy?.email || "-")})</p>
               <p class="card-copy">Semester: ${escapeHtml(item.semester || "-")}</p>
               <p class="card-copy">Current rank: ${escapeHtml(item.draftPoints?.promotionDraft?.currentRank || "Not set")}</p>
-              <p class="card-copy">${escapeHtml(item.draftPoints?.promotionDraft?.basis === "evaluator" ? "Evaluator-backed draft rank" : "Preliminary rank estimate")}: ${escapeHtml(item.draftPoints?.promotionDraft?.suggestedRank || "Pending evaluator review")}</p>
-              <p class="card-copy">${escapeHtml(item.draftPoints?.promotionDraft?.basis === "evaluator" ? "Projected rank from evaluator score" : "Projected rank from uploads and inputs")}: ${escapeHtml(item.draftPoints?.promotionDraft?.projectedRank || "Pending evaluator review")}</p>
+              <p class="card-copy">${escapeHtml(item.draftPoints?.promotionDraft?.basis === "evaluator" ? "Evaluator-backed draft rank" : item.draftPoints?.promotionDraft?.basis === "pending-review" ? "Draft rank status" : "Preliminary rank estimate")}: ${escapeHtml(item.draftPoints?.promotionDraft?.suggestedRank || "Pending evaluator review")}</p>
+              <p class="card-copy">${escapeHtml(item.draftPoints?.promotionDraft?.basis === "evaluator" ? "Projected rank from evaluator score" : item.draftPoints?.promotionDraft?.basis === "pending-review" ? "Projected rank" : "Projected rank from uploads and inputs")}: ${escapeHtml(item.draftPoints?.promotionDraft?.projectedRank || "Pending evaluator review")}</p>
               <p class="card-copy">Approximate total from uploaded data: ${escapeHtml(String(item.draftPoints?.overallEstimate ?? 0))}</p>
               <p class="card-copy">Coverage: ${escapeHtml(String(item.draftPoints?.evidenceCoverage?.uploadedPanelCount ?? 0))} / ${escapeHtml(String(item.draftPoints?.evidenceCoverage?.expectedPanelCount ?? 0))} panels</p>
               <p class="card-copy">Latest evaluator total: ${escapeHtml(formatOptionalNumber(item.draftPoints?.promotionDraft?.evaluatorTotalScore, "Pending"))}</p>
-              <p class="card-copy">${escapeHtml(item.draftPoints?.promotionDraft?.basis === "evaluator" ? "Official weighted score" : "Approximate weighted score")}: ${escapeHtml(formatOptionalNumber(item.draftPoints?.promotionDraft?.weightedScore, "Pending"))}</p>
+              <p class="card-copy">${escapeHtml(item.draftPoints?.promotionDraft?.basis === "evaluator" ? "Official weighted score" : item.draftPoints?.promotionDraft?.basis === "pending-review" ? "Weighted score" : "Approximate weighted score")}: ${escapeHtml(formatOptionalNumber(item.draftPoints?.promotionDraft?.weightedScore, "Pending"))}</p>
               <p class="card-copy">Sub-rank increments: ${escapeHtml(formatOptionalNumber(item.draftPoints?.promotionDraft?.subrankIncrements, "Pending"))}</p>
               <p class="card-copy">Applied weight profile: ${escapeHtml(item.draftPoints?.promotionDraft?.appliedWeightProfile || "Pending")}</p>
               <p class="card-copy">Confidence: ${escapeHtml(item.draftPoints?.promotionDraft?.confidence || (item.draftPoints?.promotionDraft?.basis === "evaluator" ? "high" : "Pending"))}</p>

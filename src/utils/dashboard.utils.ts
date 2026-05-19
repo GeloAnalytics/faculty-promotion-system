@@ -249,6 +249,7 @@ const academicRankLadder = [
   'Professor IV',
   'Professor V',
   'Professor VI',
+  'College/University Professor',
 ];
 
 const academicRankAliases = academicRankLadder.reduce<Record<string, string>>((aliases, rank) => {

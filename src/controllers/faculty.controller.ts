@@ -16,7 +16,7 @@ export const ingestFaculty = async (req: Request, res: Response) => {
       employeeId: payload.personalData.employeeId,
       name: payload.personalData.fullName,
       semester: payload.performanceReview.reviewPeriod,
-      teachingQuality: payload.personalData.academicRank,
+      teachingQuality: null,
       promotion: null,
       createdByUserId: req.user!.id,
       features: toPrismaJson({
