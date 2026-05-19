@@ -611,6 +611,182 @@ select {
   gap: 8px;
 }
 
+.rank-panel {
+  gap: 18px;
+  padding: 18px;
+  background:
+    radial-gradient(circle at top right, rgba(13, 107, 87, 0.08), transparent 28%),
+    linear-gradient(180deg, rgba(255, 253, 248, 0.98) 0%, rgba(248, 244, 236, 0.92) 100%);
+}
+
+.rank-panel-hero {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: flex-start;
+  padding: 18px;
+  border-radius: 20px;
+  border: 1px solid rgba(13, 107, 87, 0.12);
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.rank-panel-copy {
+  display: grid;
+  gap: 8px;
+}
+
+.rank-panel-copy h3 {
+  font-family: "Space Grotesk", sans-serif;
+  font-size: clamp(1.5rem, 3vw, 2.35rem);
+  line-height: 1.05;
+}
+
+.rank-panel-subtitle {
+  max-width: 62ch;
+  margin: 0;
+}
+
+.rank-panel-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.rank-panel-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 7px 12px;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  border: 1px solid transparent;
+}
+
+.rank-panel-chip[data-tone="evaluator"],
+.rank-panel-chip[data-tone="high"],
+.rank-panel-chip[data-tone="ready"] {
+  background: #dff7ea;
+  color: #065f46;
+  border-color: rgba(6, 95, 70, 0.16);
+}
+
+.rank-panel-chip[data-tone="employee-inputs"],
+.rank-panel-chip[data-tone="preliminary"],
+.rank-panel-chip[data-tone="medium"] {
+  background: #fff3df;
+  color: #9a5a10;
+  border-color: rgba(154, 90, 16, 0.14);
+}
+
+.rank-panel-chip[data-tone="pending-review"],
+.rank-panel-chip[data-tone="pending"],
+.rank-panel-chip[data-tone="low"],
+.rank-panel-chip[data-tone="needs-exact-rank"] {
+  background: rgba(24, 33, 31, 0.07);
+  color: #46524d;
+  border-color: rgba(24, 33, 31, 0.08);
+}
+
+.rank-panel-chip[data-tone="pending-professor-accreditation"],
+.rank-panel-chip[data-tone="pending-cup-certification"] {
+  background: #fff0ec;
+  color: #8a341f;
+  border-color: rgba(138, 52, 31, 0.14);
+}
+
+.rank-panel-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.rank-metric-card {
+  display: grid;
+  gap: 6px;
+  padding: 14px;
+  border-radius: 16px;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.8);
+}
+
+.rank-metric-card-emphasis {
+  border-color: rgba(13, 107, 87, 0.2);
+  background: linear-gradient(180deg, rgba(227, 241, 234, 0.92) 0%, rgba(255, 255, 255, 0.96) 100%);
+}
+
+.rank-metric-label,
+.rank-evidence-label {
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.rank-metric-value {
+  font-family: "Space Grotesk", sans-serif;
+  font-size: 1.15rem;
+  line-height: 1.15;
+}
+
+.rank-panel-sections {
+  display: grid;
+  grid-template-columns: 1.2fr 1fr;
+  gap: 14px;
+}
+
+.rank-panel-section {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  border-radius: 18px;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.rank-panel-section h4 {
+  margin: 0;
+  font-family: "Space Grotesk", sans-serif;
+  font-size: 0.98rem;
+}
+
+.rank-evidence-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.rank-evidence-item {
+  display: grid;
+  gap: 5px;
+  padding: 12px;
+  border-radius: 14px;
+  background: #fffdf9;
+  border: 1px solid var(--border);
+}
+
+.rank-evidence-value {
+  font-family: "Space Grotesk", sans-serif;
+  font-size: 1rem;
+}
+
+.rank-panel-note-list {
+  display: grid;
+  gap: 10px;
+}
+
+.rank-panel-note-list .card-copy {
+  margin: 0;
+}
+
+.rank-panel-warning {
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: #fff0ec;
+  border: 1px solid rgba(138, 52, 31, 0.14);
+  color: #8a341f;
+}
+
 .review-queue {
   display: grid;
   gap: 16px;
@@ -759,7 +935,10 @@ select {
   .database-sections,
   .field-row,
   .review-log-list,
-  .compact-counts {
+   .compact-counts,
+   .rank-panel-grid,
+   .rank-panel-sections,
+   .rank-evidence-grid {
     grid-template-columns: 1fr;
   }
 
@@ -786,6 +965,14 @@ select {
   .hero-meta {
     flex-direction: column;
     align-items: stretch;
+  }
+
+   .rank-panel-hero {
+    flex-direction: column;
+   }
+
+  .rank-panel-chips {
+    justify-content: flex-start;
   }
 
   .hero-actions {

@@ -635,6 +635,29 @@ function renderEmployeeDraftPoints(draftPoints, summary, errorMessage) {
     : isPendingReview
       ? "Weighted score"
       : "Approximate weighted score";
+  const basisLabel = getPromotionBasisLabel(promotionDraft.basis);
+  const statusLabel = getPromotionStatusLabel(promotionDraft.status);
+  const confidenceLabel = getPromotionConfidenceLabel(
+    promotionDraft.confidence || (isEvaluatorBacked ? "high" : null),
+  );
+  const suggestedRank = promotionDraft.suggestedRank || "Pending evaluator review";
+  const projectedRank = promotionDraft.projectedRank || "Pending evaluator review";
+  const overviewMetrics = [
+    { label: "Current rank", value: promotionDraft.currentRank || "Not set" },
+    { label: rankLabel, value: suggestedRank, emphasize: true },
+    { label: projectedLabel, value: projectedRank },
+    { label: weightedLabel, value: formatOptionalNumber(promotionDraft.weightedScore, "Pending") },
+    { label: "Sub-rank increments", value: formatOptionalNumber(promotionDraft.subrankIncrements, "Pending") },
+    { label: "Latest evaluator total", value: formatOptionalNumber(promotionDraft.evaluatorTotalScore, "Pending") },
+  ];
+  const evidenceMetrics = [
+    { label: "Uploaded panels", value: `${draftPoints.evidenceCoverage?.uploadedPanelCount ?? 0} / ${draftPoints.evidenceCoverage?.expectedPanelCount ?? 0}` },
+    { label: "Workflow coverage", value: `${draftPoints.evidenceCoverage?.workflowCoveragePercent ?? 0}%` },
+    { label: "Doc completeness", value: `${draftPoints.evidenceCoverage?.documentCompletenessAverage ?? 0}%` },
+    { label: "Profiles saved", value: String(summary?.profileCount ?? 0) },
+    { label: "Uploads saved", value: String(summary?.uploadCount ?? 0) },
+    { label: "Training drafts", value: String(summary?.trainingDraftCount ?? 0) },
+  ];
 
   employeePoints.innerHTML = `
     <div class="database-counts compact-counts">
@@ -649,23 +672,56 @@ function renderEmployeeDraftPoints(draftPoints, summary, errorMessage) {
         )
         .join("")}
     </div>
-    <div class="card workspace-summary-card">
-      <p class="card-copy">${escapeHtml(draftPoints.note || "")}</p>
-      <p class="card-copy">Recommendation basis: ${escapeHtml(promotionDraft.basis || "pending-review")}</p>
-      <p class="card-copy">Current rank: ${escapeHtml(promotionDraft.currentRank || "Not set")}</p>
-      <p class="card-copy">${escapeHtml(rankLabel)}: ${escapeHtml(promotionDraft.suggestedRank || "Pending evaluator review")}</p>
-      <p class="card-copy">${escapeHtml(projectedLabel)}: ${escapeHtml(promotionDraft.projectedRank || "Pending evaluator review")}</p>
-      <p class="card-copy">Latest evaluator total: ${escapeHtml(formatOptionalNumber(promotionDraft.evaluatorTotalScore, "Pending"))}</p>
-      <p class="card-copy">${escapeHtml(weightedLabel)}: ${escapeHtml(formatOptionalNumber(promotionDraft.weightedScore, "Pending"))}</p>
-      <p class="card-copy">Sub-rank increments: ${escapeHtml(formatOptionalNumber(promotionDraft.subrankIncrements, "Pending"))}</p>
-      <p class="card-copy">Applied weight profile: ${escapeHtml(promotionDraft.appliedWeightProfile || "Pending")}</p>
-      <p class="card-copy">Confidence: ${escapeHtml(promotionDraft.confidence || (isEvaluatorBacked ? "high" : "Pending"))}</p>
-      ${promotionDraft.pendingRequirement ? `<p class="card-copy">Pending requirement: ${escapeHtml(promotionDraft.pendingRequirement)}</p>` : ""}
-      <p class="card-copy">${escapeHtml(promotionDraft.note || "")}</p>
-      <p class="card-copy">Uploaded panels: ${escapeHtml(String(draftPoints.evidenceCoverage?.uploadedPanelCount ?? 0))} / ${escapeHtml(String(draftPoints.evidenceCoverage?.expectedPanelCount ?? 0))}</p>
-      <p class="card-copy">Workflow coverage: ${escapeHtml(String(draftPoints.evidenceCoverage?.workflowCoveragePercent ?? 0))}%</p>
-      <p class="card-copy">Average document completeness: ${escapeHtml(String(draftPoints.evidenceCoverage?.documentCompletenessAverage ?? 0))}%</p>
-      <p class="card-copy">Profiles saved: ${escapeHtml(String(summary?.profileCount ?? 0))}. Uploads saved: ${escapeHtml(String(summary?.uploadCount ?? 0))}.</p>
+    <div class="card workspace-summary-card rank-panel">
+      <div class="rank-panel-hero">
+        <div class="rank-panel-copy">
+          <p class="section-kicker">Rank Estimation</p>
+          <h3>${escapeHtml(suggestedRank)}</h3>
+          <p class="card-copy rank-panel-subtitle">${escapeHtml(draftPoints.note || "")}</p>
+        </div>
+        <div class="rank-panel-chips">
+          ${renderRankPanelChip(basisLabel, promotionDraft.basis || "pending-review")}
+          ${renderRankPanelChip(statusLabel, promotionDraft.status || "pending")}
+          ${confidenceLabel ? renderRankPanelChip(`Confidence: ${confidenceLabel}`, promotionDraft.confidence || (isEvaluatorBacked ? "high" : "pending")) : ""}
+        </div>
+      </div>
+      <div class="rank-panel-grid">
+        ${overviewMetrics
+          .map(
+            (item) => `
+              <div class="rank-metric-card${item.emphasize ? " rank-metric-card-emphasis" : ""}">
+                <span class="rank-metric-label">${escapeHtml(item.label)}</span>
+                <strong class="rank-metric-value">${escapeHtml(String(item.value))}</strong>
+              </div>
+            `,
+          )
+          .join("")}
+      </div>
+      <div class="rank-panel-sections">
+        <section class="rank-panel-section">
+          <h4>Evidence Snapshot</h4>
+          <div class="rank-evidence-grid">
+            ${evidenceMetrics
+              .map(
+                (item) => `
+                  <div class="rank-evidence-item">
+                    <span class="rank-evidence-label">${escapeHtml(item.label)}</span>
+                    <strong class="rank-evidence-value">${escapeHtml(String(item.value))}</strong>
+                  </div>
+                `,
+              )
+              .join("")}
+          </div>
+        </section>
+        <section class="rank-panel-section">
+          <h4>Assessment Notes</h4>
+          <div class="rank-panel-note-list">
+            <p class="card-copy"><strong>Applied weight profile:</strong> ${escapeHtml(promotionDraft.appliedWeightProfile || "Pending")}</p>
+            <p class="card-copy">${escapeHtml(promotionDraft.note || "")}</p>
+            ${promotionDraft.pendingRequirement ? `<p class="card-copy rank-panel-warning"><strong>Pending requirement:</strong> ${escapeHtml(promotionDraft.pendingRequirement)}</p>` : ""}
+          </div>
+        </section>
+      </div>
     </div>
   `;
 }
@@ -692,9 +748,9 @@ function renderEmployeeProfiles(profiles) {
               </div>
               <p class="card-copy">Semester: ${escapeHtml(profile.semester || "-")}</p>
               <p class="card-copy">Current rank: ${escapeHtml(profile.draftPoints?.promotionDraft?.currentRank || "Not set")}</p>
-              <p class="card-copy">${escapeHtml(profile.draftPoints?.promotionDraft?.basis === "evaluator" ? "Evaluator-backed draft rank" : "Preliminary rank estimate")}: ${escapeHtml(profile.draftPoints?.promotionDraft?.suggestedRank || "Pending evaluator review")}</p>
+              <p class="card-copy">${escapeHtml(getPromotionBasisLabel(profile.draftPoints?.promotionDraft?.basis))}: ${escapeHtml(profile.draftPoints?.promotionDraft?.suggestedRank || "Pending evaluator review")}</p>
               <p class="card-copy">Projected rank: ${escapeHtml(profile.draftPoints?.promotionDraft?.projectedRank || "Pending evaluator review")}</p>
-              <p class="card-copy">Confidence: ${escapeHtml(profile.draftPoints?.promotionDraft?.confidence || (profile.draftPoints?.promotionDraft?.basis === "evaluator" ? "high" : "Pending"))}</p>
+              <p class="card-copy">Confidence: ${escapeHtml(getPromotionConfidenceLabel(profile.draftPoints?.promotionDraft?.confidence || (profile.draftPoints?.promotionDraft?.basis === "evaluator" ? "high" : null)) || "Pending")}</p>
               <p class="card-copy">Documents linked: ${escapeHtml(String(profile.documentCount || 0))}</p>
               <p class="card-copy">Approximate total: ${escapeHtml(String(profile.draftPoints?.overallEstimate ?? 0))}</p>
             </article>
@@ -779,6 +835,9 @@ function renderReviewQueue(items) {
                 ? "Rank status"
                 : "Approximate rank";
           const reviewRankValue = promotionDraft.suggestedRank || promotionDraft.projectedRank || "Pending";
+          const reviewStatusLabel = getPromotionStatusLabel(promotionDraft.status);
+          const reviewConfidenceLabel =
+            getPromotionConfidenceLabel(promotionDraft.confidence || (promotionDraft.basis === "evaluator" ? "high" : null)) || "Pending";
           if (latestTrainingId && latestTrainingItem) {
             latestTrainingItemById.set(latestTrainingId, latestTrainingItem);
           }
@@ -794,7 +853,7 @@ function renderReviewQueue(items) {
               <p class="card-copy">Submitted by: ${escapeHtml(item.createdBy?.fullName || "-")} (${escapeHtml(item.createdBy?.email || "-")})</p>
               <p class="card-copy">Semester: ${escapeHtml(item.semester || "-")}</p>
               <p class="card-copy">Current rank: ${escapeHtml(item.draftPoints?.promotionDraft?.currentRank || "Not set")}</p>
-              <p class="card-copy">${escapeHtml(item.draftPoints?.promotionDraft?.basis === "evaluator" ? "Evaluator-backed draft rank" : item.draftPoints?.promotionDraft?.basis === "pending-review" ? "Draft rank status" : "Preliminary rank estimate")}: ${escapeHtml(item.draftPoints?.promotionDraft?.suggestedRank || "Pending evaluator review")}</p>
+              <p class="card-copy">${escapeHtml(getPromotionBasisLabel(item.draftPoints?.promotionDraft?.basis))}: ${escapeHtml(item.draftPoints?.promotionDraft?.suggestedRank || "Pending evaluator review")}</p>
               <p class="card-copy">${escapeHtml(item.draftPoints?.promotionDraft?.basis === "evaluator" ? "Projected rank from evaluator score" : item.draftPoints?.promotionDraft?.basis === "pending-review" ? "Projected rank" : "Projected rank from uploads and inputs")}: ${escapeHtml(item.draftPoints?.promotionDraft?.projectedRank || "Pending evaluator review")}</p>
               <p class="card-copy">Approximate total from uploaded data: ${escapeHtml(String(item.draftPoints?.overallEstimate ?? 0))}</p>
               <p class="card-copy">Coverage: ${escapeHtml(String(item.draftPoints?.evidenceCoverage?.uploadedPanelCount ?? 0))} / ${escapeHtml(String(item.draftPoints?.evidenceCoverage?.expectedPanelCount ?? 0))} panels</p>
@@ -802,7 +861,8 @@ function renderReviewQueue(items) {
               <p class="card-copy">${escapeHtml(item.draftPoints?.promotionDraft?.basis === "evaluator" ? "Official weighted score" : item.draftPoints?.promotionDraft?.basis === "pending-review" ? "Weighted score" : "Approximate weighted score")}: ${escapeHtml(formatOptionalNumber(item.draftPoints?.promotionDraft?.weightedScore, "Pending"))}</p>
               <p class="card-copy">Sub-rank increments: ${escapeHtml(formatOptionalNumber(item.draftPoints?.promotionDraft?.subrankIncrements, "Pending"))}</p>
               <p class="card-copy">Applied weight profile: ${escapeHtml(item.draftPoints?.promotionDraft?.appliedWeightProfile || "Pending")}</p>
-              <p class="card-copy">Confidence: ${escapeHtml(item.draftPoints?.promotionDraft?.confidence || (item.draftPoints?.promotionDraft?.basis === "evaluator" ? "high" : "Pending"))}</p>
+              <p class="card-copy">Status: ${escapeHtml(reviewStatusLabel)}</p>
+              <p class="card-copy">Confidence: ${escapeHtml(reviewConfidenceLabel)}</p>
               ${item.draftPoints?.promotionDraft?.pendingRequirement ? `<p class="card-copy">Pending requirement: ${escapeHtml(item.draftPoints.promotionDraft.pendingRequirement)}</p>` : ""}
               <p class="card-copy">${escapeHtml(item.draftPoints?.promotionDraft?.note || "")}</p>
               <div class="review-log-list">
@@ -1261,6 +1321,47 @@ function formatDatabaseValue(value) {
   }
 
   return String(value);
+}
+
+function getPromotionBasisLabel(basis) {
+  if (basis === "evaluator") {
+    return "Evaluator-backed draft rank";
+  }
+  if (basis === "employee-inputs") {
+    return "Preliminary rank estimate";
+  }
+  return "Draft rank status";
+}
+
+function getPromotionStatusLabel(status) {
+  if (status === "ready") {
+    return "Ready";
+  }
+  if (status === "preliminary") {
+    return "Preliminary";
+  }
+  if (status === "needs-exact-rank") {
+    return "Needs exact rank";
+  }
+  if (status === "pending-professor-accreditation") {
+    return "Pending professor accreditation";
+  }
+  if (status === "pending-cup-certification") {
+    return "Pending committee certification";
+  }
+  return "Pending review";
+}
+
+function getPromotionConfidenceLabel(confidence) {
+  if (!confidence) {
+    return null;
+  }
+  return confidence.charAt(0).toUpperCase() + confidence.slice(1);
+}
+
+function renderRankPanelChip(label, tone) {
+  const normalizedTone = typeof tone === "string" && tone.trim() ? tone.trim().toLowerCase() : "pending";
+  return `<span class="rank-panel-chip" data-tone="${escapeHtml(normalizedTone)}">${escapeHtml(label)}</span>`;
 }
 
 function formatOptionalNumber(value, fallback = "-") {
