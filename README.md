@@ -1,58 +1,97 @@
 # Faculty Promotion System
 
-Faculty Promotion System is a full-stack TypeScript application for collecting faculty promotion records, uploading documentary evidence, extracting text from PDFs and images, and supporting evaluator-led promotion review aligned with NBC 461-style workflows.
+Faculty Promotion System is a full-stack TypeScript application for collecting faculty promotion records, uploading documentary evidence, extracting text from PDFs and images, supporting evaluator review, and preparing machine-learning-ready promotion data aligned with NBC 461-style workflows.
+
+## What This Repository Is
+
+This repository currently has two active layers:
+
+1. An operational application layer for faculty record intake, document upload, OCR/PDF extraction, evaluator review, and dashboard summaries.
+2. An analytical layer for offline dataset export, boosting-model training, and explainability reporting.
+
+The active user-facing interface is the static portal in `public/`. The Vue app in `frontend/` is still a migration workspace and is not the main runtime UI.
 
 ## Current Status
 
-- The production-facing app is currently served from the `public/` vanilla JavaScript portal.
-- The `frontend/` Vue 3 app exists as an in-progress migration and is not yet the main runtime UI.
-- OCR and PDF parsing support evidence extraction, but evaluator scoring remains the primary basis for draft rank outputs.
-- The system now includes a server-side promotion draft snapshot that exposes current rank, evaluator-backed score, weighted score, projected rank, and pending requirements when applicable.
+- The backend and active `public/` interface are the main working system.
+- Employees can receive a preliminary rank estimate even before evaluator scoring is completed.
+- Evaluator scoring still takes priority and produces the stronger draft-rank recommendation once available.
+- Live machine-learning prediction inside the deployed API is intentionally disabled.
+- Offline ML training, comparison, and explainability reporting are implemented in `ml/`.
 
 ## Architecture
 
-- **Backend:** Express + TypeScript + Prisma + PostgreSQL
-- **Frontend in use:** Static HTML/CSS/JavaScript from `public/`
-- **Frontend migration target:** Vue 3 + Vite in `frontend/`
-- **Authentication:** JWT-backed session handling via `Authorization` header or `fps_session` cookie
-- **Document processing:** `pdf-parse` for PDFs and OCR for uploaded images
-- **Machine learning workspace:** Python training scripts for offline experimentation and dataset export
+- Backend: Express + TypeScript + Prisma + PostgreSQL
+- Active frontend: static HTML/CSS/JavaScript in `public/`
+- Frontend migration target: Vue 3 + Vite in `frontend/`
+- Authentication: JWT with `Authorization` header or `fps_session` cookie
+- Document processing: `pdf-parse` for PDFs and OCR for supported images
+- ML workflow: Python scripts for offline export, training, evaluation, and explainability
 
 ## Core Features
 
 - Employee account registration and login
-- Role-based employee and evaluator workspaces
+- Role-based employee, evaluator, and admin access
 - Faculty profile capture with academic rank and performance fields
-- Criterion-based evidence uploads grouped by KRA
-- PDF text extraction and image OCR
+- Criterion-based uploads grouped by KRA
+- PDF parsing and image OCR
 - Upload-to-profile linkage using explicit profile selection or filename matching fallback
 - Evaluator scoring workflow and review queue
-- Employee-side approximate evidence coverage summary
-- Server-side promotion draft snapshot based on evaluator-backed scoring
-- Admin and training-data support endpoints
+- Employee-side evidence coverage summary
+- Preliminary employee-side rank estimation from inputs and uploaded evidence
+- Evaluator-backed draft-rank computation from criterion scores
+- Dataset export for offline machine learning
+- Admin database overview
 
-## Promotion Draft Snapshot
+## Promotion Draft and Rank Estimation
 
-The dashboard layer computes a `promotionDraft` summary on the server. Depending on available data, it can include:
+The dashboard computes a `promotionDraft` summary on the server.
+
+Depending on available data, it can include:
 
 - current academic rank
-- official draft rank
-- projected rank from weighted score
-- latest evaluator total score
-- weighted score and sub-rank increments
+- suggested draft rank
+- projected rank
+- evaluator total score
+- weighted score
+- sub-rank increments
 - applied weight profile
-- pending requirements such as missing exact rank input or eligibility constraints
+- confidence label
+- pending requirements for eligibility constraints
 
-If evaluator scoring is not yet complete, the draft remains pending instead of showing a misleading rank recommendation.
+### Preliminary estimate mode
+
+When evaluator scoring is not yet available, the system can still generate a preliminary estimate using:
+
+- employee-entered performance values
+- extracted document scores from OCR/PDF analysis
+- upload coverage across KRA panels
+- average document completeness
+- current academic-rank group
+- highest educational attainment for eligibility checks
+
+This estimate is advisory and is labeled as preliminary.
+
+### Evaluator-backed mode
+
+When the latest training item is `LABELED` or `VALIDATED` and contains criterion scores, the system computes the rank result from evaluator-backed KRA totals.
+
+This result takes priority over the preliminary estimate.
+
+### Important note
+
+The draft-rank feature is a decision-support aid. It is not a final committee decision and should not be treated as an automated promotion outcome.
 
 ## Request Flow
 
 1. Users register or log in.
 2. Employees create or update a faculty profile.
 3. Employees upload PDF or image evidence to criterion-specific KRA panels.
-4. The backend parses PDFs or runs OCR on images and stores extracted text plus metadata.
-5. Evaluators review employee submissions and assign criterion scores.
-6. Dashboard utilities compute evidence coverage summaries and evaluator-backed draft rank outputs.
+4. The backend parses PDFs or runs OCR on images and stores extracted text and metadata.
+5. The system summarizes evidence coverage and can compute a preliminary rank estimate.
+6. Evaluators review submissions and assign criterion scores.
+7. The dashboard upgrades the rank result to an evaluator-backed draft recommendation when scoring exists.
+8. Labeled and validated examples can be exported for offline ML training and comparison.
 
 ## Project Structure
 
@@ -63,22 +102,24 @@ If evaluator scoring is not yet complete, the draft remains pending instead of s
 |-- frontend/            # Vue migration work-in-progress
 |-- prisma/              # Prisma schema and migrations
 |-- scripts/             # Dataset export and utility scripts
-|-- ml/                  # Python ML training code and artifacts
+|-- ml/                  # Offline ML workflow, artifacts, and reports
 |-- uploads/             # Local upload/output workspace if used in development
 |-- dist/                # Compiled backend output
 ```
 
-## API Areas
+## Main API Areas
 
 - `POST /api/auth/register`
 - `POST /api/auth/login`
 - `POST /api/auth/logout`
 - `GET /api/auth/me`
+- `POST /api/faculty/ingest`
 - `POST /api/documents/extract`
 - `DELETE /api/documents/:documentId`
 - `GET /api/employee/dashboard`
 - `GET /api/evaluator/review-queue`
 - `GET /api/dashboard/:profileId`
+- `GET /api/admin/database-overview`
 - `GET /api/health`
 
 ## Environment Variables
@@ -100,7 +141,7 @@ OCR_FILE_FIELD_NAME="file"
 OCR_TIMEOUT_MS=30000
 ```
 
-## Development
+## Local Development
 
 ### Backend
 
@@ -114,7 +155,7 @@ The backend serves the active portals at:
 - `http://localhost:3000/employee`
 - `http://localhost:3000/evaluator`
 
-### Frontend Migration App
+### Frontend migration app
 
 - `cd frontend`
 - `npm install`
@@ -122,7 +163,7 @@ The backend serves the active portals at:
 
 Use this only for migration or exploratory UI work unless the team explicitly switches runtime ownership to Vue.
 
-## Build and Runtime Commands
+## Common Commands
 
 - `npm run dev` - start the backend in watch mode
 - `npm run build` - compile TypeScript to `dist/`
@@ -132,11 +173,49 @@ Use this only for migration or exploratory UI work unless the team explicitly sw
 - `npm run db:push` - push Prisma schema changes directly
 - `npm run db:studio` - open Prisma Studio
 
-## Machine Learning Commands
+## Offline ML Workflow
 
-- `npm run ml:build-fallback-dataset` - build a fallback/mock dataset
-- `npm run ml:export-dataset` - export validated data for ML training
-- `npm run ml:train-boosting` - train boosting models from the `ml/` workspace
+### 1. Install Python dependencies
+
+```bash
+pip install -r ml/requirements.txt
+```
+
+### 2. Export labeled and validated training data
+
+```bash
+npm run ml:export-dataset
+```
+
+Default export:
+
+`data/exports/objective-305-training-dataset.csv`
+
+### 3. Train and compare models
+
+```bash
+npm run ml:train-boosting
+```
+
+Optional example:
+
+```bash
+python ml/train_boosting_models.py --cv-folds 5 --small-dataset-threshold 60
+```
+
+### Outputs
+
+- `ml/reports/<timestamp>/validation_metrics.csv`
+- `ml/reports/<timestamp>/cross_validation_metrics.csv`
+- `ml/reports/<timestamp>/experiment_summary.json`
+- `ml/reports/<timestamp>/test_confusion_matrix.csv`
+- `ml/reports/<timestamp>/feature_importance.csv`
+- `ml/reports/<timestamp>/permutation_importance.csv`
+- `ml/reports/<timestamp>/global_shap_importance.csv`
+- `ml/reports/<timestamp>/local_shap_explanations_test.csv`
+- `ml/artifacts/<timestamp>/best_model.joblib`
+- `ml/artifacts/<timestamp>/feature_columns.json`
+- `ml/artifacts/<timestamp>/training_metadata.json`
 
 ## Upload Behavior
 
@@ -157,5 +236,16 @@ Use this only for migration or exploratory UI work unless the team explicitly sw
 
 - The Vue frontend is not yet the main app experience.
 - Promotion draft rules are advisory and still need continued validation against official institutional policy.
+- Live inference endpoints remain intentionally disabled.
 - Audit-ready explanations and fuller committee approval workflows are still future work.
-- Automated tests are limited and should be expanded around rank normalization and promotion-draft rules.
+- Automated tests are still limited and should be expanded around rank normalization and promotion-draft rules.
+
+## Recommended Documentation
+
+For day-to-day system usage and implementation details, use this file:
+
+- `README.md`
+
+For dissertation and paper revision work, use:
+
+- `DISSERTATION_REVISION_GUIDE.md`
