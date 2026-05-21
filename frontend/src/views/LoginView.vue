@@ -60,6 +60,8 @@
 <script setup lang="ts">
 import { ref } from 'vue';
 import { useRouter } from 'vue-router';
+import { apiFetch } from '../lib/api';
+import { rememberSession, type SessionPayload } from '../lib/session';
 
 const router = useRouter();
 const activeTab = ref('login');
@@ -78,27 +80,19 @@ const registerForm = ref({
   role: 'EMPLOYEE'
 });
 
-const API_BASE = '/api';
-
 async function handleLogin() {
   error.value = '';
   loading.value = true;
   try {
-    const res = await fetch(`${API_BASE}/auth/login`, {
+    const data = await apiFetch<SessionPayload>('/api/auth/login', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(loginForm.value)
+      body: JSON.stringify(loginForm.value),
     });
-    
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Login failed');
-    
-    localStorage.setItem('fps_token', data.token);
-    localStorage.setItem('fps_role', data.user.role);
-    
+
+    rememberSession(data);
     router.push(data.homePath);
-  } catch (err: any) {
-    error.value = err.message;
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : 'Login failed';
   } finally {
     loading.value = false;
   }
@@ -108,21 +102,15 @@ async function handleRegister() {
   error.value = '';
   loading.value = true;
   try {
-    const res = await fetch(`${API_BASE}/auth/register`, {
+    const data = await apiFetch<SessionPayload>('/api/auth/register', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(registerForm.value)
+      body: JSON.stringify(registerForm.value),
     });
-    
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Registration failed');
-    
-    localStorage.setItem('fps_token', data.token);
-    localStorage.setItem('fps_role', data.user.role);
-    
+
+    rememberSession(data);
     router.push(data.homePath);
-  } catch (err: any) {
-    error.value = err.message;
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : 'Registration failed';
   } finally {
     loading.value = false;
   }

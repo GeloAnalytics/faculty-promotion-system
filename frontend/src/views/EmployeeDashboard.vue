@@ -30,43 +30,31 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
+import { apiFetch } from '../lib/api';
+import { clearSession, fetchSession } from '../lib/session';
 
 const router = useRouter();
 const userEmail = ref('');
 
 onMounted(async () => {
-  const token = localStorage.getItem('fps_token');
-  if (!token) {
+  const session = await fetchSession();
+  if (!session) {
     router.push('/');
     return;
   }
-  
-  try {
-    const res = await fetch('/api/auth/me', {
-      headers: { 'Authorization': `Bearer ${token}` }
-    });
-    if (!res.ok) throw new Error('Session expired');
-    const data = await res.json();
-    userEmail.value = data.user.email;
-  } catch (err) {
-    localStorage.removeItem('fps_token');
-    localStorage.removeItem('fps_role');
-    router.push('/');
-  }
+
+  userEmail.value = session.user.email;
 });
 
 async function logout() {
-  const token = localStorage.getItem('fps_token');
   try {
-    await fetch('/api/auth/logout', { 
+    await apiFetch('/api/auth/logout', {
       method: 'POST',
-      headers: { 'Authorization': `Bearer ${token}` }
     });
   } catch (err) {
     console.error(err);
   } finally {
-    localStorage.removeItem('fps_token');
-    localStorage.removeItem('fps_role');
+    clearSession();
     router.push('/');
   }
 }

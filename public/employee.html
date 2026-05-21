@@ -154,15 +154,39 @@
         </section>
 
         <section class="panel panel-wide" id="uploaded-files-panel">
-          <div class="panel-heading">
-            <div>
-              <p class="section-kicker">Uploaded Files</p>
-              <h2>Your submitted evidence files grouped by criterion</h2>
+          <details class="collapsible-section" open>
+            <summary>
+              <div class="panel-heading" style="margin-bottom:0">
+                <div>
+                  <p class="section-kicker">Uploaded Files</p>
+                  <h2>Your submitted evidence files grouped by criterion</h2>
+                </div>
+              </div>
+              <span class="section-toggle-icon">&#9654;</span>
+            </summary>
+            <div class="uploaded-files-toolbar">
+              <label class="field uploaded-files-filter-field">
+                <span>Search files</span>
+                <input
+                  type="search"
+                  id="uploaded-files-search"
+                  placeholder="Filter by file name, criterion, or summary"
+                />
+              </label>
+              <label class="field uploaded-files-filter-field">
+                <span>Criterion</span>
+                <select id="uploaded-files-panel-filter">
+                  <option value="">All criteria</option>
+                </select>
+              </label>
             </div>
-          </div>
-          <div id="uploaded-files-viewer" class="database-viewer">
-            <div class="notice">Uploaded files will appear here after submission.</div>
-          </div>
+            <div id="uploaded-files-filter-status" class="uploaded-files-filter-status">
+              Showing all uploaded files.
+            </div>
+            <div id="uploaded-files-viewer" class="database-viewer">
+              <div class="notice">Uploaded files will appear here after submission.</div>
+            </div>
+          </details>
         </section>
 
         <section class="panel" id="employee-profiles-panel">
@@ -174,7 +198,7 @@
                   <h2>Your faculty records</h2>
                 </div>
               </div>
-              <span class="section-toggle-icon">▶</span>
+              <span class="section-toggle-icon">&#9654;</span>
             </summary>
             <div id="employee-profiles" class="database-viewer">
               <div class="notice">Saved faculty profiles will appear here.</div>
@@ -191,7 +215,7 @@
                   <h2>Your recent uploaded files</h2>
                 </div>
               </div>
-              <span class="section-toggle-icon">▶</span>
+              <span class="section-toggle-icon">&#9654;</span>
             </summary>
             <div id="employee-logs" class="database-viewer">
               <div class="notice">Uploaded file logs will appear here.</div>
@@ -202,6 +226,6 @@
     </div>
 
     <script src="/config.js"></script>
-    <script src="/app.js"></script>
+    <script type="module" src="/app.js"></script>
   </body>
 </html>

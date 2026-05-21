@@ -1,3 +1,9 @@
+import {
+  normalizePortalPath,
+  prettyRole,
+  setNotice,
+} from "./ui-helpers.js";
+
 const portal = document.body.dataset.portal || "auth";
 const apiBaseUrl = normalizeApiBaseUrl(window.APP_CONFIG?.apiBaseUrl);
 
@@ -21,6 +27,9 @@ const trainingCriteria = byId("training-criteria");
 const trainingScoreTotal = byId("training-score-total");
 const workspaceGreeting = byId("workspace-greeting");
 const uploadedFilesViewer = byId("uploaded-files-viewer");
+const uploadedFilesSearch = byId("uploaded-files-search");
+const uploadedFilesPanelFilter = byId("uploaded-files-panel-filter");
+const uploadedFilesFilterStatus = byId("uploaded-files-filter-status");
 const showLoginButton = byId("show-login");
 const showRegisterButton = byId("show-register");
 const nameField = byId("name-field");
@@ -36,6 +45,8 @@ const latestTrainingItemById = new Map();
 uploadPanelGrid?.addEventListener("click", handleDeleteUploadClick);
 reviewQueue?.addEventListener("click", handleDeleteUploadClick);
 uploadedFilesViewer?.addEventListener("click", handleDeleteUploadClick);
+uploadedFilesSearch?.addEventListener("input", () => renderUploadedFilesSection(uploadPanelCatalog));
+uploadedFilesPanelFilter?.addEventListener("change", () => renderUploadedFilesSection(uploadPanelCatalog));
 
 document.querySelectorAll("[data-scroll-target]").forEach((button) => {
   button.addEventListener("click", () => {
@@ -460,19 +471,32 @@ function renderUploadPanels(panels) {
 
 function renderUploadedFilesSection(panels) {
   if (!uploadedFilesViewer) return;
+  syncUploadedFilesFilterOptions(panels);
 
   if (!employeeUploads.length) {
+    syncUploadedFilesFilterStatus(0, 0, false);
     uploadedFilesViewer.innerHTML = '<div class="notice">No files uploaded yet. Upload evidence in the panels above and they will appear here.</div>';
     return;
   }
 
+  const filters = getUploadedFilesFilterState();
+  const filteredUploads = employeeUploads.filter((upload) => matchesUploadedFileFilter(upload, panels, filters));
   const groupedPanels = groupPanelsByKra(panels);
-  const ungrouped = employeeUploads.filter((u) => !u.metadata?.panelKey || !panels.some((p) => p.key === u.metadata?.panelKey));
+  const ungrouped = filteredUploads.filter((u) => !u.metadata?.panelKey || !panels.some((p) => p.key === u.metadata?.panelKey));
+  const hasActiveFilters = Boolean(filters.query || filters.panelKey);
+
+  syncUploadedFilesFilterStatus(filteredUploads.length, employeeUploads.length, hasActiveFilters);
+
+  if (!filteredUploads.length) {
+    uploadedFilesViewer.innerHTML =
+      '<div class="notice">No uploaded files match the current filters. Try a different search term or switch back to all criteria.</div>';
+    return;
+  }
 
   uploadedFilesViewer.innerHTML = groupedPanels
     .map(([kraTitle, items]) => {
       const kraFiles = items.flatMap((panel) =>
-        employeeUploads
+        filteredUploads
           .filter((u) => u.metadata?.panelKey === panel.key)
           .map((u) => ({ ...u, panelTitle: panel.title }))
       );
@@ -531,6 +555,70 @@ function renderUploadedFilesSection(panels) {
         </div>
       </div>
     ` : "");
+}
+
+function getUploadedFilesFilterState() {
+  return {
+    query: (uploadedFilesSearch?.value || "").trim().toLowerCase(),
+    panelKey: uploadedFilesPanelFilter?.value || "",
+  };
+}
+
+function matchesUploadedFileFilter(upload, panels, filters) {
+  if (filters.panelKey && upload.metadata?.panelKey !== filters.panelKey) {
+    return false;
+  }
+
+  if (!filters.query) {
+    return true;
+  }
+
+  const matchedPanel = panels.find((panel) => panel.key === upload.metadata?.panelKey);
+  const haystack = [
+    upload.originalName,
+    upload.metadata?.panelTitle,
+    matchedPanel?.title,
+    upload.metadata?.panelKey,
+    upload.metadata?.analysisSummary,
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+
+  return haystack.includes(filters.query);
+}
+
+function syncUploadedFilesFilterOptions(panels) {
+  if (!uploadedFilesPanelFilter) {
+    return;
+  }
+
+  const selectedValue = uploadedFilesPanelFilter.value;
+  const panelOptions = panels
+    .filter((panel) => employeeUploads.some((upload) => upload.metadata?.panelKey === panel.key))
+    .map((panel) => `<option value="${escapeHtml(panel.key)}">${escapeHtml(panel.title)}</option>`)
+    .join("");
+
+  uploadedFilesPanelFilter.innerHTML = `<option value="">All criteria</option>${panelOptions}`;
+  uploadedFilesPanelFilter.value = panels.some((panel) => panel.key === selectedValue) ? selectedValue : "";
+}
+
+function syncUploadedFilesFilterStatus(visibleCount, totalCount, hasActiveFilters) {
+  if (!uploadedFilesFilterStatus) {
+    return;
+  }
+
+  if (!totalCount) {
+    uploadedFilesFilterStatus.textContent = "No uploaded files yet.";
+    return;
+  }
+
+  if (!hasActiveFilters) {
+    uploadedFilesFilterStatus.textContent = `Showing all ${totalCount} uploaded file${totalCount === 1 ? "" : "s"}.`;
+    return;
+  }
+
+  uploadedFilesFilterStatus.textContent = `Showing ${visibleCount} of ${totalCount} uploaded file${totalCount === 1 ? "" : "s"}.`;
 }
 
 function renderEvaluatorCriteria(panels) {
@@ -1177,41 +1265,6 @@ function getHomePathForRole(role) {
   return role === "EVALUATOR" ? "/evaluator" : "/employee";
 }
 
-function normalizePortalPath(pathname) {
-  if (pathname === "/employee.html") {
-    return "/employee";
-  }
-  if (pathname === "/evaluator.html") {
-    return "/evaluator";
-  }
-  if (pathname === "/index.html") {
-    return "/";
-  }
-  return pathname;
-}
-
-function prettyRole(role) {
-  if (role === "EMPLOYEE") {
-    return "Employee";
-  }
-  if (role === "EVALUATOR") {
-    return "Evaluator";
-  }
-  if (role === "ADMIN") {
-    return "Admin";
-  }
-  return role || "Guest";
-}
-
-function setNotice(element, message, isError = false, isSuccess = false) {
-  if (!element) {
-    return;
-  }
-  element.textContent = message;
-  element.classList.toggle("notice-error", isError);
-  element.classList.toggle("notice-success", isSuccess && !isError);
-}
-
 // ── Toast Notification System ──
 function showToast(message, type = "success") {
   let container = document.getElementById("toast-container");
@@ -1276,10 +1329,10 @@ async function readJson(response) {
   if (!response.ok) {
     if (response.status === 401) {
       if (window.location.pathname !== "/") {
-        showToast("Your session has expired. Redirecting to login…", "error");
+        showToast("Your session has expired. Redirecting to login...", "error");
         setTimeout(() => window.location.assign("/"), 1500);
       }
-      throw new Error("Session expired — please log in again");
+      throw new Error("Session expired - please log in again");
     }
     const errorMessage =
       typeof data.error === "string" && typeof data.details === "string" && data.error !== data.details

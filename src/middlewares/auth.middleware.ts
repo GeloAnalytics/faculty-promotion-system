@@ -3,12 +3,13 @@ import jwt from 'jsonwebtoken';
 import { env } from '../config/env';
 import { SessionUser } from '../types';
 import { UserRole } from '@prisma/client';
+import { parseCookieHeader } from '../utils/cookie.utils';
 
 export const attachSessionUser = (req: Request, res: Response, next: NextFunction) => {
   let token = req.headers.authorization?.split(' ')[1];
 
   if (!token && req.headers.cookie) {
-    const cookies = parseCookies(req.headers.cookie);
+    const cookies = parseCookieHeader(req.headers.cookie);
     token = cookies['fps_session'];
   }
 
@@ -43,12 +44,3 @@ export const requireRole = (...allowedRoles: UserRole[]) => {
     return next();
   };
 };
-
-function parseCookies(header: string): Record<string, string> {
-  return header.split(';').reduce<Record<string, string>>((cookies, entry) => {
-    const [rawKey, ...rawValue] = entry.trim().split('=');
-    if (!rawKey) return cookies;
-    cookies[rawKey] = rawValue.join('=');
-    return cookies;
-  }, {});
-}

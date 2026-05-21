@@ -1,12 +1,12 @@
 import { DocumentKind, Prisma } from '@prisma/client';
-import path from 'node:path';
 import { z } from 'zod';
 import pdf from 'pdf-parse';
 import { prisma } from '../config/db';
 import { uploadPanels } from '../uploadPanels';
 import { analyzeDocumentContent } from '../utils';
 import { extractImageTextWithOcr, type OcrConfig } from '../ocr';
-import { UploadPanelDefinition, ProcessedUploadResult, ProfileLinkCandidate, ProfileLinkResult } from '../types';
+import { UploadPanelDefinition, ProcessedUploadResult, ProfileLinkResult } from '../types';
+import { findBestMatchingProfile, scoreProfileFilename } from './profileMatching';
 
 export function parseDocumentKind(input: unknown): DocumentKind {
   const normalized = typeof input === 'string' ? input.toUpperCase() : 'REQUIREMENT';
@@ -249,65 +249,6 @@ export async function attachExistingDocumentsToProfile(
     matchedFileNames: matchedDocuments.map((document) => document.originalName),
   };
 }
-
-function findBestMatchingProfile(profiles: ProfileLinkCandidate[], originalName: string) {
-  let bestMatch: ProfileLinkCandidate | null = null;
-  let bestScore = 0;
-
-  for (const profile of profiles) {
-    const score = scoreProfileFilename(profile.name, profile.employeeId ?? undefined, originalName);
-    if (score > bestScore) {
-      bestScore = score;
-      bestMatch = profile;
-    }
-  }
-
-  return bestScore > 0 ? bestMatch : null;
-}
-
-function scoreProfileFilename(fullName: string, employeeId: string | undefined, originalName: string) {
-  const normalizedFileName = normalizeForMatch(path.parse(originalName).name);
-  const fileTokens = new Set(tokenizeForMatch(originalName));
-  const nameTokens = tokenizeForMatch(fullName);
-
-  let score = 0;
-
-  if (employeeId) {
-    const normalizedEmployeeId = normalizeForMatch(employeeId);
-    if (normalizedEmployeeId && normalizedFileName.includes(normalizedEmployeeId)) {
-      score += 100;
-    }
-  }
-
-  if (!nameTokens.length) {
-    return score;
-  }
-
-  const matchedNameTokenCount = nameTokens.filter((token) => fileTokens.has(token)).length;
-  if (matchedNameTokenCount === nameTokens.length) {
-    score += 50 + matchedNameTokenCount;
-  } else if (matchedNameTokenCount >= Math.max(2, nameTokens.length - 1)) {
-    score += 15 + matchedNameTokenCount;
-  }
-
-  return score;
-}
-
-function tokenizeForMatch(value: string) {
-  return normalizeForMatch(value)
-    .split(' ')
-    .filter((token) => token.length >= 2);
-}
-
-function normalizeForMatch(value: string) {
-  return value
-    .toLowerCase()
-    .normalize('NFKD')
-    .replace(/[^a-z0-9]+/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
-
 export function toPrismaJson(value: unknown): Prisma.InputJsonValue {
   return JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
 }

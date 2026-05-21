@@ -167,6 +167,7 @@ Use this only for migration or exploratory UI work unless the team explicitly sw
 
 - `npm run dev` - start the backend in watch mode
 - `npm run build` - compile TypeScript to `dist/`
+- `npm test` - run the lightweight utility and workflow regression tests
 - `npm run start` - run the compiled backend
 - `npm run db:migrate` - apply development migrations
 - `npm run db:deploy` - apply deploy-safe migrations

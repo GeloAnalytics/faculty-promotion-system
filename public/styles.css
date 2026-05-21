@@ -1499,6 +1499,23 @@ select {
   background: rgba(255, 253, 248, 0.5);
 }
 
+.uploaded-files-toolbar {
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) minmax(220px, 0.9fr);
+  gap: 14px;
+  margin-bottom: 14px;
+}
+
+.uploaded-files-filter-field {
+  margin: 0;
+}
+
+.uploaded-files-filter-status {
+  margin-bottom: 14px;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
 .uploaded-files-group-header {
   display: flex;
   justify-content: space-between;
@@ -1575,6 +1592,10 @@ select {
 }
 
 @media (max-width: 640px) {
+  .uploaded-files-toolbar {
+    grid-template-columns: 1fr;
+  }
+
   .uploaded-file-row {
     flex-direction: column;
     align-items: stretch;

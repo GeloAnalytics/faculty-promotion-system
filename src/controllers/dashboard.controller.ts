@@ -1,7 +1,10 @@
 import { Request, Response } from 'express';
 import { prisma } from '../config/db';
 import { buildDraftPointSummary, summarizeDocumentMetadata } from '../utils/dashboard.utils';
-import { parseEvaluatorAssessment } from '../utils/evaluator.utils';
+import {
+  buildTrainingAssessmentContext,
+  getLatestEvaluatorBackedTrainingItem,
+} from '../utils/dashboardSelection';
 
 export const getEmployeeDashboard = async (req: Request, res: Response) => {
   const [profiles, documents, trainingExamples] = await Promise.all([
@@ -65,7 +68,7 @@ export const getEmployeeDashboard = async (req: Request, res: Response) => {
 
   const latestProfileWithAssessment = profiles.find((profile) => getLatestEvaluatorBackedTrainingItem(profile.trainingItems));
   const latestProfile = latestProfileWithAssessment ?? profiles[0] ?? null;
-  const latestTrainingItem = latestProfile ? getLatestEvaluatorBackedTrainingItem(latestProfile.trainingItems) ?? latestProfile.trainingItems[0] : null;
+  const latestTrainingContext = latestProfile ? buildTrainingAssessmentContext(latestProfile.trainingItems)?.assessmentContext : undefined;
   const draftPoints = buildDraftPointSummary(
     latestProfile
       ? {
@@ -74,12 +77,7 @@ export const getEmployeeDashboard = async (req: Request, res: Response) => {
         }
       : null,
     latestProfile?.documents ?? documents.filter((document) => document.profileId === latestProfile?.id),
-    latestTrainingItem
-      ? {
-          assessment: parseEvaluatorAssessment(latestTrainingItem.notes),
-          status: latestTrainingItem.status,
-        }
-      : undefined,
+    latestTrainingContext,
   );
 
   return res.json({
@@ -98,30 +96,27 @@ export const getEmployeeDashboard = async (req: Request, res: Response) => {
           draftPoints,
         }
       : null,
-    profiles: profiles.map((profile) => ({
-      id: profile.id,
-      name: profile.name,
-      employeeId: profile.employeeId,
-      semester: profile.semester,
-      createdAt: profile.createdAt,
-      documentCount: profile.documents.length,
-      trainingExampleCount: profile.trainingItems.length,
-      draftPoints: buildDraftPointSummary(
-        {
-          features: profile.features,
-          semester: profile.semester,
-        },
-        profile.documents,
-        getLatestEvaluatorBackedTrainingItem(profile.trainingItems) ?? profile.trainingItems[0]
-          ? {
-              assessment: parseEvaluatorAssessment(
-                (getLatestEvaluatorBackedTrainingItem(profile.trainingItems) ?? profile.trainingItems[0])!.notes,
-              ),
-              status: (getLatestEvaluatorBackedTrainingItem(profile.trainingItems) ?? profile.trainingItems[0])!.status,
-            }
-          : undefined,
-      ),
-    })),
+    profiles: profiles.map((profile) => {
+      const trainingContext = buildTrainingAssessmentContext(profile.trainingItems);
+
+      return {
+        id: profile.id,
+        name: profile.name,
+        employeeId: profile.employeeId,
+        semester: profile.semester,
+        createdAt: profile.createdAt,
+        documentCount: profile.documents.length,
+        trainingExampleCount: profile.trainingItems.length,
+        draftPoints: buildDraftPointSummary(
+          {
+            features: profile.features,
+            semester: profile.semester,
+          },
+          profile.documents,
+          trainingContext?.assessmentContext,
+        ),
+      };
+    }),
     uploads: documents.map((document) => ({
       id: document.id,
       profileId: document.profileId,
@@ -193,54 +188,46 @@ export const getEvaluatorQueue = async (_req: Request, res: Response) => {
   });
 
   return res.json({
-    items: profiles.map((profile) => ({
-      latestEvaluatorTrainingItem: getLatestEvaluatorBackedTrainingItem(profile.trainingItems) ?? profile.trainingItems[0] ?? null,
-      id: profile.id,
-      name: profile.name,
-      employeeId: profile.employeeId,
-      semester: profile.semester,
-      createdAt: profile.createdAt,
-      createdBy: profile.createdBy,
-      draftPoints: buildDraftPointSummary(
-        {
-          features: profile.features,
-          semester: profile.semester,
-        },
-        profile.documents,
-        getLatestEvaluatorBackedTrainingItem(profile.trainingItems) ?? profile.trainingItems[0]
+    items: profiles.map((profile) => {
+      const trainingContext = buildTrainingAssessmentContext(profile.trainingItems);
+      const preferredTrainingItem = trainingContext?.selectedItem ?? null;
+
+      return {
+        latestEvaluatorTrainingItem: preferredTrainingItem,
+        id: profile.id,
+        name: profile.name,
+        employeeId: profile.employeeId,
+        semester: profile.semester,
+        createdAt: profile.createdAt,
+        createdBy: profile.createdBy,
+        draftPoints: buildDraftPointSummary(
+          {
+            features: profile.features,
+            semester: profile.semester,
+          },
+          profile.documents,
+          trainingContext?.assessmentContext,
+        ),
+        uploadLogs: profile.documents.map((document) => ({
+          id: document.id,
+          originalName: document.originalName,
+          mimeType: document.mimeType,
+          kind: document.kind,
+          createdAt: document.createdAt,
+          metadata: summarizeDocumentMetadata(document.extractionMetadata),
+        })),
+        trainingItems: profile.trainingItems.map((item) => ({
+          ...item,
+          evaluatorAssessment: buildTrainingAssessmentContext([item])?.assessmentContext.assessment ?? null,
+        })),
+        latestTrainingExampleId: preferredTrainingItem?.id ?? null,
+        latestTrainingItem: preferredTrainingItem
           ? {
-              assessment: parseEvaluatorAssessment(
-                (getLatestEvaluatorBackedTrainingItem(profile.trainingItems) ?? profile.trainingItems[0])!.notes,
-              ),
-              status: (getLatestEvaluatorBackedTrainingItem(profile.trainingItems) ?? profile.trainingItems[0])!.status,
+              ...preferredTrainingItem,
+              evaluatorAssessment: trainingContext?.assessmentContext.assessment ?? null,
             }
-          : undefined,
-      ),
-      uploadLogs: profile.documents.map((document) => ({
-        id: document.id,
-        originalName: document.originalName,
-        mimeType: document.mimeType,
-        kind: document.kind,
-        createdAt: document.createdAt,
-        metadata: summarizeDocumentMetadata(document.extractionMetadata),
-      })),
-      trainingItems: profile.trainingItems.map((item) => ({
-        ...item,
-        evaluatorAssessment: parseEvaluatorAssessment(item.notes),
-      })),
-      latestTrainingExampleId: profile.trainingItems[0]?.id ?? null,
-      latestTrainingItem: profile.trainingItems[0]
-        ? {
-            ...profile.trainingItems[0],
-            evaluatorAssessment: parseEvaluatorAssessment(profile.trainingItems[0].notes),
-          }
-        : null,
-    })),
+          : null,
+      };
+    }),
   });
 };
-
-function getLatestEvaluatorBackedTrainingItem(
-  trainingItems: Array<{ status: string; notes: string | null; updatedAt: Date; createdAt: Date }>,
-) {
-  return trainingItems.find((item) => item.status === 'LABELED' || item.status === 'VALIDATED') ?? null;
-}
