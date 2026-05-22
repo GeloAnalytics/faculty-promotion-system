@@ -14,6 +14,7 @@ The active user-facing interface is the static portal in `public/`. The Vue app 
 ## Current Status
 
 - The backend and active `public/` interface are the main working system.
+- Employee profile maintenance now separates baseline profile data from current promotion-cycle inputs.
 - Employees can receive a preliminary rank estimate even before evaluator scoring is completed.
 - Evaluator scoring still takes priority and produces the stronger draft-rank recommendation once available.
 - Live machine-learning prediction inside the deployed API is intentionally disabled.
@@ -32,7 +33,8 @@ The active user-facing interface is the static portal in `public/`. The Vue app 
 
 - Employee account registration and login
 - Role-based employee, evaluator, and admin access
-- Faculty profile capture with academic rank and performance fields
+- Faculty profile capture with baseline identity, rank, attainment, and promotion history
+- Current-cycle submission fields for review-period performance metrics and cycle notes
 - Criterion-based uploads grouped by KRA
 - PDF parsing and image OCR
 - Upload-to-profile linkage using explicit profile selection or filename matching fallback
@@ -40,8 +42,18 @@ The active user-facing interface is the static portal in `public/`. The Vue app 
 - Employee-side evidence coverage summary
 - Preliminary employee-side rank estimation from inputs and uploaded evidence
 - Evaluator-backed draft-rank computation from criterion scores
+- Standardized faculty rank and educational-attainment option catalogs from the backend
 - Dataset export for offline machine learning
 - Admin database overview
+
+## Faculty Record Model
+
+Faculty records now distinguish between two data layers:
+
+- `baselineData` stores longer-lived profile fields such as identity, academic rank, highest educational attainment, and promotion history.
+- `cycleData` stores the active review period inputs such as IPCR averages, teaching effectiveness, research and extension values, professional development hours, and cycle-specific notes.
+
+This split keeps promotion-history and eligibility data stable across updates while letting employees revise only the current cycle inputs when a new review period starts.
 
 ## Promotion Draft and Rank Estimation
 
@@ -63,7 +75,8 @@ Depending on available data, it can include:
 
 When evaluator scoring is not yet available, the system can still generate a preliminary estimate using:
 
-- employee-entered performance values
+- baseline profile data such as current rank, attainment, and promotion history
+- current-cycle performance values
 - extracted document scores from OCR/PDF analysis
 - upload coverage across KRA panels
 - average document completeness
@@ -85,13 +98,14 @@ The draft-rank feature is a decision-support aid. It is not a final committee de
 ## Request Flow
 
 1. Users register or log in.
-2. Employees create or update a faculty profile.
-3. Employees upload PDF or image evidence to criterion-specific KRA panels.
-4. The backend parses PDFs or runs OCR on images and stores extracted text and metadata.
-5. The system summarizes evidence coverage and can compute a preliminary rank estimate.
-6. Evaluators review submissions and assign criterion scores.
-7. The dashboard upgrades the rank result to an evaluator-backed draft recommendation when scoring exists.
-8. Labeled and validated examples can be exported for offline ML training and comparison.
+2. Employees create or update a baseline faculty profile.
+3. Employees maintain the current promotion-cycle fields for the active review period.
+4. Employees upload PDF or image evidence to criterion-specific KRA panels.
+5. The backend parses PDFs or runs OCR on images and stores extracted text and metadata.
+6. The system summarizes evidence coverage and can compute a preliminary rank estimate.
+7. Evaluators review submissions and assign criterion scores.
+8. The dashboard upgrades the rank result to an evaluator-backed draft recommendation when scoring exists.
+9. Labeled and validated examples can be exported for offline ML training and comparison.
 
 ## Project Structure
 
@@ -113,6 +127,8 @@ The draft-rank feature is a decision-support aid. It is not a final committee de
 - `POST /api/auth/login`
 - `POST /api/auth/logout`
 - `GET /api/auth/me`
+- `GET /api/config/upload-panels`
+- `GET /api/config/faculty-options`
 - `POST /api/faculty/ingest`
 - `POST /api/documents/extract`
 - `DELETE /api/documents/:documentId`
