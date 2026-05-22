@@ -40,6 +40,9 @@ const showRegisterButton = byId("show-register");
 const nameField = byId("name-field");
 const roleField = byId("role-field");
 const authSubmit = byId("auth-submit");
+const facultyFormMode = byId("faculty-form-mode");
+const facultySubmitButton = byId("faculty-submit-button");
+const facultyResetButton = byId("faculty-reset-button");
 
 let authMode = "login";
 let currentUser = null;
@@ -47,16 +50,23 @@ let latestRecordContext = null;
 let uploadPanelCatalog = [];
 let employeeUploads = [];
 let evaluatorQueueItems = [];
+let activeProfileBaseline = null;
+const employeeProfileRecords = new Map();
 const latestTrainingItemById = new Map();
 uploadPanelGrid?.addEventListener("click", handleDeleteUploadClick);
 reviewQueue?.addEventListener("click", handleDeleteUploadClick);
 uploadedFilesViewer?.addEventListener("click", handleDeleteUploadClick);
+employeeProfiles?.addEventListener("click", handleEmployeeProfileAction);
 uploadedFilesSearch?.addEventListener("input", () => renderUploadedFilesSection(uploadPanelCatalog));
 uploadedFilesPanelFilter?.addEventListener("change", () => renderUploadedFilesSection(uploadPanelCatalog));
 reviewQueueSearch?.addEventListener("input", () => renderReviewQueue(evaluatorQueueItems));
 reviewQueueStatusFilter?.addEventListener("change", () => renderReviewQueue(evaluatorQueueItems));
 reviewQueueConfidenceFilter?.addEventListener("change", () => renderReviewQueue(evaluatorQueueItems));
 reviewQueuePanelFilter?.addEventListener("change", () => renderReviewQueue(evaluatorQueueItems));
+facultyResetButton?.addEventListener("click", () => {
+  resetFacultyFormForNewRecord();
+  setNotice(facultyResult, "You can now create a new baseline record.", false);
+});
 
 document.querySelectorAll("[data-scroll-target]").forEach((button) => {
   button.addEventListener("click", () => {
@@ -107,22 +117,30 @@ authForm?.addEventListener("submit", async (event) => {
 
 facultyForm?.addEventListener("submit", async (event) => {
   event.preventDefault();
-  setNotice(facultyResult, "Saving faculty record...");
+  const isUpdating = Boolean(latestRecordContext?.profileId && latestRecordContext?.mode === "update");
+  setNotice(facultyResult, isUpdating ? "Updating faculty record..." : "Saving faculty record...");
 
   try {
-    const data = await apiFetch(buildApiUrl("/api/faculty/ingest"), {
-      method: "POST",
-      body: JSON.stringify(buildFacultyPayload()),
-    });
+    const data = await apiFetch(
+      isUpdating
+        ? buildApiUrl(`/api/faculty/${encodeURIComponent(latestRecordContext.profileId)}`)
+        : buildApiUrl("/api/faculty/ingest"),
+      {
+        method: isUpdating ? "PATCH" : "POST",
+        body: JSON.stringify(buildFacultyPayload()),
+      },
+    );
 
-    latestRecordContext = data;
+    latestRecordContext = { profileId: data.profileId, mode: "update" };
     setNotice(
       facultyResult,
-      `Faculty record saved. Profile ID: ${data.profileId}. You can now upload evidence files to the matching panels.`,
+      `${
+        isUpdating ? "Faculty record updated" : "Faculty record saved"
+      }. Profile ID: ${data.profileId}. You can now upload evidence files to the matching panels.`,
       false,
       true,
     );
-    collapseFacultyForm();
+    collapseFacultyFormWithModeSupport();
     await loadEmployeeWorkspace();
   } catch (error) {
     setNotice(facultyResult, toErrorMessage(error), true);
@@ -206,6 +224,9 @@ async function refreshSession() {
           ? `Hello ${data.user.fullName}. Here are the logs and records for evaluation.`
           : `Hello ${data.user.fullName}. Enter your faculty record and upload your supporting documents here for faculty promotion.`;
     }
+    if (portal === "employee" && !valueOf("fullName")) {
+      setFieldValue("fullName", data.user.fullName);
+    }
   } catch {
     currentUser = null;
     if (sessionUser) {
@@ -284,13 +305,16 @@ async function loadEmployeeDashboard() {
     }
 
     if (data.latestProfile?.id) {
-      latestRecordContext = { profileId: data.latestProfile.id };
+      selectFacultyProfileForEditing(data.latestProfile, { collapse: false, scroll: false });
+    } else {
+      resetFacultyFormForNewRecord({ preserveIdentity: true, collapse: false });
     }
   } catch (error) {
     employeeUploads = [];
     renderEmployeeDraftPoints(null, null, toErrorMessage(error));
     renderEmployeeProfiles([]);
     renderEmployeeUploads([], toErrorMessage(error));
+    resetFacultyFormForNewRecord({ preserveIdentity: true, collapse: false });
     if (uploadPanelCatalog.length) {
       renderUploadPanels(uploadPanelCatalog);
       renderUploadedFilesSection(uploadPanelCatalog);
@@ -838,6 +862,11 @@ function renderEmployeeProfiles(profiles) {
     return;
   }
 
+  employeeProfileRecords.clear();
+  profiles.forEach((profile) => {
+    employeeProfileRecords.set(profile.id, profile);
+  });
+
   if (!profiles.length) {
     employeeProfiles.innerHTML = '<div class="notice">No employee records saved yet.</div>';
     return;
@@ -860,6 +889,11 @@ function renderEmployeeProfiles(profiles) {
               <p class="card-copy">Confidence: ${escapeHtml(getPromotionConfidenceLabel(profile.draftPoints?.promotionDraft?.confidence || (profile.draftPoints?.promotionDraft?.basis === "evaluator" ? "high" : null)) || "Pending")}</p>
               <p class="card-copy">Documents linked: ${escapeHtml(String(profile.documentCount || 0))}</p>
               <p class="card-copy">Approximate total: ${escapeHtml(String(profile.draftPoints?.overallEstimate ?? 0))}</p>
+              <div class="profile-card-actions">
+                <button class="button button-secondary" type="button" data-action="edit-profile" data-profile-id="${escapeHtml(profile.id)}">
+                  Edit Baseline Data
+                </button>
+              </div>
             </article>
           `,
         )
@@ -1355,9 +1389,29 @@ function buildFacultyPayload() {
       administrativeExperience: numberOf("administrativeExperience"),
       professionalDevelopmentHours: numberOf("professionalDevelopmentHours"),
     },
-    promotionHistory: [],
+    promotionHistory: Array.isArray(activeProfileBaseline?.promotionHistory) ? activeProfileBaseline.promotionHistory : [],
     notes: valueOf("analysis-notes"),
   };
+}
+
+function handleEmployeeProfileAction(event) {
+  const editButton = event.target.closest("[data-action='edit-profile']");
+  if (!editButton) {
+    return;
+  }
+
+  const profile = employeeProfileRecords.get(editButton.dataset.profileId);
+  if (!profile) {
+    setNotice(facultyResult, "That profile could not be loaded for editing.", true);
+    return;
+  }
+
+  selectFacultyProfileForEditing(profile);
+  setNotice(
+    facultyResult,
+    `Editing ${profile.name || "the selected faculty profile"}. Update the baseline fields, then save to refresh the approximation.`,
+    false,
+  );
 }
 
 function groupPanelsByKra(panels) {
@@ -1557,6 +1611,115 @@ function numberOf(id) {
   return Number.isFinite(value) ? value : 0;
 }
 
+function setFieldValue(id, value) {
+  const element = byId(id);
+  if (!element) {
+    return;
+  }
+
+  element.value = value === null || value === undefined ? "" : String(value);
+}
+
+function ensureSelectOption(id, value) {
+  const element = byId(id);
+  if (!element || value === null || value === undefined || value === "") {
+    return;
+  }
+
+  const normalizedValue = String(value);
+  const hasMatchingOption = Array.from(element.options || []).some((option) => option.value === normalizedValue);
+  if (!hasMatchingOption) {
+    const option = document.createElement("option");
+    option.value = normalizedValue;
+    option.textContent = normalizedValue;
+    element.appendChild(option);
+  }
+}
+
+function applyFacultyBaselineToForm(baselineData) {
+  activeProfileBaseline = baselineData || null;
+
+  const personalData = baselineData?.personalData || {};
+  const performanceReview = baselineData?.performanceReview || {};
+
+  setFieldValue("fullName", personalData.fullName ?? currentUser?.fullName ?? "");
+  setFieldValue("employeeId", personalData.employeeId ?? "");
+  setFieldValue("academicRank", personalData.academicRank ?? "");
+  setFieldValue("yearsInService", personalData.yearsInService);
+  ensureSelectOption("attainment", personalData.highestEducationalAttainment);
+  setFieldValue("attainment", personalData.highestEducationalAttainment ?? "");
+  setFieldValue("reviewPeriod", performanceReview.reviewPeriod ?? "");
+  setFieldValue("ipcrAverage", performanceReview.ipcrAverage);
+  setFieldValue("teachingEffectiveness", performanceReview.teachingEffectiveness);
+  setFieldValue("researchOutputs", performanceReview.researchOutputs);
+  setFieldValue("extensionServices", performanceReview.extensionServices);
+  setFieldValue("administrativeExperience", performanceReview.administrativeExperience);
+  setFieldValue("professionalDevelopmentHours", performanceReview.professionalDevelopmentHours);
+  setFieldValue("analysis-notes", baselineData?.notes ?? "");
+}
+
+function selectFacultyProfileForEditing(profile, options = {}) {
+  latestRecordContext = { profileId: profile.id, mode: "update" };
+  applyFacultyBaselineToForm(profile.baselineData || null);
+  setFacultyFormMode({
+    mode: "update",
+    profileId: profile.id,
+    name: profile.name,
+  });
+  revealFacultyForm(options.collapse !== false);
+
+  if (options.scroll !== false) {
+    document.querySelector("#faculty-panel")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+}
+
+function resetFacultyFormForNewRecord(options = {}) {
+  latestRecordContext = { profileId: null, mode: "create" };
+  activeProfileBaseline = null;
+  facultyForm?.reset();
+  setFieldValue("fullName", options.preserveIdentity === false ? "" : currentUser?.fullName ?? valueOf("fullName"));
+  setFieldValue("employeeId", "");
+  setFieldValue("academicRank", "");
+  setFieldValue("yearsInService", "");
+  setFieldValue("attainment", "");
+  setFieldValue("reviewPeriod", "");
+  setFieldValue("ipcrAverage", "");
+  setFieldValue("teachingEffectiveness", "");
+  setFieldValue("researchOutputs", "");
+  setFieldValue("extensionServices", "");
+  setFieldValue("administrativeExperience", "");
+  setFieldValue("professionalDevelopmentHours", "");
+  setFieldValue("analysis-notes", "");
+  setFacultyFormMode({ mode: "create" });
+  revealFacultyForm(options.collapse !== false);
+}
+
+function setFacultyFormMode({ mode, profileId, name }) {
+  if (facultyFormMode) {
+    facultyFormMode.textContent =
+      mode === "update"
+        ? `Editing baseline data for ${name || "this faculty profile"}${profileId ? ` (${profileId})` : ""}. Update the current rank or other fields, then save to refresh the approximation.`
+        : "Create a baseline record, or load a saved one below to update missing rank and profile details.";
+  }
+
+  if (facultySubmitButton) {
+    facultySubmitButton.textContent = mode === "update" ? "Update Faculty Record" : "Save Faculty Record";
+  }
+}
+
+function revealFacultyForm(shouldOpen = true) {
+  const toggle = byId("faculty-form-toggle");
+  const savedIndicator = byId("faculty-form-saved");
+
+  if (toggle && shouldOpen) {
+    toggle.setAttribute("open", "open");
+  }
+
+  if (savedIndicator) {
+    savedIndicator.style.display = "none";
+  }
+}
+
 function formatDatabaseValue(value) {
   if (value === null || value === undefined || value === "") {
     return "-";
@@ -1595,6 +1758,9 @@ function getPromotionStatusLabel(status) {
   }
   if (status === "needs-exact-rank") {
     return "Needs exact rank";
+  }
+  if (status === "pending-doctoral-attainment") {
+    return "Pending doctoral attainment";
   }
   if (status === "pending-professor-accreditation") {
     return "Pending professor accreditation";
@@ -1810,7 +1976,7 @@ function getPanelUploadCount(panelKey) {
   return employeeUploads.filter((item) => item.metadata?.panelKey === panelKey).length;
 }
 
-function collapseFacultyForm() {
+function collapseFacultyFormLegacy() {
   const toggle = byId("faculty-form-toggle");
   const savedIndicator = byId("faculty-form-saved");
 
@@ -1822,6 +1988,23 @@ function collapseFacultyForm() {
     const name = valueOf("fullName") || "Faculty";
     const eid = valueOf("employeeId");
     savedIndicator.textContent = `${name}${eid ? ` (${eid})` : ""} — Record saved. Expand above to edit.`;
+    savedIndicator.style.display = "flex";
+  }
+}
+
+function collapseFacultyFormWithModeSupport() {
+  const toggle = byId("faculty-form-toggle");
+  const savedIndicator = byId("faculty-form-saved");
+
+  if (toggle) {
+    toggle.removeAttribute("open");
+  }
+
+  if (savedIndicator) {
+    const name = valueOf("fullName") || "Faculty";
+    const eid = valueOf("employeeId");
+    const actionLabel = latestRecordContext?.mode === "update" ? "Record updated" : "Record saved";
+    savedIndicator.textContent = `${name}${eid ? ` (${eid})` : ""} - ${actionLabel}. Expand above to edit.`;
     savedIndicator.style.display = "flex";
   }
 }

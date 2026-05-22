@@ -691,6 +691,7 @@ select {
 }
 
 .rank-panel-chip[data-tone="pending-professor-accreditation"],
+.rank-panel-chip[data-tone="pending-doctoral-attainment"],
 .rank-panel-chip[data-tone="pending-cup-certification"] {
   background: #fff0ec;
   color: #8a341f;
@@ -986,6 +987,14 @@ select {
   gap: 10px;
 }
 
+#faculty-panel .panel-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
 .field-row {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1016,6 +1025,19 @@ select {
 .field select:focus {
   outline: 2px solid rgba(13, 107, 87, 0.2);
   border-color: var(--accent);
+}
+
+.form-action-row {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.profile-card-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 12px;
+  flex-wrap: wrap;
 }
 
 .code-block {

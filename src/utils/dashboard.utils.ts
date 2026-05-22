@@ -18,6 +18,7 @@ type PromotionDraftSnapshot = {
     | 'preliminary'
     | 'pending'
     | 'needs-exact-rank'
+    | 'pending-doctoral-attainment'
     | 'pending-professor-accreditation'
     | 'pending-cup-certification';
   currentRankGroup: string | null;
@@ -66,6 +67,7 @@ export function buildDraftPointSummary(
   const rawInput = readJsonObject(featureEnvelope.rawInput);
   const personalData = readJsonObject(rawInput.personalData);
   const performanceReview = readJsonObject(rawInput.performanceReview);
+  const promotionHistory = Array.isArray(rawInput.promotionHistory) ? rawInput.promotionHistory : [];
   const uploadedPanels = new Set<string>();
 
   let instruction = readOptionalNumber(performanceReview.teachingEffectiveness) ?? 0;
@@ -103,6 +105,7 @@ export function buildDraftPointSummary(
     typeof personalData.highestEducationalAttainment === 'string'
       ? personalData.highestEducationalAttainment
       : null,
+    promotionHistory,
     {
       instruction,
       research,
@@ -143,6 +146,7 @@ export function buildDraftPointSummary(
 function buildPromotionDraftSnapshot(
   academicRank: string | null,
   highestEducationalAttainment: string | null,
+  promotionHistory: unknown,
   approximateInputs: {
     instruction: number;
     research: number;
@@ -157,6 +161,8 @@ function buildPromotionDraftSnapshot(
   trainingStatus: string | null,
 ): PromotionDraftSnapshot {
   const currentRank = normalizeAcademicRank(academicRank);
+  const normalizedAttainment = normalizeAttainment(highestEducationalAttainment);
+  const hasDoctoralGraduateBonus = canUseDoctoralGraduateBonus(normalizedAttainment, promotionHistory);
   const hasEvaluatorScore =
     (trainingStatus === 'LABELED' || trainingStatus === 'VALIDATED') &&
     assessment !== null &&
@@ -190,7 +196,12 @@ function buildPromotionDraftSnapshot(
   );
 
   if (!hasEvaluatorScore) {
-    const approximateOutcome = resolveOfficialRankOutcome(currentRank, approximateKraTotals, highestEducationalAttainment);
+    const approximateOutcome = resolveOfficialRankOutcome(
+      currentRank,
+      approximateKraTotals,
+      highestEducationalAttainment,
+      hasDoctoralGraduateBonus,
+    );
     return {
       currentRank,
       suggestedRank: approximateOutcome.suggestedRank,
@@ -211,7 +222,12 @@ function buildPromotionDraftSnapshot(
   const evaluatorTotalScore = roundScore(assessment.totalScore);
   const criterionScores = readNumberRecord(assessment.criterionScores);
   const kraTotals = computeKraTotals(criterionScores);
-  const rankOutcome = resolveOfficialRankOutcome(currentRank, kraTotals, highestEducationalAttainment);
+  const rankOutcome = resolveOfficialRankOutcome(
+    currentRank,
+    kraTotals,
+    highestEducationalAttainment,
+    hasDoctoralGraduateBonus,
+  );
 
   return {
     currentRank,
@@ -403,22 +419,34 @@ function resolveOfficialRankOutcome(
   currentRank: string,
   kraTotals: { instruction: number; research: number; extension: number; professionalDevelopment: number },
   highestEducationalAttainment: string | null,
+  hasDoctoralGraduateBonus: boolean,
 ): RankResolution {
   let activeRank = currentRank;
   let activeGroup = getRankGroup(activeRank);
   let weightedScore = computeWeightedScore(kraTotals, activeGroup.weights);
-  let subrankIncrements = getSubrankIncrement(weightedScore);
+  let incrementRule = applyRankIncrementRules(
+    activeGroup.key,
+    getSubrankIncrement(weightedScore),
+    hasDoctoralGraduateBonus,
+  );
+  let subrankIncrements = incrementRule.adjustedIncrements;
   let projectedRank = getRankAfterIncrements(activeRank, subrankIncrements);
   let guard = 0;
+  let bonusApplied = incrementRule.bonusApplied;
 
-  while (guard < 8 && crossesIntoNextRank(activeRank, projectedRank)) {
+  while (guard < 8 && rankGroupByRank[projectedRank] !== activeGroup.key) {
     const nextGroup = getNextRankGroup(activeGroup.key);
     if (!nextGroup) {
       break;
     }
 
     const recomputedScore = computeWeightedScore(kraTotals, nextGroup.weights);
-    const recomputedIncrements = getSubrankIncrement(recomputedScore);
+    const recomputedIncrementRule = applyRankIncrementRules(
+      nextGroup.key,
+      getSubrankIncrement(recomputedScore),
+      hasDoctoralGraduateBonus,
+    );
+    const recomputedIncrements = recomputedIncrementRule.adjustedIncrements;
     const recomputedProjectedRank = getRankAfterIncrements(activeRank, recomputedIncrements);
 
     if (!isWithinOrBeyondGroup(recomputedProjectedRank, nextGroup.key)) {
@@ -432,7 +460,10 @@ function resolveOfficialRankOutcome(
         rankGroupLabel: activeGroup.label,
         appliedWeightProfile: nextGroup.label,
         pendingRequirement: null,
-        note: `Official ranking was recomputed using ${nextGroup.label} weights. The employee did not qualify for the next rank, so the highest ${activeGroup.label} sub-rank was retained.`,
+        note: buildRankResolutionNote(
+          `Official ranking was recomputed using ${nextGroup.label} weights. The employee did not qualify for the next rank, so the highest ${activeGroup.label} sub-rank was retained.`,
+          recomputedIncrementRule.bonusApplied,
+        ),
       };
     }
 
@@ -440,28 +471,37 @@ function resolveOfficialRankOutcome(
     weightedScore = recomputedScore;
     subrankIncrements = recomputedIncrements;
     projectedRank = recomputedProjectedRank;
+    bonusApplied = recomputedIncrementRule.bonusApplied;
     guard += 1;
   }
 
   const normalizedProjectedRank = projectedRank;
   const normalizedAttainment = normalizeAttainment(highestEducationalAttainment);
   const currentGroupLabel = getRankGroupLabel(currentRank) ?? activeGroup.label;
+  const doctoralQualified = hasDoctoralQualification(normalizedAttainment);
+  const highestQualifiedRank = getHighestQualifiedRank(currentRank, normalizedAttainment);
+  const highestQualifiedRankIndex = getAcademicRankIndex(highestQualifiedRank);
+  const projectedRankIndex = getAcademicRankIndex(normalizedProjectedRank);
+
+  if (projectedRankIndex > highestQualifiedRankIndex) {
+    return {
+      suggestedRank: highestQualifiedRank,
+      projectedRank: normalizedProjectedRank,
+      weightedScore,
+      subrankIncrements,
+      status: 'pending-doctoral-attainment',
+      rankGroupLabel: currentGroupLabel,
+      appliedWeightProfile: activeGroup.label,
+      pendingRequirement:
+        'Associate Professor and Professor ranks require at least doctoral units or a completed doctoral degree.',
+      note: buildRankResolutionNote(
+        `The weighted KRA result reaches ${normalizedProjectedRank}, but the award is capped at ${highestQualifiedRank} until the faculty member has at least doctoral units or a completed doctoral degree.`,
+        bonusApplied,
+      ),
+    };
+  }
 
   if (rankGroupByRank[normalizedProjectedRank] === 'professor' && rankGroupByRank[currentRank] !== 'professor') {
-    if (normalizedAttainment !== 'doctorate') {
-      return {
-        suggestedRank: 'Associate Professor V',
-        projectedRank: normalizedProjectedRank,
-        weightedScore,
-        subrankIncrements,
-        status: 'pending-professor-accreditation',
-        rankGroupLabel: currentGroupLabel,
-        appliedWeightProfile: activeGroup.label,
-        pendingRequirement: 'Professor rank requires an earned doctoral degree and EAC accreditation.',
-        note: 'The computed sub-rank increments reach the Professor level, but the employee cannot be awarded a Professor rank without an earned doctoral degree and EAC accreditation.',
-      };
-    }
-
     return {
       suggestedRank: 'Associate Professor V',
       projectedRank: normalizedProjectedRank,
@@ -470,8 +510,13 @@ function resolveOfficialRankOutcome(
       status: 'pending-professor-accreditation',
       rankGroupLabel: currentGroupLabel,
       appliedWeightProfile: activeGroup.label,
-      pendingRequirement: 'EAC accreditation is still required before the Professor rank can be awarded for the first time.',
-      note: 'The employee qualifies for a Professor rank based on the official score, but the award remains pending until EAC accreditation is completed.',
+      pendingRequirement: doctoralQualified
+        ? 'EAC accreditation is still required before the Professor rank can be awarded for the first time.'
+        : 'Professor rank requires doctoral units or a completed doctoral degree, plus EAC accreditation.',
+      note: buildRankResolutionNote(
+        'The employee qualifies for a Professor rank based on the official score, but the award remains pending until EAC accreditation is completed.',
+        bonusApplied,
+      ),
     };
   }
 
@@ -485,7 +530,10 @@ function resolveOfficialRankOutcome(
       rankGroupLabel: currentGroupLabel,
       appliedWeightProfile: activeGroup.label,
       pendingRequirement: 'Certification Committee approval is required for College/University Professor.',
-      note: 'The computed sub-rank increments reach College/University Professor, but the official award remains pending until Certification Committee approval is completed.',
+      note: buildRankResolutionNote(
+        'The computed sub-rank increments reach College/University Professor, but the official award remains pending until Certification Committee approval is completed.',
+        bonusApplied,
+      ),
     };
   }
 
@@ -498,7 +546,10 @@ function resolveOfficialRankOutcome(
     rankGroupLabel: currentGroupLabel,
     appliedWeightProfile: activeGroup.label,
     pendingRequirement: null,
-    note: 'Draft rank is based on the official 2022 NBC 461 weighted score and sub-rank increment rules. Final committee confirmation is still required.',
+    note: buildRankResolutionNote(
+      'Draft rank is based on the official 2022 NBC 461 weighted score and sub-rank increment rules. Final committee confirmation is still required.',
+      bonusApplied,
+    ),
   };
 }
 
@@ -528,16 +579,29 @@ function getSubrankIncrement(score: number) {
   return 0;
 }
 
+function applyRankIncrementRules(
+  activeGroupKey: RankGroupKey,
+  subrankIncrements: number,
+  hasDoctoralGraduateBonus: boolean,
+) {
+  const cappedBaseIncrements = activeGroupKey === 'professor' ? Math.min(subrankIncrements, 1) : subrankIncrements;
+  const adjustedIncrements =
+    activeGroupKey === 'professor'
+      ? Math.min(cappedBaseIncrements + (hasDoctoralGraduateBonus ? 1 : 0), 1)
+      : cappedBaseIncrements + (hasDoctoralGraduateBonus ? 1 : 0);
+
+  return {
+    adjustedIncrements,
+    bonusApplied: hasDoctoralGraduateBonus && adjustedIncrements > cappedBaseIncrements,
+  };
+}
+
 function getRankAfterIncrements(rank: string, increments: number) {
   const currentIndex = getAcademicRankIndex(rank);
   if (currentIndex < 0) {
     return rank;
   }
   return academicRankLadder[Math.min(currentIndex + increments, academicRankLadder.length - 1)];
-}
-
-function crossesIntoNextRank(currentRank: string, projectedRank: string) {
-  return rankGroupByRank[currentRank] !== rankGroupByRank[projectedRank];
 }
 
 function isWithinOrBeyondGroup(rank: string, groupKey: RankGroupKey) {
@@ -573,13 +637,53 @@ function normalizeAttainment(attainment: string | null) {
   }
 
   const normalized = attainment.trim().toLowerCase();
-  if (/doctor|ph\.?d|edd|dpa|dba/.test(normalized)) {
-    return 'doctorate';
+  if (
+    /(doctor|doctoral).*(unit|units|candidate|candidacy|ongoing|level)|\bunit(s)?\b.*(doctor|doctoral)|doctoral studies/.test(
+      normalized,
+    )
+  ) {
+    return 'doctorate-units';
+  }
+  if (/ph\.?d|edd|dpa|dba|doctor of|doctoral graduate|doctorate graduate|earned doctoral|completed doctoral|doctorate/.test(normalized)) {
+    return 'doctorate-graduate';
   }
   if (/master|mba|ma\b|ms\b|msc|m\.?a|m\.?s/.test(normalized)) {
     return 'masters';
   }
   return 'other';
+}
+
+function hasDoctoralQualification(attainment: string) {
+  return attainment === 'doctorate-units' || attainment === 'doctorate-graduate';
+}
+
+function canUseDoctoralGraduateBonus(attainment: string, promotionHistory: unknown) {
+  if (attainment !== 'doctorate-graduate') {
+    return false;
+  }
+
+  const history = Array.isArray(promotionHistory) ? promotionHistory : [];
+  return !history.some((entry) => readJsonObject(entry).promoted === true);
+}
+
+function getHighestQualifiedRank(currentRank: string, attainment: string) {
+  if (hasDoctoralQualification(attainment)) {
+    return 'College/University Professor';
+  }
+
+  const highestNonDoctoralRank = 'Assistant Professor IV';
+  const currentRankIndex = getAcademicRankIndex(currentRank);
+  const highestNonDoctoralRankIndex = getAcademicRankIndex(highestNonDoctoralRank);
+
+  return currentRankIndex > highestNonDoctoralRankIndex ? currentRank : highestNonDoctoralRank;
+}
+
+function buildRankResolutionNote(baseNote: string, bonusApplied: boolean) {
+  if (!bonusApplied) {
+    return baseNote;
+  }
+
+  return `${baseNote} A one-time +1 rank adjustment for a doctoral graduate was applied.`;
 }
 
 function normalizeAcademicRank(rank: string | null) {
