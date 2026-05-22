@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import pdf from 'pdf-parse';
 import { extractGuidelineReference } from '../utils';
+import { academicRankOptions, educationalAttainmentOptions } from '../constants/faculty';
 import { uploadPanels } from '../uploadPanels';
 import { tqeReferenceSummary, guidelinePdfPath } from '../config/globals';
 
@@ -19,6 +20,13 @@ export const getUploadPanels = (_req: Request, res: Response) => {
   res.json({
     modelStatus: 'inactive',
     panels: uploadPanels,
+  });
+};
+
+export const getFacultyOptions = (_req: Request, res: Response) => {
+  res.json({
+    academicRanks: academicRankOptions,
+    educationalAttainments: educationalAttainmentOptions,
   });
 };
 

@@ -45,92 +45,113 @@
           <div class="panel-heading">
             <div>
               <p class="section-kicker">Faculty Record</p>
-              <h2>Create or update the base employee record</h2>
-              <p class="card-copy" id="faculty-form-mode">Create a baseline record, or load a saved one below to update missing rank and profile details.</p>
+              <h2>Maintain your baseline profile and current cycle data</h2>
+              <p class="card-copy" id="faculty-form-mode">Create a baseline profile, then keep the current cycle fields updated so the rank estimate stays usable.</p>
             </div>
             <button class="button button-secondary" id="faculty-reset-button" type="button">Start New Record</button>
           </div>
           <details class="faculty-form-toggle" id="faculty-form-toggle" open>
             <summary>
-              <span>Edit faculty record fields</span>
+              <span>Edit faculty information</span>
               <span class="toggle-chevron">▶</span>
             </summary>
           <form id="faculty-form" class="stack-form">
-            <div class="field-row">
-              <label class="field">
-                <span>Faculty name</span>
-                <input type="text" id="fullName" placeholder="Enter your full name" required />
-              </label>
-              <label class="field">
-                <span>Employee ID</span>
-                <input type="text" id="employeeId" placeholder="Optional employee ID" />
-              </label>
-            </div>
-            <div class="field-row">
-              <label class="field">
-                <span>Highest attainment</span>
-                <select id="attainment">
-                  <option value="">Select attainment</option>
-                  <option>Doctorate Graduate</option>
-                  <option>Doctoral Graduate</option>
-                  <option>Doctorate Units</option>
-                  <option>Doctoral Units</option>
-                  <option>Masteral Graduate</option>
-                  <option>Master's</option>
-                  <option>Bachelor's</option>
-                </select>
-              </label>
-              <label class="field">
-                <span>Academic rank</span>
-                <input type="text" id="academicRank" placeholder="Instructor III, Assistant Professor II, etc." required />
-                <small class="field-help">Enter the exact current sub-rank so the approximation can use the correct promotion rules.</small>
-              </label>
-            </div>
-            <div class="field-row">
-              <label class="field">
-                <span>Years in service</span>
-                <input type="number" id="yearsInService" min="0" step="1" />
-              </label>
-              <label class="field">
-                <span>Review period</span>
-                <input type="text" id="reviewPeriod" placeholder="2025" />
-              </label>
-            </div>
-            <div class="field-row">
-              <label class="field">
-                <span>IPCR average</span>
-                <input type="number" id="ipcrAverage" min="0" max="5" step="0.01" />
-              </label>
-              <label class="field">
-                <span>Teaching effectiveness</span>
-                <input type="number" id="teachingEffectiveness" min="0" max="100" step="0.01" />
-                <small class="field-help">Enter the average teaching effectiveness score for the last 3 years.</small>
-              </label>
-            </div>
-            <div class="field-row">
-              <label class="field">
-                <span>Research outputs</span>
-                <input type="number" id="researchOutputs" min="0" step="0.01" />
-              </label>
-              <label class="field">
-                <span>Extension services</span>
-                <input type="number" id="extensionServices" min="0" step="0.01" />
-              </label>
-            </div>
-            <div class="field-row">
-              <label class="field">
-                <span>Administrative experience</span>
-                <input type="number" id="administrativeExperience" min="0" step="0.01" />
-              </label>
-              <label class="field">
-                <span>Professional development hours</span>
-                <input type="number" id="professionalDevelopmentHours" min="0" step="0.01" />
-              </label>
-            </div>
-            <label class="field">
-              <span>Notes</span>
-              <input type="text" id="analysis-notes" placeholder="Optional context for the faculty record" />
-            </label>
+            <section class="form-section-card">
+              <div class="form-section-heading">
+                <div>
+                  <h3>Baseline Profile</h3>
+                  <p class="field-help">Keep identity, rank, and attainment accurate here.</p>
+                </div>
+              </div>
+              <div class="field-row">
+                <label class="field">
+                  <span>Faculty name</span>
+                  <input type="text" id="fullName" placeholder="Enter your full name" required />
+                </label>
+                <label class="field">
+                  <span>Employee ID</span>
+                  <input type="text" id="employeeId" placeholder="Optional employee ID" />
+                </label>
+              </div>
+              <div class="field-row">
+                <label class="field">
+                  <span>Current academic rank</span>
+                  <select id="academicRank" required>
+                    <option value="">Select current rank</option>
+                  </select>
+                </label>
+                <label class="field">
+                  <span>Highest attainment</span>
+                  <select id="attainment" required>
+                    <option value="">Select attainment</option>
+                  </select>
+                </label>
+              </div>
+              <div class="field-row">
+                <label class="field">
+                  <span>Years in service</span>
+                  <input type="number" id="yearsInService" min="0" step="1" />
+                </label>
+              </div>
+            </section>
+            <section class="form-section-card">
+              <div class="form-section-heading">
+                <div>
+                  <h3>Promotion History</h3>
+                  <p class="field-help">Past promotions help the system track the one-time doctoral graduate bonus correctly.</p>
+                </div>
+                <button class="button button-ghost" id="add-promotion-history" type="button">Add History Row</button>
+              </div>
+              <div id="promotion-history-list" class="promotion-history-list"></div>
+            </section>
+            <section class="form-section-card">
+              <div class="form-section-heading">
+                <div>
+                  <h3>Current Promotion Cycle</h3>
+                  <p class="field-help">These fields describe the current review period only.</p>
+                </div>
+              </div>
+              <div class="field-row">
+                <label class="field">
+                  <span>Review period</span>
+                  <input type="text" id="reviewPeriod" placeholder="2025" />
+                </label>
+                <label class="field">
+                  <span>IPCR average</span>
+                  <input type="number" id="ipcrAverage" min="0" max="5" step="0.01" />
+                </label>
+              </div>
+              <div class="field-row">
+                <label class="field">
+                  <span>Teaching effectiveness</span>
+                  <input type="number" id="teachingEffectiveness" min="0" max="100" step="0.01" />
+                </label>
+                <label class="field">
+                  <span>Research outputs</span>
+                  <input type="number" id="researchOutputs" min="0" step="0.01" />
+                </label>
+              </div>
+              <div class="field-row">
+                <label class="field">
+                  <span>Extension services</span>
+                  <input type="number" id="extensionServices" min="0" step="0.01" />
+                </label>
+                <label class="field">
+                  <span>Administrative experience</span>
+                  <input type="number" id="administrativeExperience" min="0" step="0.01" />
+                </label>
+              </div>
+              <div class="field-row">
+                <label class="field">
+                  <span>Professional development hours</span>
+                  <input type="number" id="professionalDevelopmentHours" min="0" step="0.01" />
+                </label>
+                <label class="field">
+                  <span>Cycle notes</span>
+                  <input type="text" id="analysis-notes" placeholder="Optional notes for this cycle" />
+                </label>
+              </div>
+            </section>
             <div class="form-action-row">
               <button class="button button-primary" id="faculty-submit-button" type="submit">Save Faculty Record</button>
               <button class="button button-ghost" type="button" data-scroll-target="#employee-profiles-panel">View Saved Profiles</button>

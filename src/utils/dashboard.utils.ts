@@ -1,4 +1,5 @@
 import { uploadPanels } from '../uploadPanels';
+import { academicRankOptions, normalizeAcademicRankOption } from '../constants/faculty';
 
 type EvaluatorAssessmentSnapshot = {
   totalScore: number;
@@ -62,9 +63,9 @@ export function buildDraftPointSummary(
   profile: { features: unknown; semester: string | null } | null,
   documents: Array<{ extractionMetadata: unknown }>,
   latestEvaluation?: { assessment: EvaluatorAssessmentSnapshot | null; status: string | null },
+  submissionRawInput?: unknown,
 ) {
-  const featureEnvelope = readJsonObject(profile?.features);
-  const rawInput = readJsonObject(featureEnvelope.rawInput);
+  const rawInput = mergeFacultyRecordInput(profile?.features, submissionRawInput);
   const personalData = readJsonObject(rawInput.personalData);
   const performanceReview = readJsonObject(rawInput.performanceReview);
   const promotionHistory = Array.isArray(rawInput.promotionHistory) ? rawInput.promotionHistory : [];
@@ -140,6 +141,95 @@ export function buildDraftPointSummary(
       workflowCoveragePercent: roundScore(coverage * 100),
     },
     promotionDraft,
+  };
+}
+
+export function mergeFacultyRecordInput(profileFeatures: unknown, submissionRawInput?: unknown) {
+  const featureEnvelope = readJsonObject(profileFeatures);
+  const legacyRawInput = readJsonObject(featureEnvelope.rawInput);
+  const baselineData = readJsonObject(featureEnvelope.baselineData);
+  const baselinePersonalData = readJsonObject(baselineData.personalData);
+  const legacyPersonalData = readJsonObject(legacyRawInput.personalData);
+  const baselinePromotionHistory = Array.isArray(baselineData.promotionHistory)
+    ? baselineData.promotionHistory
+    : Array.isArray(legacyRawInput.promotionHistory)
+      ? legacyRawInput.promotionHistory
+      : [];
+
+  const submission = readJsonObject(submissionRawInput);
+  const submissionPerformanceReview = readJsonObject(submission.performanceReview);
+  const legacyPerformanceReview = readJsonObject(legacyRawInput.performanceReview);
+
+  return {
+    personalData: {
+      ...legacyPersonalData,
+      ...baselinePersonalData,
+    },
+    performanceReview: Object.keys(submissionPerformanceReview).length ? submissionPerformanceReview : legacyPerformanceReview,
+    promotionHistory: baselinePromotionHistory,
+    notes:
+      typeof submission.notes === 'string'
+        ? submission.notes
+        : typeof legacyRawInput.notes === 'string'
+          ? legacyRawInput.notes
+          : '',
+  };
+}
+
+export function extractBaselineDataFromProfileFeatures(
+  profileFeatures: unknown,
+  fallbackName: string,
+  fallbackEmployeeId: string | null,
+) {
+  const featureEnvelope = readJsonObject(profileFeatures);
+  const baselineData = readJsonObject(featureEnvelope.baselineData);
+  const legacyRawInput = readJsonObject(featureEnvelope.rawInput);
+  const personalData = readJsonObject(
+    Object.keys(readJsonObject(baselineData.personalData)).length ? baselineData.personalData : legacyRawInput.personalData,
+  );
+  const promotionHistory = Array.isArray(baselineData.promotionHistory)
+    ? baselineData.promotionHistory
+    : Array.isArray(legacyRawInput.promotionHistory)
+      ? legacyRawInput.promotionHistory
+      : [];
+
+  return {
+    personalData: {
+      fullName: typeof personalData.fullName === 'string' ? personalData.fullName : fallbackName,
+      employeeId: typeof personalData.employeeId === 'string' ? personalData.employeeId : fallbackEmployeeId,
+      academicRank: typeof personalData.academicRank === 'string' ? personalData.academicRank : '',
+      yearsInService: readOptionalNumber(personalData.yearsInService),
+      highestEducationalAttainment:
+        typeof personalData.highestEducationalAttainment === 'string' ? personalData.highestEducationalAttainment : '',
+    },
+    promotionHistory,
+  };
+}
+
+export function extractCycleSubmissionData(profileFeatures: unknown, submissionRawInput: unknown, fallbackSemester: string | null) {
+  const featureEnvelope = readJsonObject(profileFeatures);
+  const legacyRawInput = readJsonObject(featureEnvelope.rawInput);
+  const submission = readJsonObject(submissionRawInput);
+  const performanceReview = readJsonObject(
+    Object.keys(readJsonObject(submission.performanceReview)).length ? submission.performanceReview : legacyRawInput.performanceReview,
+  );
+
+  return {
+    performanceReview: {
+      reviewPeriod: typeof performanceReview.reviewPeriod === 'string' ? performanceReview.reviewPeriod : fallbackSemester ?? '',
+      ipcrAverage: readOptionalNumber(performanceReview.ipcrAverage),
+      teachingEffectiveness: readOptionalNumber(performanceReview.teachingEffectiveness),
+      researchOutputs: readOptionalNumber(performanceReview.researchOutputs),
+      extensionServices: readOptionalNumber(performanceReview.extensionServices),
+      administrativeExperience: readOptionalNumber(performanceReview.administrativeExperience),
+      professionalDevelopmentHours: readOptionalNumber(performanceReview.professionalDevelopmentHours),
+    },
+    notes:
+      typeof submission.notes === 'string'
+        ? submission.notes
+        : typeof legacyRawInput.notes === 'string'
+          ? legacyRawInput.notes
+          : '',
   };
 }
 
@@ -246,33 +336,7 @@ function buildPromotionDraftSnapshot(
   };
 }
 
-const academicRankLadder = [
-  'Instructor I',
-  'Instructor II',
-  'Instructor III',
-  'Assistant Professor I',
-  'Assistant Professor II',
-  'Assistant Professor III',
-  'Assistant Professor IV',
-  'Associate Professor I',
-  'Associate Professor II',
-  'Associate Professor III',
-  'Associate Professor IV',
-  'Associate Professor V',
-  'Professor I',
-  'Professor II',
-  'Professor III',
-  'Professor IV',
-  'Professor V',
-  'Professor VI',
-  'College/University Professor',
-];
-
-const academicRankAliases = academicRankLadder.reduce<Record<string, string>>((aliases, rank) => {
-  aliases[normalizeRankKey(rank)] = rank;
-  aliases[normalizeRankKey(rank.replace(/\bI\b/g, '1').replace(/\bII\b/g, '2').replace(/\bIII\b/g, '3').replace(/\bIV\b/g, '4').replace(/\bV\b/g, '5').replace(/\bVI\b/g, '6'))] = rank;
-  return aliases;
-}, {});
+const academicRankLadder = academicRankOptions;
 
 type RankGroupKey = 'instructor' | 'assistant-professor' | 'associate-professor' | 'professor' | 'college-university-professor';
 
@@ -691,11 +755,7 @@ function normalizeAcademicRank(rank: string | null) {
     return null;
   }
 
-  return academicRankAliases[normalizeRankKey(rank)] ?? rank.trim();
-}
-
-function normalizeRankKey(rank: string) {
-  return rank.trim().toLowerCase().replace(/\s+/g, ' ');
+  return normalizeAcademicRankOption(rank) ?? rank.trim();
 }
 
 function getAcademicRankIndex(rank: string) {

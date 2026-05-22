@@ -43,20 +43,25 @@ const authSubmit = byId("auth-submit");
 const facultyFormMode = byId("faculty-form-mode");
 const facultySubmitButton = byId("faculty-submit-button");
 const facultyResetButton = byId("faculty-reset-button");
+const promotionHistoryList = byId("promotion-history-list");
+const addPromotionHistoryButton = byId("add-promotion-history");
 
 let authMode = "login";
 let currentUser = null;
 let latestRecordContext = null;
 let uploadPanelCatalog = [];
+let facultyOptionCatalog = { academicRanks: [], educationalAttainments: [] };
 let employeeUploads = [];
 let evaluatorQueueItems = [];
-let activeProfileBaseline = null;
+let promotionHistoryState = [];
 const employeeProfileRecords = new Map();
 const latestTrainingItemById = new Map();
 uploadPanelGrid?.addEventListener("click", handleDeleteUploadClick);
 reviewQueue?.addEventListener("click", handleDeleteUploadClick);
 uploadedFilesViewer?.addEventListener("click", handleDeleteUploadClick);
 employeeProfiles?.addEventListener("click", handleEmployeeProfileAction);
+promotionHistoryList?.addEventListener("click", handlePromotionHistoryClick);
+promotionHistoryList?.addEventListener("change", handlePromotionHistoryChange);
 uploadedFilesSearch?.addEventListener("input", () => renderUploadedFilesSection(uploadPanelCatalog));
 uploadedFilesPanelFilter?.addEventListener("change", () => renderUploadedFilesSection(uploadPanelCatalog));
 reviewQueueSearch?.addEventListener("input", () => renderReviewQueue(evaluatorQueueItems));
@@ -66,6 +71,10 @@ reviewQueuePanelFilter?.addEventListener("change", () => renderReviewQueue(evalu
 facultyResetButton?.addEventListener("click", () => {
   resetFacultyFormForNewRecord();
   setNotice(facultyResult, "You can now create a new baseline record.", false);
+});
+addPromotionHistoryButton?.addEventListener("click", () => {
+  promotionHistoryState.push(createEmptyPromotionHistoryEntry());
+  renderPromotionHistoryRows();
 });
 
 document.querySelectorAll("[data-scroll-target]").forEach((button) => {
@@ -242,7 +251,8 @@ async function refreshSession() {
 }
 
 async function loadEmployeeWorkspace() {
-  await Promise.all([loadUploadPanelCatalog(), loadEmployeeDashboard()]);
+  await Promise.all([loadUploadPanelCatalog(), loadFacultyOptionCatalog(), loadEmployeeDashboard()]);
+  renderFacultyOptionFields();
   renderUploadPanels(uploadPanelCatalog);
   renderUploadedFilesSection(uploadPanelCatalog);
 }
@@ -343,6 +353,18 @@ async function loadReviewQueue() {
       reviewQueueFilterStatus.textContent = "Unable to load the review queue.";
     }
     reviewQueue.innerHTML = `<div class="notice notice-error">${escapeHtml(toErrorMessage(error))}</div>`;
+  }
+}
+
+async function loadFacultyOptionCatalog() {
+  try {
+    const data = await apiFetch(buildApiUrl("/api/config/faculty-options"), { method: "GET" }, false);
+    facultyOptionCatalog = {
+      academicRanks: Array.isArray(data.academicRanks) ? data.academicRanks : [],
+      educationalAttainments: Array.isArray(data.educationalAttainments) ? data.educationalAttainments : [],
+    };
+  } catch {
+    facultyOptionCatalog = { academicRanks: [], educationalAttainments: [] };
   }
 }
 
@@ -1389,7 +1411,7 @@ function buildFacultyPayload() {
       administrativeExperience: numberOf("administrativeExperience"),
       professionalDevelopmentHours: numberOf("professionalDevelopmentHours"),
     },
-    promotionHistory: Array.isArray(activeProfileBaseline?.promotionHistory) ? activeProfileBaseline.promotionHistory : [],
+    promotionHistory: collectPromotionHistory(),
     notes: valueOf("analysis-notes"),
   };
 }
@@ -1620,34 +1642,20 @@ function setFieldValue(id, value) {
   element.value = value === null || value === undefined ? "" : String(value);
 }
 
-function ensureSelectOption(id, value) {
-  const element = byId(id);
-  if (!element || value === null || value === undefined || value === "") {
-    return;
-  }
-
-  const normalizedValue = String(value);
-  const hasMatchingOption = Array.from(element.options || []).some((option) => option.value === normalizedValue);
-  if (!hasMatchingOption) {
-    const option = document.createElement("option");
-    option.value = normalizedValue;
-    option.textContent = normalizedValue;
-    element.appendChild(option);
-  }
-}
-
 function applyFacultyBaselineToForm(baselineData) {
-  activeProfileBaseline = baselineData || null;
-
   const personalData = baselineData?.personalData || {};
-  const performanceReview = baselineData?.performanceReview || {};
 
   setFieldValue("fullName", personalData.fullName ?? currentUser?.fullName ?? "");
   setFieldValue("employeeId", personalData.employeeId ?? "");
   setFieldValue("academicRank", personalData.academicRank ?? "");
   setFieldValue("yearsInService", personalData.yearsInService);
-  ensureSelectOption("attainment", personalData.highestEducationalAttainment);
   setFieldValue("attainment", personalData.highestEducationalAttainment ?? "");
+  hydratePromotionHistory(Array.isArray(baselineData?.promotionHistory) ? baselineData.promotionHistory : []);
+}
+
+function applyCycleDataToForm(cycleData) {
+  const performanceReview = cycleData?.performanceReview || {};
+
   setFieldValue("reviewPeriod", performanceReview.reviewPeriod ?? "");
   setFieldValue("ipcrAverage", performanceReview.ipcrAverage);
   setFieldValue("teachingEffectiveness", performanceReview.teachingEffectiveness);
@@ -1655,12 +1663,13 @@ function applyFacultyBaselineToForm(baselineData) {
   setFieldValue("extensionServices", performanceReview.extensionServices);
   setFieldValue("administrativeExperience", performanceReview.administrativeExperience);
   setFieldValue("professionalDevelopmentHours", performanceReview.professionalDevelopmentHours);
-  setFieldValue("analysis-notes", baselineData?.notes ?? "");
+  setFieldValue("analysis-notes", cycleData?.notes ?? "");
 }
 
 function selectFacultyProfileForEditing(profile, options = {}) {
   latestRecordContext = { profileId: profile.id, mode: "update" };
   applyFacultyBaselineToForm(profile.baselineData || null);
+  applyCycleDataToForm(profile.cycleData || null);
   setFacultyFormMode({
     mode: "update",
     profileId: profile.id,
@@ -1675,7 +1684,6 @@ function selectFacultyProfileForEditing(profile, options = {}) {
 
 function resetFacultyFormForNewRecord(options = {}) {
   latestRecordContext = { profileId: null, mode: "create" };
-  activeProfileBaseline = null;
   facultyForm?.reset();
   setFieldValue("fullName", options.preserveIdentity === false ? "" : currentUser?.fullName ?? valueOf("fullName"));
   setFieldValue("employeeId", "");
@@ -1690,16 +1698,154 @@ function resetFacultyFormForNewRecord(options = {}) {
   setFieldValue("administrativeExperience", "");
   setFieldValue("professionalDevelopmentHours", "");
   setFieldValue("analysis-notes", "");
+  hydratePromotionHistory([]);
   setFacultyFormMode({ mode: "create" });
   revealFacultyForm(options.collapse !== false);
+}
+
+function renderFacultyOptionFields() {
+  populateSelectOptions("academicRank", facultyOptionCatalog.academicRanks, "Select current rank");
+  populateSelectOptions("attainment", facultyOptionCatalog.educationalAttainments, "Select attainment");
+  renderPromotionHistoryRows();
+
+  const activeProfile = latestRecordContext?.profileId ? employeeProfileRecords.get(latestRecordContext.profileId) : null;
+  if (activeProfile) {
+    applyFacultyBaselineToForm(activeProfile.baselineData || null);
+    applyCycleDataToForm(activeProfile.cycleData || null);
+  }
+}
+
+function populateSelectOptions(id, options, placeholder) {
+  const element = byId(id);
+  if (!element) {
+    return;
+  }
+
+  const currentValue = element.value;
+  const uniqueOptions = Array.from(new Set([...(Array.isArray(options) ? options : []), ...(currentValue ? [currentValue] : [])]));
+  element.innerHTML = [`<option value="">${escapeHtml(placeholder)}</option>`]
+    .concat(uniqueOptions.map((option) => `<option value="${escapeHtml(option)}">${escapeHtml(option)}</option>`))
+    .join("");
+  element.value = currentValue || "";
+}
+
+function hydratePromotionHistory(entries) {
+  promotionHistoryState = Array.isArray(entries) && entries.length
+    ? entries.map((entry) => ({
+        cycle: entry?.cycle || "",
+        promoted: Boolean(entry?.promoted),
+        previousRank: entry?.previousRank || "",
+        newRank: entry?.newRank || "",
+      }))
+    : [createEmptyPromotionHistoryEntry()];
+  renderPromotionHistoryRows();
+}
+
+function createEmptyPromotionHistoryEntry() {
+  return {
+    cycle: "",
+    promoted: false,
+    previousRank: "",
+    newRank: "",
+  };
+}
+
+function renderPromotionHistoryRows() {
+  if (!promotionHistoryList) {
+    return;
+  }
+
+  const rankOptions = facultyOptionCatalog.academicRanks || [];
+  promotionHistoryList.innerHTML = promotionHistoryState
+    .map((entry, index) => `
+      <article class="promotion-history-card">
+        <div class="field-row promotion-history-row">
+          <label class="field">
+            <span>Cycle</span>
+            <input type="text" value="${escapeHtml(entry.cycle || "")}" data-history-index="${index}" data-history-field="cycle" placeholder="2024, 9th cycle, etc." />
+          </label>
+          <label class="field">
+            <span>Previous rank</span>
+            <select data-history-index="${index}" data-history-field="previousRank">
+              ${buildPromotionRankOptions(rankOptions, entry.previousRank, "Select previous rank")}
+            </select>
+          </label>
+          <label class="field">
+            <span>New rank</span>
+            <select data-history-index="${index}" data-history-field="newRank">
+              ${buildPromotionRankOptions(rankOptions, entry.newRank, "Select new rank")}
+            </select>
+          </label>
+          <label class="field checkbox-field">
+            <span>Promoted?</span>
+            <input type="checkbox" ${entry.promoted ? "checked" : ""} data-history-index="${index}" data-history-field="promoted" />
+          </label>
+        </div>
+        <div class="promotion-history-actions">
+          <button class="button button-secondary" type="button" data-history-remove="${index}">Remove</button>
+        </div>
+      </article>
+    `)
+    .join("");
+}
+
+function buildPromotionRankOptions(options, selectedValue, placeholder) {
+  const uniqueOptions = Array.from(new Set([...(Array.isArray(options) ? options : []), ...(selectedValue ? [selectedValue] : [])]));
+  return [`<option value="">${escapeHtml(placeholder)}</option>`]
+    .concat(
+      uniqueOptions.map(
+        (option) =>
+          `<option value="${escapeHtml(option)}" ${option === selectedValue ? "selected" : ""}>${escapeHtml(option)}</option>`,
+      ),
+    )
+    .join("");
+}
+
+function handlePromotionHistoryClick(event) {
+  const removeButton = event.target.closest("[data-history-remove]");
+  if (!removeButton) {
+    return;
+  }
+
+  const index = Number.parseInt(removeButton.dataset.historyRemove || "", 10);
+  if (!Number.isInteger(index)) {
+    return;
+  }
+
+  promotionHistoryState.splice(index, 1);
+  if (!promotionHistoryState.length) {
+    promotionHistoryState.push(createEmptyPromotionHistoryEntry());
+  }
+  renderPromotionHistoryRows();
+}
+
+function handlePromotionHistoryChange(event) {
+  const field = event.target.dataset.historyField;
+  const index = Number.parseInt(event.target.dataset.historyIndex || "", 10);
+  if (!field || !Number.isInteger(index) || !promotionHistoryState[index]) {
+    return;
+  }
+
+  promotionHistoryState[index][field] = field === "promoted" ? Boolean(event.target.checked) : event.target.value;
+}
+
+function collectPromotionHistory() {
+  return Array.from(document.querySelectorAll(".promotion-history-card"))
+    .map((card) => ({
+      cycle: card.querySelector('[data-history-field="cycle"]')?.value?.trim() || undefined,
+      promoted: Boolean(card.querySelector('[data-history-field="promoted"]')?.checked),
+      previousRank: card.querySelector('[data-history-field="previousRank"]')?.value || undefined,
+      newRank: card.querySelector('[data-history-field="newRank"]')?.value || undefined,
+    }))
+    .filter((entry) => entry.cycle || entry.previousRank || entry.newRank || entry.promoted);
 }
 
 function setFacultyFormMode({ mode, profileId, name }) {
   if (facultyFormMode) {
     facultyFormMode.textContent =
       mode === "update"
-        ? `Editing baseline data for ${name || "this faculty profile"}${profileId ? ` (${profileId})` : ""}. Update the current rank or other fields, then save to refresh the approximation.`
-        : "Create a baseline record, or load a saved one below to update missing rank and profile details.";
+        ? `Editing baseline data for ${name || "this faculty profile"}${profileId ? ` (${profileId})` : ""}. Update baseline or cycle details, then save to refresh the approximation.`
+        : "Create a baseline profile, or load a saved one below to continue updating it.";
   }
 
   if (facultySubmitButton) {

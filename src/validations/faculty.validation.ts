@@ -1,4 +1,27 @@
 import { z } from 'zod';
+import { normalizeAcademicRankOption, normalizeEducationalAttainmentOption } from '../constants/faculty';
+
+const academicRankSchema = z
+  .string()
+  .trim()
+  .min(1, 'Academic rank is required')
+  .refine((value) => normalizeAcademicRankOption(value) !== null, 'Select a valid academic rank')
+  .transform((value) => normalizeAcademicRankOption(value) as string);
+
+const educationalAttainmentSchema = z
+  .string()
+  .trim()
+  .min(1, 'Highest educational attainment is required')
+  .refine((value) => normalizeEducationalAttainmentOption(value) !== null, 'Select a valid highest educational attainment')
+  .transform((value) => normalizeEducationalAttainmentOption(value) as string);
+
+const optionalAcademicRankSchema = z
+  .string()
+  .trim()
+  .optional()
+  .transform((value) => (value ? normalizeAcademicRankOption(value) : undefined))
+  .refine((value) => value === undefined || value !== null, 'Select a valid academic rank')
+  .transform((value) => value ?? undefined);
 
 export const personalDataSchema = z.object({
   employeeId: z.string().trim().optional(),
@@ -6,9 +29,9 @@ export const personalDataSchema = z.object({
   age: z.number().nonnegative().optional(),
   sex: z.string().trim().optional(),
   civilStatus: z.string().trim().optional(),
-  academicRank: z.string().trim().min(1, 'Academic rank is required'),
+  academicRank: academicRankSchema,
   yearsInService: z.number().nonnegative().optional(),
-  highestEducationalAttainment: z.string().trim().optional(),
+  highestEducationalAttainment: educationalAttainmentSchema,
   department: z.string().trim().optional(),
 });
 
@@ -25,8 +48,8 @@ export const performanceReviewSchema = z.object({
 export const promotionHistorySchema = z.object({
   cycle: z.string().trim().optional(),
   promoted: z.boolean(),
-  previousRank: z.string().trim().optional(),
-  newRank: z.string().trim().optional(),
+  previousRank: optionalAcademicRankSchema,
+  newRank: optionalAcademicRankSchema,
 });
 
 export const documentExtractionSchema = z.object({

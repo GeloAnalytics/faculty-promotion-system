@@ -136,3 +136,37 @@ test('doctoral graduates receive the one-time +1 rank bonus when no prior promot
   assert.equal(usedDraft.promotionDraft.suggestedRank, 'Associate Professor I');
   assert.match(bonusDraft.promotionDraft.note, /one-time \+1 rank adjustment/i);
 });
+
+test('draft rank still resolves when baseline and cycle data are stored separately', () => {
+  const draftPoints = buildDraftPointSummary(
+    {
+      features: {
+        baselineData: {
+          personalData: {
+            fullName: 'Test Faculty',
+            academicRank: 'Assistant Professor IV',
+            highestEducationalAttainment: 'Doctorate Graduate',
+            yearsInService: 11,
+          },
+          promotionHistory: [],
+        },
+      },
+      semester: '2026-1',
+    },
+    [],
+    undefined,
+    {
+      performanceReview: {
+        teachingEffectiveness: 91.8,
+        researchOutputs: 2,
+        extensionServices: 1,
+        professionalDevelopmentHours: 0,
+        ipcrAverage: 0,
+      },
+      notes: 'Cycle data test',
+    },
+  );
+
+  assert.equal(draftPoints.promotionDraft.suggestedRank, 'Associate Professor II');
+  assert.equal(draftPoints.promotionDraft.currentRank, 'Assistant Professor IV');
+});

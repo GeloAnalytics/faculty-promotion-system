@@ -132,8 +132,13 @@ function buildStoredFeatureEnvelope(
   features: ReturnType<typeof buildFeatureVector>,
   tqeBenchmarks: ReturnType<typeof findClosestTqeBenchmarks>,
 ) {
+  const baselineData = {
+    personalData: payload.personalData,
+    promotionHistory: payload.promotionHistory,
+  };
+
   return toPrismaJson({
-    rawInput: payload,
+    baselineData,
     engineeredFeatures: features,
     modelStatus: 'inactive',
     tqeBenchmarks,
