@@ -22,6 +22,11 @@ const employeePoints = byId("employee-points");
 const employeeLogs = byId("employee-logs");
 const employeeProfiles = byId("employee-profiles");
 const reviewQueue = byId("review-queue");
+const reviewQueueSearch = byId("review-queue-search");
+const reviewQueueStatusFilter = byId("review-queue-status-filter");
+const reviewQueueConfidenceFilter = byId("review-queue-confidence-filter");
+const reviewQueuePanelFilter = byId("review-queue-panel-filter");
+const reviewQueueFilterStatus = byId("review-queue-filter-status");
 const databaseViewer = byId("database-viewer");
 const trainingCriteria = byId("training-criteria");
 const trainingScoreTotal = byId("training-score-total");
@@ -41,12 +46,17 @@ let currentUser = null;
 let latestRecordContext = null;
 let uploadPanelCatalog = [];
 let employeeUploads = [];
+let evaluatorQueueItems = [];
 const latestTrainingItemById = new Map();
 uploadPanelGrid?.addEventListener("click", handleDeleteUploadClick);
 reviewQueue?.addEventListener("click", handleDeleteUploadClick);
 uploadedFilesViewer?.addEventListener("click", handleDeleteUploadClick);
 uploadedFilesSearch?.addEventListener("input", () => renderUploadedFilesSection(uploadPanelCatalog));
 uploadedFilesPanelFilter?.addEventListener("change", () => renderUploadedFilesSection(uploadPanelCatalog));
+reviewQueueSearch?.addEventListener("input", () => renderReviewQueue(evaluatorQueueItems));
+reviewQueueStatusFilter?.addEventListener("change", () => renderReviewQueue(evaluatorQueueItems));
+reviewQueueConfidenceFilter?.addEventListener("change", () => renderReviewQueue(evaluatorQueueItems));
+reviewQueuePanelFilter?.addEventListener("change", () => renderReviewQueue(evaluatorQueueItems));
 
 document.querySelectorAll("[data-scroll-target]").forEach((button) => {
   button.addEventListener("click", () => {
@@ -294,11 +304,20 @@ async function loadReviewQueue() {
   }
 
   reviewQueue.innerHTML = '<div class="notice">Loading employee submission logs...</div>';
+  if (reviewQueueFilterStatus) {
+    reviewQueueFilterStatus.textContent = "Loading review queue...";
+  }
 
   try {
     const data = await apiFetch(buildApiUrl("/api/evaluator/review-queue"), { method: "GET" });
-    renderReviewQueue(data.items || []);
+    evaluatorQueueItems = Array.isArray(data.items) ? data.items : [];
+    renderReviewQueue(evaluatorQueueItems);
   } catch (error) {
+    evaluatorQueueItems = [];
+    syncReviewQueueFilterOptions([]);
+    if (reviewQueueFilterStatus) {
+      reviewQueueFilterStatus.textContent = "Unable to load the review queue.";
+    }
     reviewQueue.innerHTML = `<div class="notice notice-error">${escapeHtml(toErrorMessage(error))}</div>`;
   }
 }
@@ -901,16 +920,31 @@ function renderReviewQueue(items) {
     return;
   }
 
+  evaluatorQueueItems = Array.isArray(items) ? items : [];
   latestTrainingItemById.clear();
+  syncReviewQueueFilterOptions(evaluatorQueueItems);
 
-  if (!items.length) {
+  if (!evaluatorQueueItems.length) {
+    syncReviewQueueFilterStatus(0, 0, false);
     reviewQueue.innerHTML = '<div class="notice">No employee submissions are waiting in the evaluator queue.</div>';
+    return;
+  }
+
+  const filters = getReviewQueueFilterState();
+  const filteredItems = evaluatorQueueItems.filter((item) => matchesReviewQueueFilter(item, filters));
+  const hasActiveFilters = Boolean(filters.query || filters.status || filters.confidence || filters.panelKey);
+
+  syncReviewQueueFilterStatus(filteredItems.length, evaluatorQueueItems.length, hasActiveFilters);
+
+  if (!filteredItems.length) {
+    reviewQueue.innerHTML =
+      '<div class="notice">No faculty records match the current search or filters. Try another keyword or broaden the selected filters.</div>';
     return;
   }
 
   reviewQueue.innerHTML = `
     <div class="review-queue">
-      ${items
+      ${filteredItems
         .map((item) => {
           const uploads = Array.isArray(item.uploadLogs) ? item.uploadLogs : [];
           const latestTrainingItem = item.latestTrainingItem || null;
@@ -926,6 +960,9 @@ function renderReviewQueue(items) {
           const reviewStatusLabel = getPromotionStatusLabel(promotionDraft.status);
           const reviewConfidenceLabel =
             getPromotionConfidenceLabel(promotionDraft.confidence || (promotionDraft.basis === "evaluator" ? "high" : null)) || "Pending";
+          const uploadedPanelCount = item.draftPoints?.evidenceCoverage?.uploadedPanelCount ?? 0;
+          const expectedPanelCount = item.draftPoints?.evidenceCoverage?.expectedPanelCount ?? 0;
+          const uploadCountLabel = `${uploads.length} file${uploads.length === 1 ? "" : "s"}`;
           if (latestTrainingId && latestTrainingItem) {
             latestTrainingItemById.set(latestTrainingId, latestTrainingItem);
           }
@@ -938,24 +975,51 @@ function renderReviewQueue(items) {
                 </div>
                 <span class="training-example-status">${escapeHtml(item.employeeId || "No Employee ID")}</span>
               </div>
-              <p class="card-copy">Submitted by: ${escapeHtml(item.createdBy?.fullName || "-")} (${escapeHtml(item.createdBy?.email || "-")})</p>
-              <p class="card-copy">Semester: ${escapeHtml(item.semester || "-")}</p>
-              <p class="card-copy">Current rank: ${escapeHtml(item.draftPoints?.promotionDraft?.currentRank || "Not set")}</p>
-              <p class="card-copy">${escapeHtml(getPromotionBasisLabel(item.draftPoints?.promotionDraft?.basis))}: ${escapeHtml(item.draftPoints?.promotionDraft?.suggestedRank || "Pending evaluator review")}</p>
-              <p class="card-copy">${escapeHtml(item.draftPoints?.promotionDraft?.basis === "evaluator" ? "Projected rank from evaluator score" : item.draftPoints?.promotionDraft?.basis === "pending-review" ? "Projected rank" : "Projected rank from uploads and inputs")}: ${escapeHtml(item.draftPoints?.promotionDraft?.projectedRank || "Pending evaluator review")}</p>
-              <p class="card-copy">Approximate total from uploaded data: ${escapeHtml(String(item.draftPoints?.overallEstimate ?? 0))}</p>
-              <p class="card-copy">Coverage: ${escapeHtml(String(item.draftPoints?.evidenceCoverage?.uploadedPanelCount ?? 0))} / ${escapeHtml(String(item.draftPoints?.evidenceCoverage?.expectedPanelCount ?? 0))} panels</p>
-              <p class="card-copy">Latest evaluator total: ${escapeHtml(formatOptionalNumber(item.draftPoints?.promotionDraft?.evaluatorTotalScore, "Pending"))}</p>
-              <p class="card-copy">${escapeHtml(item.draftPoints?.promotionDraft?.basis === "evaluator" ? "Official weighted score" : item.draftPoints?.promotionDraft?.basis === "pending-review" ? "Weighted score" : "Approximate weighted score")}: ${escapeHtml(formatOptionalNumber(item.draftPoints?.promotionDraft?.weightedScore, "Pending"))}</p>
-              <p class="card-copy">Sub-rank increments: ${escapeHtml(formatOptionalNumber(item.draftPoints?.promotionDraft?.subrankIncrements, "Pending"))}</p>
-              <p class="card-copy">Applied weight profile: ${escapeHtml(item.draftPoints?.promotionDraft?.appliedWeightProfile || "Pending")}</p>
-              <p class="card-copy">Status: ${escapeHtml(reviewStatusLabel)}</p>
-              <p class="card-copy">Confidence: ${escapeHtml(reviewConfidenceLabel)}</p>
-              ${item.draftPoints?.promotionDraft?.pendingRequirement ? `<p class="card-copy">Pending requirement: ${escapeHtml(item.draftPoints.promotionDraft.pendingRequirement)}</p>` : ""}
-              <p class="card-copy">${escapeHtml(item.draftPoints?.promotionDraft?.note || "")}</p>
-              <div class="review-log-list">
-                ${uploads.length ? uploads.map(renderUploadLogChip).join("") : '<div class="notice">No uploads linked yet.</div>'}
+              <div class="review-card-meta">
+                <span class="review-meta-chip">Submitted by ${escapeHtml(item.createdBy?.fullName || "-")}</span>
+                <span class="review-meta-chip">${escapeHtml(item.createdBy?.email || "No email on file")}</span>
+                <span class="review-meta-chip">Semester ${escapeHtml(item.semester || "-")}</span>
+                <span class="review-meta-chip">Coverage ${escapeHtml(String(uploadedPanelCount))} / ${escapeHtml(String(expectedPanelCount))} panels</span>
+                <span class="review-meta-chip">${escapeHtml(uploadCountLabel)}</span>
               </div>
+              <div class="review-card-metrics">
+                ${renderReviewMetric("Current rank", item.draftPoints?.promotionDraft?.currentRank || "Not set")}
+                ${renderReviewMetric(getPromotionBasisLabel(item.draftPoints?.promotionDraft?.basis), item.draftPoints?.promotionDraft?.suggestedRank || "Pending evaluator review", true)}
+                ${renderReviewMetric(
+                  item.draftPoints?.promotionDraft?.basis === "evaluator"
+                    ? "Projected rank from evaluator score"
+                    : item.draftPoints?.promotionDraft?.basis === "pending-review"
+                      ? "Projected rank"
+                      : "Projected rank from uploads and inputs",
+                  item.draftPoints?.promotionDraft?.projectedRank || "Pending evaluator review",
+                )}
+                ${renderReviewMetric("Approximate total from uploaded data", String(item.draftPoints?.overallEstimate ?? 0))}
+                ${renderReviewMetric("Latest evaluator total", formatOptionalNumber(item.draftPoints?.promotionDraft?.evaluatorTotalScore, "Pending"))}
+                ${renderReviewMetric(
+                  item.draftPoints?.promotionDraft?.basis === "evaluator"
+                    ? "Official weighted score"
+                    : item.draftPoints?.promotionDraft?.basis === "pending-review"
+                      ? "Weighted score"
+                      : "Approximate weighted score",
+                  formatOptionalNumber(item.draftPoints?.promotionDraft?.weightedScore, "Pending"),
+                  true,
+                )}
+                ${renderReviewMetric("Sub-rank increments", formatOptionalNumber(item.draftPoints?.promotionDraft?.subrankIncrements, "Pending"))}
+                ${renderReviewMetric("Applied weight profile", item.draftPoints?.promotionDraft?.appliedWeightProfile || "Pending")}
+                ${renderReviewMetric("Status", reviewStatusLabel)}
+                ${renderReviewMetric("Confidence", reviewConfidenceLabel)}
+              </div>
+              ${item.draftPoints?.promotionDraft?.pendingRequirement ? `<p class="card-copy rank-panel-warning"><strong>Pending requirement:</strong> ${escapeHtml(item.draftPoints.promotionDraft.pendingRequirement)}</p>` : ""}
+              ${item.draftPoints?.promotionDraft?.note ? `<p class="card-copy review-card-note">${escapeHtml(item.draftPoints.promotionDraft.note)}</p>` : ""}
+              <details class="review-card-details">
+                <summary>
+                  <span>Upload logs</span>
+                  <span class="review-card-details-meta">${escapeHtml(uploadCountLabel)}</span>
+                </summary>
+                <div class="review-log-list">
+                  ${uploads.length ? uploads.map(renderUploadLogChip).join("") : '<div class="notice">No uploads linked yet.</div>'}
+                </div>
+              </details>
               ${renderEvaluatorDeleteManager(item)}
               <div class="review-card-actions">
                 <button class="button button-secondary queue-score-button" type="button" data-training-id="${escapeHtml(latestTrainingId)}" ${latestTrainingId ? "" : "disabled"}>
@@ -986,11 +1050,147 @@ function renderReviewQueue(items) {
   });
 }
 
+function getReviewQueueFilterState() {
+  return {
+    query: (reviewQueueSearch?.value || "").trim().toLowerCase(),
+    status: (reviewQueueStatusFilter?.value || "").trim().toLowerCase(),
+    confidence: (reviewQueueConfidenceFilter?.value || "").trim().toLowerCase(),
+    panelKey: reviewQueuePanelFilter?.value || "",
+  };
+}
+
+function matchesReviewQueueFilter(item, filters) {
+  const uploads = Array.isArray(item?.uploadLogs) ? item.uploadLogs : [];
+  const promotionDraft = item?.draftPoints?.promotionDraft || {};
+  const normalizedStatus = normalizeReviewQueueStatus(promotionDraft.status);
+  const normalizedConfidence = getReviewQueueConfidenceValue(promotionDraft);
+
+  if (filters.status && normalizedStatus !== filters.status) {
+    return false;
+  }
+
+  if (filters.confidence && normalizedConfidence !== filters.confidence) {
+    return false;
+  }
+
+  if (filters.panelKey && !uploads.some((upload) => upload.metadata?.panelKey === filters.panelKey)) {
+    return false;
+  }
+
+  if (!filters.query) {
+    return true;
+  }
+
+  const haystack = [
+    item.name,
+    item.employeeId,
+    item.semester,
+    item.createdBy?.fullName,
+    item.createdBy?.email,
+    promotionDraft.currentRank,
+    promotionDraft.suggestedRank,
+    promotionDraft.projectedRank,
+    promotionDraft.appliedWeightProfile,
+    promotionDraft.pendingRequirement,
+    promotionDraft.note,
+    getPromotionBasisLabel(promotionDraft.basis),
+    getPromotionStatusLabel(normalizedStatus),
+    normalizedConfidence === "pending" ? "Pending" : getPromotionConfidenceLabel(normalizedConfidence),
+    ...uploads.flatMap((upload) => [
+      upload.originalName,
+      upload.metadata?.panelTitle,
+      upload.metadata?.panelKey,
+      upload.metadata?.analysisSummary,
+      upload.metadata?.linkage,
+    ]),
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+
+  return haystack.includes(filters.query);
+}
+
+function syncReviewQueueFilterOptions(items) {
+  if (!reviewQueuePanelFilter) {
+    return;
+  }
+
+  const selectedValue = reviewQueuePanelFilter.value;
+  const panelMap = new Map();
+
+  items.forEach((item) => {
+    const uploads = Array.isArray(item?.uploadLogs) ? item.uploadLogs : [];
+    uploads.forEach((upload) => {
+      const panelKey = upload.metadata?.panelKey;
+      if (!panelKey || panelMap.has(panelKey)) {
+        return;
+      }
+      panelMap.set(panelKey, upload.metadata?.panelTitle || panelKey);
+    });
+  });
+
+  const panelOptions = [...panelMap.entries()]
+    .sort((left, right) => left[1].localeCompare(right[1]))
+    .map(([panelKey, panelTitle]) => `<option value="${escapeHtml(panelKey)}">${escapeHtml(panelTitle)}</option>`)
+    .join("");
+
+  reviewQueuePanelFilter.innerHTML = `<option value="">All upload panels</option>${panelOptions}`;
+  reviewQueuePanelFilter.value = panelMap.has(selectedValue) ? selectedValue : "";
+}
+
+function syncReviewQueueFilterStatus(visibleCount, totalCount, hasActiveFilters) {
+  if (!reviewQueueFilterStatus) {
+    return;
+  }
+
+  if (!totalCount) {
+    reviewQueueFilterStatus.textContent = "No employee submissions are waiting in the evaluator queue.";
+    return;
+  }
+
+  if (!hasActiveFilters) {
+    reviewQueueFilterStatus.textContent = `Showing all ${totalCount} faculty record${totalCount === 1 ? "" : "s"} in the queue.`;
+    return;
+  }
+
+  reviewQueueFilterStatus.textContent = `Showing ${visibleCount} of ${totalCount} faculty record${totalCount === 1 ? "" : "s"} after filtering.`;
+}
+
+function normalizeReviewQueueStatus(status) {
+  if (!status || typeof status !== "string") {
+    return "pending-review";
+  }
+
+  return status.trim().toLowerCase() || "pending-review";
+}
+
+function getReviewQueueConfidenceValue(promotionDraft) {
+  const confidence = promotionDraft?.confidence || (promotionDraft?.basis === "evaluator" ? "high" : null);
+  if (!confidence || typeof confidence !== "string") {
+    return "pending";
+  }
+
+  return confidence.trim().toLowerCase() || "pending";
+}
+
+function renderReviewMetric(label, value, emphasis = false) {
+  return `
+    <div class="review-card-metric${emphasis ? " review-card-metric-emphasis" : ""}">
+      <span class="review-card-metric-label">${escapeHtml(label)}</span>
+      <strong class="review-card-metric-value">${escapeHtml(value)}</strong>
+    </div>
+  `;
+}
+
 function renderUploadLogChip(log) {
   return `
     <article class="upload-log-chip">
       <strong>${escapeHtml(log.originalName)}</strong>
-      <span>${escapeHtml(log.metadata?.panelTitle || log.metadata?.panelKey || "unassigned panel")}</span>
+      <div class="upload-log-chip-meta">
+        <span>${escapeHtml(log.metadata?.panelTitle || log.metadata?.panelKey || "unassigned panel")}</span>
+        <span>${escapeHtml(log.metadata?.linkage || "pending linkage")}</span>
+      </div>
       <p>${escapeHtml(log.metadata?.analysisSummary || "Stored without extracted summary.")}</p>
       <small>${escapeHtml(formatDatabaseValue(log.createdAt))}</small>
     </article>

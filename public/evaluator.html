@@ -38,6 +38,47 @@
               <h2>Review queue grouped by employee profile</h2>
             </div>
           </div>
+          <div class="uploaded-files-toolbar review-queue-toolbar">
+            <label class="field uploaded-files-filter-field">
+              <span>Search queue</span>
+              <input
+                type="search"
+                id="review-queue-search"
+                placeholder="Search faculty, employee ID, file name, or upload summary"
+              />
+            </label>
+            <label class="field uploaded-files-filter-field">
+              <span>Filter by status</span>
+              <select id="review-queue-status-filter">
+                <option value="">All statuses</option>
+                <option value="ready">Ready</option>
+                <option value="preliminary">Preliminary</option>
+                <option value="needs-exact-rank">Needs exact rank</option>
+                <option value="pending-professor-accreditation">Pending professor accreditation</option>
+                <option value="pending-cup-certification">Pending committee certification</option>
+                <option value="pending-review">Pending review</option>
+              </select>
+            </label>
+            <label class="field uploaded-files-filter-field">
+              <span>Filter by confidence</span>
+              <select id="review-queue-confidence-filter">
+                <option value="">All confidence levels</option>
+                <option value="high">High</option>
+                <option value="medium">Medium</option>
+                <option value="low">Low</option>
+                <option value="pending">Pending</option>
+              </select>
+            </label>
+            <label class="field uploaded-files-filter-field">
+              <span>Filter by upload panel</span>
+              <select id="review-queue-panel-filter">
+                <option value="">All upload panels</option>
+              </select>
+            </label>
+          </div>
+          <p id="review-queue-filter-status" class="uploaded-files-filter-status">
+            Loading review queue...
+          </p>
           <div id="review-queue" class="database-viewer">
             <div class="notice">Loading employee submission logs...</div>
           </div>
