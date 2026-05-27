@@ -1,5 +1,9 @@
 import { z } from 'zod';
 import { normalizeAcademicRankOption, normalizeEducationalAttainmentOption } from '../constants/faculty';
+import {
+  fixedReviewPeriodLabel,
+  reviewCycleYearLabels,
+} from '../constants/reviewCycle';
 
 const academicRankSchema = z
   .string()
@@ -23,8 +27,84 @@ const optionalAcademicRankSchema = z
   .refine((value) => value === undefined || value !== null, 'Select a valid academic rank')
   .transform((value) => value ?? undefined);
 
+const employeeIdSchema = z
+  .string()
+  .trim()
+  .regex(/^\d{10}$/, 'Employee ID must contain exactly 10 digits');
+
+function buildCycleMetricYearSchema(max?: number) {
+  const scoreSchema = z.coerce.number().nonnegative();
+  const constrainedScoreSchema = max === undefined ? scoreSchema : scoreSchema.max(max);
+
+  return z.object({
+    yearLabel: z.enum(reviewCycleYearLabels),
+    firstSemester: constrainedScoreSchema,
+    secondSemester: constrainedScoreSchema,
+    yearlyAverage: z.number().nonnegative().optional(),
+  });
+}
+
+function computeAverage(values: number[]) {
+  if (!values.length) {
+    return 0;
+  }
+
+  return Math.round((values.reduce((sum, value) => sum + value, 0) / values.length) * 100) / 100;
+}
+
+function normalizeCycleMetricSummary(
+  entries: Array<{ yearLabel: (typeof reviewCycleYearLabels)[number]; firstSemester: number; secondSemester: number }>,
+) {
+  const entryMap = new Map(entries.map((entry) => [entry.yearLabel, entry]));
+  const yearlyEntries = reviewCycleYearLabels.map((yearLabel) => {
+    const entry = entryMap.get(yearLabel);
+    const firstSemester = entry?.firstSemester ?? 0;
+    const secondSemester = entry?.secondSemester ?? 0;
+
+    return {
+      yearLabel,
+      firstSemester,
+      secondSemester,
+      yearlyAverage: computeAverage([firstSemester, secondSemester]),
+    };
+  });
+
+  return {
+    average: computeAverage(
+      yearlyEntries.flatMap((entry) => [entry.firstSemester, entry.secondSemester]),
+    ),
+    yearlyEntries,
+  };
+}
+
+const cycleMetricsSchema = z
+  .object({
+    ipcrAverage: z.object({
+      average: z.number().nonnegative().optional(),
+      yearlyEntries: z.array(buildCycleMetricYearSchema(5)).length(reviewCycleYearLabels.length),
+    }),
+    teachingEffectiveness: z.object({
+      average: z.number().nonnegative().optional(),
+      yearlyEntries: z.array(buildCycleMetricYearSchema(100)).length(reviewCycleYearLabels.length),
+    }),
+    researchOutputs: z.object({
+      average: z.number().nonnegative().optional(),
+      yearlyEntries: z.array(buildCycleMetricYearSchema()).length(reviewCycleYearLabels.length),
+    }),
+    extensionServices: z.object({
+      average: z.number().nonnegative().optional(),
+      yearlyEntries: z.array(buildCycleMetricYearSchema()).length(reviewCycleYearLabels.length),
+    }),
+  })
+  .transform((value) => ({
+    ipcrAverage: normalizeCycleMetricSummary(value.ipcrAverage.yearlyEntries),
+    teachingEffectiveness: normalizeCycleMetricSummary(value.teachingEffectiveness.yearlyEntries),
+    researchOutputs: normalizeCycleMetricSummary(value.researchOutputs.yearlyEntries),
+    extensionServices: normalizeCycleMetricSummary(value.extensionServices.yearlyEntries),
+  }));
+
 export const personalDataSchema = z.object({
-  employeeId: z.string().trim().optional(),
+  employeeId: employeeIdSchema,
   fullName: z.string().trim().min(1),
   age: z.number().nonnegative().optional(),
   sex: z.string().trim().optional(),
@@ -43,6 +123,19 @@ export const performanceReviewSchema = z.object({
   extensionServices: z.number().nonnegative().optional(),
   administrativeExperience: z.number().nonnegative().optional(),
   professionalDevelopmentHours: z.number().nonnegative().optional(),
+  cycleMetrics: cycleMetricsSchema.optional(),
+}).transform((value) => {
+  const cycleMetrics = value.cycleMetrics;
+
+  return {
+    ...value,
+    reviewPeriod: fixedReviewPeriodLabel,
+    ipcrAverage: cycleMetrics?.ipcrAverage.average ?? value.ipcrAverage,
+    teachingEffectiveness: cycleMetrics?.teachingEffectiveness.average ?? value.teachingEffectiveness,
+    researchOutputs: cycleMetrics?.researchOutputs.average ?? value.researchOutputs,
+    extensionServices: cycleMetrics?.extensionServices.average ?? value.extensionServices,
+    cycleMetrics,
+  };
 });
 
 export const promotionHistorySchema = z.object({

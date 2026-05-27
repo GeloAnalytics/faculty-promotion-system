@@ -216,6 +216,7 @@ export const getEvaluatorQueue = async (_req: Request, res: Response) => {
         semester: profile.semester,
         createdAt: profile.createdAt,
         createdBy: profile.createdBy,
+        cycleData: extractCycleSubmissionData(profile.features, latestSubmissionRawInput, profile.semester),
         draftPoints: buildDraftPointSummary(
           {
             features: profile.features,

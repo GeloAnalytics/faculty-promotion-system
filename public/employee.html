@@ -70,7 +70,15 @@
                 </label>
                 <label class="field">
                   <span>Employee ID</span>
-                  <input type="text" id="employeeId" placeholder="Optional employee ID" />
+                  <input
+                    type="text"
+                    id="employeeId"
+                    placeholder="Enter 10-digit employee ID"
+                    inputmode="numeric"
+                    maxlength="10"
+                    pattern="[0-9]{10}"
+                    required
+                  />
                 </label>
               </div>
               <div class="field-row">
@@ -108,49 +116,23 @@
               <div class="form-section-heading">
                 <div>
                   <h3>Current Promotion Cycle</h3>
-                  <p class="field-help">These fields describe the current review period only.</p>
+                  <p class="field-help">Enter the semester scores for the fixed review cycle. Yearly and overall averages are computed automatically.</p>
                 </div>
               </div>
-              <div class="field-row">
-                <label class="field">
-                  <span>Review period</span>
-                  <input type="text" id="reviewPeriod" placeholder="2025" />
-                </label>
-                <label class="field">
-                  <span>IPCR average</span>
-                  <input type="number" id="ipcrAverage" min="0" max="5" step="0.01" />
-                </label>
+              <div class="cycle-period-banner">
+                <div>
+                  <span class="cycle-period-label">Review period</span>
+                  <strong id="review-period-display">July 2022-June 2026</strong>
+                </div>
+                <p class="card-copy">Inclusive academic years: 2022-2023, 2023-2024, 2024-2025, and 2025-2026.</p>
               </div>
               <div class="field-row">
-                <label class="field">
-                  <span>Teaching effectiveness</span>
-                  <input type="number" id="teachingEffectiveness" min="0" max="100" step="0.01" />
-                </label>
-                <label class="field">
-                  <span>Research outputs</span>
-                  <input type="number" id="researchOutputs" min="0" step="0.01" />
-                </label>
-              </div>
-              <div class="field-row">
-                <label class="field">
-                  <span>Extension services</span>
-                  <input type="number" id="extensionServices" min="0" step="0.01" />
-                </label>
                 <label class="field">
                   <span>Administrative experience</span>
                   <input type="number" id="administrativeExperience" min="0" step="0.01" />
                 </label>
               </div>
-              <div class="field-row">
-                <label class="field">
-                  <span>Professional development hours</span>
-                  <input type="number" id="professionalDevelopmentHours" min="0" step="0.01" />
-                </label>
-                <label class="field">
-                  <span>Cycle notes</span>
-                  <input type="text" id="analysis-notes" placeholder="Optional notes for this cycle" />
-                </label>
-              </div>
+              <div id="cycle-metrics-grid" class="cycle-metrics-grid"></div>
             </section>
             <div class="form-action-row">
               <button class="button button-primary" id="faculty-submit-button" type="submit">Save Faculty Record</button>

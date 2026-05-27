@@ -57,6 +57,26 @@ export interface PerformanceReview {
   extensionServices?: number;
   administrativeExperience?: number;
   professionalDevelopmentHours?: number;
+  cycleMetrics?: CycleMetrics;
+}
+
+export interface CycleMetricYearEntry {
+  yearLabel: string;
+  firstSemester?: number;
+  secondSemester?: number;
+  yearlyAverage?: number;
+}
+
+export interface CycleMetricSummary {
+  average?: number;
+  yearlyEntries: CycleMetricYearEntry[];
+}
+
+export interface CycleMetrics {
+  ipcrAverage?: CycleMetricSummary;
+  teachingEffectiveness?: CycleMetricSummary;
+  researchOutputs?: CycleMetricSummary;
+  extensionServices?: CycleMetricSummary;
 }
 
 export interface PromotionHistoryEntry {

@@ -45,6 +45,22 @@ const facultySubmitButton = byId("faculty-submit-button");
 const facultyResetButton = byId("faculty-reset-button");
 const promotionHistoryList = byId("promotion-history-list");
 const addPromotionHistoryButton = byId("add-promotion-history");
+const cycleMetricsGrid = byId("cycle-metrics-grid");
+const employeeIdField = byId("employeeId");
+
+const FIXED_REVIEW_PERIOD = "July 2022-June 2026";
+const REVIEW_CYCLE_YEARS = [
+  { key: "2022-2023", label: "AY 2022-2023" },
+  { key: "2023-2024", label: "AY 2023-2024" },
+  { key: "2024-2025", label: "AY 2024-2025" },
+  { key: "2025-2026", label: "AY 2025-2026" },
+];
+const CYCLE_METRIC_DEFINITIONS = [
+  { key: "ipcrAverage", label: "IPCR Average", min: 0, max: 5, step: 0.01, scaleLabel: "0 to 5 scale" },
+  { key: "teachingEffectiveness", label: "Teaching Effectiveness", min: 0, max: 100, step: 0.01, scaleLabel: "0 to 100 scale" },
+  { key: "researchOutputs", label: "Research Outputs", min: 0, step: 0.01, scaleLabel: "Non-negative value" },
+  { key: "extensionServices", label: "Extension Services", min: 0, step: 0.01, scaleLabel: "Non-negative value" },
+];
 
 let authMode = "login";
 let currentUser = null;
@@ -68,6 +84,8 @@ reviewQueueSearch?.addEventListener("input", () => renderReviewQueue(evaluatorQu
 reviewQueueStatusFilter?.addEventListener("change", () => renderReviewQueue(evaluatorQueueItems));
 reviewQueueConfidenceFilter?.addEventListener("change", () => renderReviewQueue(evaluatorQueueItems));
 reviewQueuePanelFilter?.addEventListener("change", () => renderReviewQueue(evaluatorQueueItems));
+employeeIdField?.addEventListener("input", enforceEmployeeIdDigits);
+cycleMetricsGrid?.addEventListener("input", handleCycleMetricInput);
 facultyResetButton?.addEventListener("click", () => {
   resetFacultyFormForNewRecord();
   setNotice(facultyResult, "You can now create a new baseline record.", false);
@@ -126,6 +144,10 @@ authForm?.addEventListener("submit", async (event) => {
 
 facultyForm?.addEventListener("submit", async (event) => {
   event.preventDefault();
+  const payload = buildFacultyPayload();
+  if (!payload) {
+    return;
+  }
   const isUpdating = Boolean(latestRecordContext?.profileId && latestRecordContext?.mode === "update");
   setNotice(facultyResult, isUpdating ? "Updating faculty record..." : "Saving faculty record...");
 
@@ -136,7 +158,7 @@ facultyForm?.addEventListener("submit", async (event) => {
         : buildApiUrl("/api/faculty/ingest"),
       {
         method: isUpdating ? "PATCH" : "POST",
-        body: JSON.stringify(buildFacultyPayload()),
+        body: JSON.stringify(payload),
       },
     );
 
@@ -251,6 +273,7 @@ async function refreshSession() {
 }
 
 async function loadEmployeeWorkspace() {
+  renderCycleMetricInputs();
   await Promise.all([loadUploadPanelCatalog(), loadFacultyOptionCatalog(), loadEmployeeDashboard()]);
   renderFacultyOptionFields();
   renderUploadPanels(uploadPanelCatalog);
@@ -904,7 +927,7 @@ function renderEmployeeProfiles(profiles) {
                 <strong>${escapeHtml(profile.name)}</strong>
                 <span class="training-example-status">${escapeHtml(profile.employeeId || "No Employee ID")}</span>
               </div>
-              <p class="card-copy">Semester: ${escapeHtml(profile.semester || "-")}</p>
+              <p class="card-copy">Review cycle: ${escapeHtml(profile.cycleData?.performanceReview?.reviewPeriod || profile.semester || FIXED_REVIEW_PERIOD)}</p>
               <p class="card-copy">Current rank: ${escapeHtml(profile.draftPoints?.promotionDraft?.currentRank || "Not set")}</p>
               <p class="card-copy">${escapeHtml(getPromotionBasisLabel(profile.draftPoints?.promotionDraft?.basis))}: ${escapeHtml(profile.draftPoints?.promotionDraft?.suggestedRank || "Pending evaluator review")}</p>
               <p class="card-copy">Projected rank: ${escapeHtml(profile.draftPoints?.promotionDraft?.projectedRank || "Pending evaluator review")}</p>
@@ -1034,7 +1057,7 @@ function renderReviewQueue(items) {
               <div class="review-card-meta">
                 <span class="review-meta-chip">Submitted by ${escapeHtml(item.createdBy?.fullName || "-")}</span>
                 <span class="review-meta-chip">${escapeHtml(item.createdBy?.email || "No email on file")}</span>
-                <span class="review-meta-chip">Semester ${escapeHtml(item.semester || "-")}</span>
+                <span class="review-meta-chip">Cycle ${escapeHtml(item.cycleData?.performanceReview?.reviewPeriod || item.semester || FIXED_REVIEW_PERIOD)}</span>
                 <span class="review-meta-chip">Coverage ${escapeHtml(String(uploadedPanelCount))} / ${escapeHtml(String(expectedPanelCount))} panels</span>
                 <span class="review-meta-chip">${escapeHtml(uploadCountLabel)}</span>
               </div>
@@ -1065,6 +1088,7 @@ function renderReviewQueue(items) {
                 ${renderReviewMetric("Status", reviewStatusLabel)}
                 ${renderReviewMetric("Confidence", reviewConfidenceLabel)}
               </div>
+              ${renderCycleMetricReviewSection(item.cycleData?.performanceReview)}
               ${item.draftPoints?.promotionDraft?.pendingRequirement ? `<p class="card-copy rank-panel-warning"><strong>Pending requirement:</strong> ${escapeHtml(item.draftPoints.promotionDraft.pendingRequirement)}</p>` : ""}
               ${item.draftPoints?.promotionDraft?.note ? `<p class="card-copy review-card-note">${escapeHtml(item.draftPoints.promotionDraft.note)}</p>` : ""}
               <details class="review-card-details">
@@ -1239,6 +1263,124 @@ function renderReviewMetric(label, value, emphasis = false) {
   `;
 }
 
+function renderCycleMetricReviewSection(performanceReview) {
+  const cycleMetrics = performanceReview?.cycleMetrics || {};
+  const metricCards = CYCLE_METRIC_DEFINITIONS.map((metric) => buildCycleMetricReviewCard(metric, cycleMetrics?.[metric.key]))
+    .filter(Boolean)
+    .join("");
+
+  if (!metricCards) {
+    return `
+      <section class="review-cycle-section">
+        <div class="review-cycle-heading">
+          <h3>Cycle Metrics Review</h3>
+          <span class="review-cycle-badge review-cycle-badge-pending">Semester breakdown pending</span>
+        </div>
+        <p class="card-copy">This record does not yet have the semester-by-semester values required for the ${escapeHtml(FIXED_REVIEW_PERIOD)} cycle.</p>
+      </section>
+    `;
+  }
+
+  const validations = buildCycleMetricValidations(cycleMetrics);
+
+  return `
+    <section class="review-cycle-section">
+      <div class="review-cycle-heading">
+        <h3>Cycle Metrics Review</h3>
+        <span class="review-cycle-badge ${validations.some((item) => item.level === "error") ? "review-cycle-badge-warning" : "review-cycle-badge-ready"}">
+          ${validations.some((item) => item.level === "error") ? "Needs metric cleanup" : "Semester metrics complete"}
+        </span>
+      </div>
+      <div class="review-cycle-grid">
+        ${metricCards}
+      </div>
+      <div class="review-cycle-validations">
+        ${validations.map((item) => `
+          <span class="review-validation-chip review-validation-chip-${escapeHtml(item.level)}">${escapeHtml(item.message)}</span>
+        `).join("")}
+      </div>
+    </section>
+  `;
+}
+
+function buildCycleMetricReviewCard(metric, metricSummary) {
+  if (!metricSummary) {
+    return "";
+  }
+
+  const yearlyEntries = Array.isArray(metricSummary.yearlyEntries) ? metricSummary.yearlyEntries : [];
+  const filledSemesters = yearlyEntries.reduce((count, entry) => {
+    const firstFilled = Number.isFinite(entry?.firstSemester) ? 1 : 0;
+    const secondFilled = Number.isFinite(entry?.secondSemester) ? 1 : 0;
+    return count + firstFilled + secondFilled;
+  }, 0);
+  const fillRatio = Math.min(100, Math.round((filledSemesters / (REVIEW_CYCLE_YEARS.length * 2)) * 100));
+
+  return `
+    <article class="review-cycle-card">
+      <div class="review-cycle-card-header">
+        <div>
+          <strong>${escapeHtml(metric.label)}</strong>
+          <p class="card-copy">Overall average: ${escapeHtml(formatMetricNumber(metricSummary.average))}</p>
+        </div>
+        <span class="review-cycle-stat">${escapeHtml(String(filledSemesters))}/8 sems</span>
+      </div>
+      <div class="review-cycle-progress">
+        <span class="review-cycle-progress-fill" style="width:${escapeHtml(String(fillRatio))}%"></span>
+      </div>
+      <div class="review-cycle-year-list">
+        ${REVIEW_CYCLE_YEARS.map((year) => {
+          const entry = yearlyEntries.find((item) => item?.yearLabel === year.key) || {};
+          return `
+            <div class="review-cycle-year-row">
+              <span>${escapeHtml(year.label)}</span>
+              <span>1st: ${escapeHtml(formatOptionalMetricNumber(entry.firstSemester))}</span>
+              <span>2nd: ${escapeHtml(formatOptionalMetricNumber(entry.secondSemester))}</span>
+              <strong>Avg: ${escapeHtml(formatOptionalMetricNumber(entry.yearlyAverage))}</strong>
+            </div>
+          `;
+        }).join("")}
+      </div>
+    </article>
+  `;
+}
+
+function buildCycleMetricValidations(cycleMetrics) {
+  const validations = [];
+
+  for (const metric of CYCLE_METRIC_DEFINITIONS) {
+    const metricSummary = cycleMetrics?.[metric.key];
+    const yearlyEntries = Array.isArray(metricSummary?.yearlyEntries) ? metricSummary.yearlyEntries : [];
+    const missingPeriods = [];
+
+    for (const year of REVIEW_CYCLE_YEARS) {
+      const entry = yearlyEntries.find((item) => item?.yearLabel === year.key) || {};
+      if (!Number.isFinite(entry.firstSemester)) {
+        missingPeriods.push(`${year.label} 1st sem`);
+      }
+      if (!Number.isFinite(entry.secondSemester)) {
+        missingPeriods.push(`${year.label} 2nd sem`);
+      }
+      if (metric.max !== undefined) {
+        if (Number.isFinite(entry.firstSemester) && entry.firstSemester > metric.max) {
+          validations.push({ level: "error", message: `${metric.label} exceeds ${metric.scaleLabel} in ${year.label} 1st sem.` });
+        }
+        if (Number.isFinite(entry.secondSemester) && entry.secondSemester > metric.max) {
+          validations.push({ level: "error", message: `${metric.label} exceeds ${metric.scaleLabel} in ${year.label} 2nd sem.` });
+        }
+      }
+    }
+
+    if (missingPeriods.length) {
+      validations.push({ level: "error", message: `${metric.label} is missing ${missingPeriods.length} semester value(s).` });
+    } else {
+      validations.push({ level: "success", message: `${metric.label} is complete for all 8 semesters.` });
+    }
+  }
+
+  return validations.length ? validations : [{ level: "warning", message: "Cycle metrics are not yet available for this record." }];
+}
+
 function renderUploadLogChip(log) {
   return `
     <article class="upload-log-chip">
@@ -1308,7 +1450,7 @@ function renderDatabaseOverview(data) {
       columns: [
         { key: "name", label: "Faculty" },
         { key: "employeeId", label: "Employee ID" },
-        { key: "semester", label: "Semester" },
+        { key: "semester", label: "Review Cycle" },
         { key: "createdAt", label: "Created" },
       ],
     },
@@ -1394,25 +1536,38 @@ function renderDatabaseTable(columns, rows) {
 }
 
 function buildFacultyPayload() {
+  const employeeId = sanitizeEmployeeId(valueOf("employeeId"));
+  if (!/^\d{10}$/.test(employeeId)) {
+    setNotice(facultyResult, "Employee ID must contain exactly 10 digits.", true);
+    employeeIdField?.focus();
+    return null;
+  }
+
+  const cycleMetrics = collectCycleMetrics();
+  const cycleMetricError = validateCycleMetrics(cycleMetrics);
+  if (cycleMetricError) {
+    setNotice(facultyResult, cycleMetricError, true);
+    return null;
+  }
+
   return {
     personalData: {
       fullName: valueOf("fullName"),
-      employeeId: valueOf("employeeId"),
+      employeeId,
       academicRank: valueOf("academicRank"),
       yearsInService: numberOf("yearsInService"),
       highestEducationalAttainment: valueOf("attainment"),
     },
     performanceReview: {
-      reviewPeriod: valueOf("reviewPeriod"),
-      ipcrAverage: numberOf("ipcrAverage"),
-      teachingEffectiveness: numberOf("teachingEffectiveness"),
-      researchOutputs: numberOf("researchOutputs"),
-      extensionServices: numberOf("extensionServices"),
+      reviewPeriod: FIXED_REVIEW_PERIOD,
+      ipcrAverage: cycleMetrics.ipcrAverage.average,
+      teachingEffectiveness: cycleMetrics.teachingEffectiveness.average,
+      researchOutputs: cycleMetrics.researchOutputs.average,
+      extensionServices: cycleMetrics.extensionServices.average,
       administrativeExperience: numberOf("administrativeExperience"),
-      professionalDevelopmentHours: numberOf("professionalDevelopmentHours"),
+      cycleMetrics,
     },
     promotionHistory: collectPromotionHistory(),
-    notes: valueOf("analysis-notes"),
   };
 }
 
@@ -1642,11 +1797,237 @@ function setFieldValue(id, value) {
   element.value = value === null || value === undefined ? "" : String(value);
 }
 
+function sanitizeEmployeeId(value) {
+  return String(value || "").replace(/\D/g, "").slice(0, 10);
+}
+
+function setEmployeeIdValue(value) {
+  setFieldValue("employeeId", sanitizeEmployeeId(value));
+}
+
+function enforceEmployeeIdDigits(event) {
+  if (!event?.target) {
+    return;
+  }
+
+  const sanitizedValue = sanitizeEmployeeId(event.target.value);
+  if (event.target.value !== sanitizedValue) {
+    event.target.value = sanitizedValue;
+  }
+}
+
+function renderCycleMetricInputs() {
+  if (!cycleMetricsGrid) {
+    return;
+  }
+
+  cycleMetricsGrid.innerHTML = CYCLE_METRIC_DEFINITIONS.map((metric) => `
+    <article class="cycle-metric-card">
+      <div class="cycle-metric-header">
+        <div>
+          <h4>${escapeHtml(metric.label)}</h4>
+          <p class="card-copy">${escapeHtml(metric.scaleLabel)}</p>
+        </div>
+        <div class="cycle-metric-average">
+          <span>Overall average</span>
+          <strong data-cycle-average="${escapeHtml(metric.key)}">0.00</strong>
+        </div>
+      </div>
+      <div class="cycle-metric-table-wrap">
+        <table class="cycle-metric-table">
+          <thead>
+            <tr>
+              <th>Academic year</th>
+              <th>1st semester</th>
+              <th>2nd semester</th>
+              <th>Year average</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${REVIEW_CYCLE_YEARS.map((year) => `
+              <tr>
+                <th scope="row">${escapeHtml(year.label)}</th>
+                <td>
+                  <input
+                    type="number"
+                    min="${escapeHtml(String(metric.min ?? 0))}"
+                    ${metric.max !== undefined ? `max="${escapeHtml(String(metric.max))}"` : ""}
+                    step="${escapeHtml(String(metric.step ?? 0.01))}"
+                    data-cycle-input="true"
+                    data-cycle-metric="${escapeHtml(metric.key)}"
+                    data-cycle-year="${escapeHtml(year.key)}"
+                    data-cycle-semester="firstSemester"
+                    required
+                  />
+                </td>
+                <td>
+                  <input
+                    type="number"
+                    min="${escapeHtml(String(metric.min ?? 0))}"
+                    ${metric.max !== undefined ? `max="${escapeHtml(String(metric.max))}"` : ""}
+                    step="${escapeHtml(String(metric.step ?? 0.01))}"
+                    data-cycle-input="true"
+                    data-cycle-metric="${escapeHtml(metric.key)}"
+                    data-cycle-year="${escapeHtml(year.key)}"
+                    data-cycle-semester="secondSemester"
+                    required
+                  />
+                </td>
+                <td>
+                  <output class="cycle-year-average" data-cycle-year-average="${escapeHtml(`${metric.key}:${year.key}`)}">0.00</output>
+                </td>
+              </tr>
+            `).join("")}
+          </tbody>
+        </table>
+      </div>
+    </article>
+  `).join("");
+
+  syncCycleMetricSummaries();
+}
+
+function handleCycleMetricInput(event) {
+  if (!event.target?.matches?.("[data-cycle-input='true']")) {
+    return;
+  }
+
+  syncCycleMetricSummaries();
+}
+
+function setCycleMetricValues(cycleMetrics) {
+  if (!cycleMetricsGrid) {
+    return;
+  }
+
+  if (!cycleMetricsGrid.children.length) {
+    renderCycleMetricInputs();
+  }
+
+  for (const metric of CYCLE_METRIC_DEFINITIONS) {
+    const metricSummary = cycleMetrics?.[metric.key];
+    const entryMap = new Map(
+      Array.isArray(metricSummary?.yearlyEntries)
+        ? metricSummary.yearlyEntries.map((entry) => [entry?.yearLabel, entry])
+        : [],
+    );
+
+    for (const year of REVIEW_CYCLE_YEARS) {
+      const entry = entryMap.get(year.key) || {};
+      const firstInput = cycleMetricsGrid.querySelector(
+        `[data-cycle-metric="${metric.key}"][data-cycle-year="${year.key}"][data-cycle-semester="firstSemester"]`,
+      );
+      const secondInput = cycleMetricsGrid.querySelector(
+        `[data-cycle-metric="${metric.key}"][data-cycle-year="${year.key}"][data-cycle-semester="secondSemester"]`,
+      );
+
+      if (firstInput) {
+        firstInput.value = entry.firstSemester === null || entry.firstSemester === undefined ? "" : String(entry.firstSemester);
+      }
+      if (secondInput) {
+        secondInput.value = entry.secondSemester === null || entry.secondSemester === undefined ? "" : String(entry.secondSemester);
+      }
+    }
+  }
+
+  syncCycleMetricSummaries();
+}
+
+function collectCycleMetrics() {
+  return Object.fromEntries(
+    CYCLE_METRIC_DEFINITIONS.map((metric) => {
+      const yearlyEntries = REVIEW_CYCLE_YEARS.map((year) => {
+        const firstSemester = readCycleMetricInput(metric.key, year.key, "firstSemester");
+        const secondSemester = readCycleMetricInput(metric.key, year.key, "secondSemester");
+        return {
+          yearLabel: year.key,
+          firstSemester,
+          secondSemester,
+          yearlyAverage: averageNumbers([firstSemester, secondSemester]),
+        };
+      });
+
+      return [
+        metric.key,
+        {
+          average: averageNumbers(yearlyEntries.flatMap((entry) => [entry.firstSemester, entry.secondSemester])),
+          yearlyEntries,
+        },
+      ];
+    }),
+  );
+}
+
+function validateCycleMetrics(cycleMetrics) {
+  for (const metric of CYCLE_METRIC_DEFINITIONS) {
+    const entries = cycleMetrics?.[metric.key]?.yearlyEntries || [];
+    for (const entry of entries) {
+      if (!Number.isFinite(entry.firstSemester) || !Number.isFinite(entry.secondSemester)) {
+        return `${metric.label} requires values for both semesters across all years of ${FIXED_REVIEW_PERIOD}.`;
+      }
+      if (metric.max !== undefined && (entry.firstSemester > metric.max || entry.secondSemester > metric.max)) {
+        return `${metric.label} must stay within the allowed range of ${metric.scaleLabel.toLowerCase()}.`;
+      }
+    }
+  }
+
+  return "";
+}
+
+function readCycleMetricInput(metricKey, yearKey, semesterKey) {
+  const element = cycleMetricsGrid?.querySelector(
+    `[data-cycle-metric="${metricKey}"][data-cycle-year="${yearKey}"][data-cycle-semester="${semesterKey}"]`,
+  );
+  return element ? Number.parseFloat(element.value) : Number.NaN;
+}
+
+function syncCycleMetricSummaries() {
+  if (!cycleMetricsGrid) {
+    return;
+  }
+
+  const cycleMetrics = collectCycleMetrics();
+
+  for (const metric of CYCLE_METRIC_DEFINITIONS) {
+    const metricSummary = cycleMetrics[metric.key];
+    const averageOutput = cycleMetricsGrid.querySelector(`[data-cycle-average="${metric.key}"]`);
+    if (averageOutput) {
+      averageOutput.textContent = formatMetricNumber(metricSummary.average);
+    }
+
+    for (const yearEntry of metricSummary.yearlyEntries) {
+      const yearAverageOutput = cycleMetricsGrid.querySelector(
+        `[data-cycle-year-average="${metric.key}:${yearEntry.yearLabel}"]`,
+      );
+      if (yearAverageOutput) {
+        yearAverageOutput.textContent = formatMetricNumber(yearEntry.yearlyAverage);
+      }
+    }
+  }
+}
+
+function averageNumbers(values) {
+  const numericValues = values.filter((value) => Number.isFinite(value));
+  if (!numericValues.length) {
+    return Number.NaN;
+  }
+
+  return Math.round((numericValues.reduce((sum, value) => sum + value, 0) / numericValues.length) * 100) / 100;
+}
+
+function formatMetricNumber(value) {
+  return Number.isFinite(value) ? Number(value).toFixed(2) : "0.00";
+}
+
+function formatOptionalMetricNumber(value, fallback = "-") {
+  return Number.isFinite(value) ? Number(value).toFixed(2) : fallback;
+}
+
 function applyFacultyBaselineToForm(baselineData) {
   const personalData = baselineData?.personalData || {};
 
   setFieldValue("fullName", personalData.fullName ?? currentUser?.fullName ?? "");
-  setFieldValue("employeeId", personalData.employeeId ?? "");
+  setEmployeeIdValue(personalData.employeeId ?? "");
   setFieldValue("academicRank", personalData.academicRank ?? "");
   setFieldValue("yearsInService", personalData.yearsInService);
   setFieldValue("attainment", personalData.highestEducationalAttainment ?? "");
@@ -1656,14 +2037,8 @@ function applyFacultyBaselineToForm(baselineData) {
 function applyCycleDataToForm(cycleData) {
   const performanceReview = cycleData?.performanceReview || {};
 
-  setFieldValue("reviewPeriod", performanceReview.reviewPeriod ?? "");
-  setFieldValue("ipcrAverage", performanceReview.ipcrAverage);
-  setFieldValue("teachingEffectiveness", performanceReview.teachingEffectiveness);
-  setFieldValue("researchOutputs", performanceReview.researchOutputs);
-  setFieldValue("extensionServices", performanceReview.extensionServices);
   setFieldValue("administrativeExperience", performanceReview.administrativeExperience);
-  setFieldValue("professionalDevelopmentHours", performanceReview.professionalDevelopmentHours);
-  setFieldValue("analysis-notes", cycleData?.notes ?? "");
+  setCycleMetricValues(performanceReview.cycleMetrics || null);
 }
 
 function selectFacultyProfileForEditing(profile, options = {}) {
@@ -1686,18 +2061,12 @@ function resetFacultyFormForNewRecord(options = {}) {
   latestRecordContext = { profileId: null, mode: "create" };
   facultyForm?.reset();
   setFieldValue("fullName", options.preserveIdentity === false ? "" : currentUser?.fullName ?? valueOf("fullName"));
-  setFieldValue("employeeId", "");
+  setEmployeeIdValue("");
   setFieldValue("academicRank", "");
   setFieldValue("yearsInService", "");
   setFieldValue("attainment", "");
-  setFieldValue("reviewPeriod", "");
-  setFieldValue("ipcrAverage", "");
-  setFieldValue("teachingEffectiveness", "");
-  setFieldValue("researchOutputs", "");
-  setFieldValue("extensionServices", "");
   setFieldValue("administrativeExperience", "");
-  setFieldValue("professionalDevelopmentHours", "");
-  setFieldValue("analysis-notes", "");
+  setCycleMetricValues(null);
   hydratePromotionHistory([]);
   setFacultyFormMode({ mode: "create" });
   revealFacultyForm(options.collapse !== false);

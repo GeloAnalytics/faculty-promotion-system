@@ -1,5 +1,6 @@
 import { uploadPanels } from '../uploadPanels';
 import { academicRankOptions, normalizeAcademicRankOption } from '../constants/faculty';
+import { fixedReviewPeriodLabel, reviewCycleMetricKeys, reviewCycleYearLabels } from '../constants/reviewCycle';
 
 type EvaluatorAssessmentSnapshot = {
   totalScore: number;
@@ -71,11 +72,11 @@ export function buildDraftPointSummary(
   const promotionHistory = Array.isArray(rawInput.promotionHistory) ? rawInput.promotionHistory : [];
   const uploadedPanels = new Set<string>();
 
-  let instruction = readOptionalNumber(performanceReview.teachingEffectiveness) ?? 0;
-  let research = readOptionalNumber(performanceReview.researchOutputs) ?? 0;
-  let extension = readOptionalNumber(performanceReview.extensionServices) ?? 0;
+  let instruction = resolvePerformanceMetricValue(performanceReview, 'teachingEffectiveness') ?? 0;
+  let research = resolvePerformanceMetricValue(performanceReview, 'researchOutputs') ?? 0;
+  let extension = resolvePerformanceMetricValue(performanceReview, 'extensionServices') ?? 0;
   let professionalDevelopment = readOptionalNumber(performanceReview.professionalDevelopmentHours) ?? 0;
-  let ipcrAverage = readOptionalNumber(performanceReview.ipcrAverage) ?? 0;
+  let ipcrAverage = resolvePerformanceMetricValue(performanceReview, 'ipcrAverage') ?? 0;
   let completenessTotal = 0;
   let completenessSamples = 0;
 
@@ -124,7 +125,10 @@ export function buildDraftPointSummary(
   return {
     note: 'Approximate estimate only. Evaluator review is still required for the official score.',
     facultyName: typeof personalData.fullName === 'string' ? personalData.fullName : null,
-    semester: profile?.semester ?? null,
+    semester:
+      (typeof performanceReview.reviewPeriod === 'string' && performanceReview.reviewPeriod) ||
+      profile?.semester ||
+      fixedReviewPeriodLabel,
     categories: {
       instruction: roundScore(instruction),
       research: roundScore(research),
@@ -216,13 +220,19 @@ export function extractCycleSubmissionData(profileFeatures: unknown, submissionR
 
   return {
     performanceReview: {
-      reviewPeriod: typeof performanceReview.reviewPeriod === 'string' ? performanceReview.reviewPeriod : fallbackSemester ?? '',
-      ipcrAverage: readOptionalNumber(performanceReview.ipcrAverage),
-      teachingEffectiveness: readOptionalNumber(performanceReview.teachingEffectiveness),
-      researchOutputs: readOptionalNumber(performanceReview.researchOutputs),
-      extensionServices: readOptionalNumber(performanceReview.extensionServices),
+      reviewPeriod:
+        (typeof performanceReview.reviewPeriod === 'string' && performanceReview.reviewPeriod) ||
+        fallbackSemester ||
+        fixedReviewPeriodLabel,
+      ipcrAverage: resolvePerformanceMetricValue(performanceReview, 'ipcrAverage'),
+      teachingEffectiveness: resolvePerformanceMetricValue(performanceReview, 'teachingEffectiveness'),
+      researchOutputs: resolvePerformanceMetricValue(performanceReview, 'researchOutputs'),
+      extensionServices: resolvePerformanceMetricValue(performanceReview, 'extensionServices'),
       administrativeExperience: readOptionalNumber(performanceReview.administrativeExperience),
       professionalDevelopmentHours: readOptionalNumber(performanceReview.professionalDevelopmentHours),
+      cycleMetrics: Object.fromEntries(
+        reviewCycleMetricKeys.map((metricKey) => [metricKey, extractCycleMetricSummary(performanceReview, metricKey)]),
+      ),
     },
     notes:
       typeof submission.notes === 'string'
@@ -792,4 +802,69 @@ function readOptionalNumber(value: unknown) {
 
 function roundScore(value: number) {
   return Math.round(value * 100) / 100;
+}
+
+function resolvePerformanceMetricValue(
+  performanceReview: Record<string, unknown>,
+  metricKey: (typeof reviewCycleMetricKeys)[number],
+) {
+  return readOptionalNumber(performanceReview[metricKey]) ?? extractCycleMetricSummary(performanceReview, metricKey)?.average ?? null;
+}
+
+function extractCycleMetricSummary(
+  performanceReview: Record<string, unknown>,
+  metricKey: (typeof reviewCycleMetricKeys)[number],
+) {
+  const cycleMetrics = readJsonObject(performanceReview.cycleMetrics);
+  const metricSummary = readJsonObject(cycleMetrics[metricKey]);
+  const sourceEntries = Array.isArray(metricSummary.yearlyEntries) ? metricSummary.yearlyEntries : [];
+  const entryMap = new Map(
+    sourceEntries.map((entry) => {
+      const record = readJsonObject(entry);
+      return [typeof record.yearLabel === 'string' ? record.yearLabel : '', record];
+    }),
+  );
+
+  const yearlyEntries = reviewCycleYearLabels.map((yearLabel) => {
+    const entry = readJsonObject(entryMap.get(yearLabel));
+    const firstSemester = readOptionalNumber(entry.firstSemester);
+    const secondSemester = readOptionalNumber(entry.secondSemester);
+    const yearlyAverage =
+      readOptionalNumber(entry.yearlyAverage) ?? computeAverage([firstSemester, secondSemester]);
+
+    return {
+      yearLabel,
+      firstSemester: firstSemester ?? undefined,
+      secondSemester: secondSemester ?? undefined,
+      yearlyAverage: yearlyAverage ?? undefined,
+    };
+  });
+
+  const average =
+    readOptionalNumber(metricSummary.average) ??
+    computeAverage(
+      yearlyEntries.flatMap((entry) => [entry.firstSemester ?? null, entry.secondSemester ?? null]),
+    );
+
+  const hasValues =
+    average !== null ||
+    yearlyEntries.some((entry) => entry.firstSemester !== undefined || entry.secondSemester !== undefined);
+
+  if (!hasValues) {
+    return null;
+  }
+
+  return {
+    average: average ?? undefined,
+    yearlyEntries,
+  };
+}
+
+function computeAverage(values: Array<number | null>) {
+  const numericValues = values.filter((value): value is number => typeof value === 'number' && Number.isFinite(value));
+  if (!numericValues.length) {
+    return null;
+  }
+
+  return roundScore(numericValues.reduce((sum, value) => sum + value, 0) / numericValues.length);
 }

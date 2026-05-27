@@ -40,6 +40,25 @@ function buildProfileFeatures({
   };
 }
 
+function buildCycleMetricSummary(valuesByYear: Array<[number, number]>) {
+  const yearLabels = ['2022-2023', '2023-2024', '2024-2025', '2025-2026'];
+  const flattenedValues = valuesByYear.flat();
+  const average = Math.round((flattenedValues.reduce((sum, value) => sum + value, 0) / flattenedValues.length) * 100) / 100;
+
+  return {
+    average,
+    yearlyEntries: yearLabels.map((yearLabel, index) => {
+      const [firstSemester, secondSemester] = valuesByYear[index];
+      return {
+        yearLabel,
+        firstSemester,
+        secondSemester,
+        yearlyAverage: Math.round(((firstSemester + secondSemester) / 2) * 100) / 100,
+      };
+    }),
+  };
+}
+
 test('associate professor projection is capped without doctoral units or graduation', () => {
   const draftPoints = buildDraftPointSummary(
     {
@@ -169,4 +188,57 @@ test('draft rank still resolves when baseline and cycle data are stored separate
 
   assert.equal(draftPoints.promotionDraft.suggestedRank, 'Associate Professor II');
   assert.equal(draftPoints.promotionDraft.currentRank, 'Assistant Professor IV');
+});
+
+test('draft rank can resolve from semester-by-semester cycle metrics when flat averages are absent', () => {
+  const draftPoints = buildDraftPointSummary(
+    {
+      features: {
+        baselineData: {
+          personalData: {
+            fullName: 'Test Faculty',
+            academicRank: 'Assistant Professor IV',
+            highestEducationalAttainment: 'Doctorate Graduate',
+          },
+          promotionHistory: [],
+        },
+      },
+      semester: 'July 2022-June 2026',
+    },
+    [],
+    undefined,
+    {
+      performanceReview: {
+        cycleMetrics: {
+          teachingEffectiveness: buildCycleMetricSummary([
+            [90, 92],
+            [92, 93],
+            [94, 95],
+            [95, 96],
+          ]),
+          researchOutputs: buildCycleMetricSummary([
+            [2, 2],
+            [2, 2],
+            [2, 3],
+            [3, 3],
+          ]),
+          extensionServices: buildCycleMetricSummary([
+            [1, 1],
+            [1, 1],
+            [1, 1],
+            [1, 2],
+          ]),
+          ipcrAverage: buildCycleMetricSummary([
+            [4.5, 4.5],
+            [4.6, 4.6],
+            [4.7, 4.7],
+            [4.8, 4.8],
+          ]),
+        },
+      },
+    },
+  );
+
+  assert.equal(draftPoints.promotionDraft.suggestedRank, 'Associate Professor II');
+  assert.equal(draftPoints.semester, 'July 2022-June 2026');
 });
