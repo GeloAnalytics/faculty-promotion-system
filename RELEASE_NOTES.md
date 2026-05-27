@@ -1,5 +1,23 @@
 # Release Notes
 
+## 2026-05-27
+
+### Summary
+
+This update restructures the live employee and evaluator portals so they use desktop screen width more effectively, and it refreshes the project documentation to reflect that UI change.
+
+### What Changed
+
+- Expanded the active `public/` page shell and introduced a 12-column dashboard grid for large screens.
+- Rebalanced the employee portal so the faculty form and uploaded files stay in the main workspace while scoring and saved profiles move into a right-side utility rail.
+- Rebalanced the evaluator portal so the review queue stays primary while the scoring form becomes a sticky side panel.
+- Added evaluator section navigation for quicker movement between the review queue, scoring form, and database viewer.
+- Updated `README.md` to note the wider desktop-first layout now used by the live employee and evaluator dashboards.
+
+### Verification
+
+- `git diff --check -- public/employee.html public/evaluator.html public/styles.css` passed.
+
 ## 2026-05-22
 
 ### Summary

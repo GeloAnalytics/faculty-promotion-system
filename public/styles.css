@@ -34,9 +34,9 @@ select {
 }
 
 .page-shell {
-  max-width: min(1680px, calc(100vw - 32px));
+  width: min(1920px, calc(100vw - 20px));
   margin: 0 auto;
-  padding: 28px clamp(18px, 2vw, 32px) 56px;
+  padding: 24px clamp(14px, 1.8vw, 32px) 56px;
 }
 
 .hero {
@@ -197,6 +197,29 @@ select {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 20px;
+}
+
+.dashboard-grid {
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  align-items: start;
+}
+
+.dashboard-grid > * {
+  min-width: 0;
+}
+
+.dashboard-main {
+  grid-column: 1 / span 8;
+}
+
+.dashboard-side {
+  grid-column: 9 / span 4;
+}
+
+.panel-sticky {
+  position: sticky;
+  top: 88px;
+  align-self: start;
 }
 
 .panel {
@@ -798,6 +821,12 @@ select {
   margin-bottom: 8px;
 }
 
+@media (max-width: 1500px) {
+  .uploaded-files-toolbar.review-queue-toolbar {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
 .review-card {
   gap: 14px;
   background:
@@ -1107,9 +1136,26 @@ select {
   white-space: pre-wrap;
 }
 
+@media (max-width: 1280px) {
+  .dashboard-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .dashboard-main,
+  .dashboard-side {
+    grid-column: 1 / -1;
+  }
+
+  .panel-sticky {
+    position: static;
+    top: auto;
+  }
+}
+
 @media (max-width: 980px) {
   .hero,
   .content-grid,
+  .dashboard-grid,
   .reference-grid,
   .auth-grid,
   .upload-groups,
@@ -1126,6 +1172,11 @@ select {
    .rank-evidence-grid,
    .review-cycle-grid {
     grid-template-columns: 1fr;
+  }
+
+  .dashboard-main,
+  .dashboard-side {
+    grid-column: 1 / -1;
   }
 
   .hero {
@@ -1151,6 +1202,11 @@ select {
   .hero-meta {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .panel-sticky {
+    position: static;
+    top: auto;
   }
 
    .rank-panel-hero {
@@ -1291,6 +1347,31 @@ select {
   background: var(--accent-soft);
   color: var(--accent-strong);
   border-color: var(--border-strong);
+}
+
+body[data-portal="employee"] #faculty-panel,
+body[data-portal="employee"] #uploaded-files-panel,
+body[data-portal="evaluator"] #review-queue-panel {
+  padding: 24px;
+}
+
+body[data-portal="employee"] #draft-points-panel,
+body[data-portal="employee"] #employee-profiles-panel,
+body[data-portal="evaluator"] #scoring-panel {
+  padding: 22px;
+}
+
+body[data-portal="employee"] #upload-panels,
+body[data-portal="employee"] #employee-logs-panel,
+body[data-portal="evaluator"] #database-panel {
+  grid-column: 1 / -1;
+}
+
+body[data-portal="employee"] #draft-points-panel .database-viewer,
+body[data-portal="employee"] #employee-profiles-panel .database-viewer,
+body[data-portal="employee"] #employee-logs-panel .database-viewer,
+body[data-portal="evaluator"] #scoring-panel .stack-form {
+  gap: 14px;
 }
 
 /* ── Collapsible Faculty Form ── */

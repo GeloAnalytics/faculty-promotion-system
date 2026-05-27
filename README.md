@@ -14,6 +14,7 @@ The active user-facing interface is the static portal in `public/`. The Vue app 
 ## Current Status
 
 - The backend and active `public/` interface are the main working system.
+- The employee and evaluator portals now use a wider desktop-first dashboard layout so full-screen views make better use of available horizontal space.
 - Employee profile maintenance now separates baseline profile data from current promotion-cycle inputs.
 - Employees can receive a preliminary rank estimate even before evaluator scoring is completed.
 - Evaluator scoring still takes priority and produces the stronger draft-rank recommendation once available.
@@ -33,6 +34,7 @@ The active user-facing interface is the static portal in `public/`. The Vue app 
 
 - Employee account registration and login
 - Role-based employee, evaluator, and admin access
+- Full-width employee and evaluator dashboard layouts with responsive collapse back to a single-column flow on narrower screens
 - Faculty profile capture with baseline identity, rank, attainment, and promotion history
 - Current-cycle submission fields for review-period performance metrics and cycle notes
 - Criterion-based uploads grouped by KRA

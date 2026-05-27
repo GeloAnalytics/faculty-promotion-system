@@ -14,7 +14,7 @@
   </head>
   <body data-portal="evaluator">
     <div class="page-shell">
-      <main class="content-grid">
+      <main class="content-grid dashboard-grid dashboard-grid-evaluator">
         <header class="hero panel panel-wide">
           <p class="eyebrow">Evaluator Portal</p>
           <h1 id="workspace-greeting">Hello. Here are the logs and records for evaluation.</h1>
@@ -31,7 +31,14 @@
             </div>
           </div>
         </header>
-        <section class="panel panel-wide" id="review-queue-panel">
+
+        <nav class="section-nav" id="section-nav">
+          <a class="nav-chip" href="#review-queue-panel">Review Queue</a>
+          <a class="nav-chip" href="#scoring-panel">Actual Scoring</a>
+          <a class="nav-chip" href="#database-panel">Database Viewer</a>
+        </nav>
+
+        <section class="panel dashboard-main" id="review-queue-panel">
           <div class="panel-heading">
             <div>
               <p class="section-kicker">Employee Logs</p>
@@ -85,7 +92,7 @@
           </div>
         </section>
 
-        <section class="panel panel-wide" id="scoring-panel">
+        <section class="panel dashboard-side panel-sticky" id="scoring-panel">
           <div class="panel-heading">
             <div>
               <p class="section-kicker">Actual Scoring</p>

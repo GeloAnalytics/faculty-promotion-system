@@ -14,7 +14,7 @@
   </head>
   <body data-portal="employee">
     <div class="page-shell">
-      <main class="content-grid">
+      <main class="content-grid dashboard-grid dashboard-grid-employee">
         <header class="hero panel panel-wide">
           <p class="eyebrow">Employee Portal</p>
           <h1 id="workspace-greeting">Hello. Enter your faculty record and upload your supporting documents here for faculty promotion.</h1>
@@ -41,7 +41,7 @@
           <a class="nav-chip" href="#employee-logs-panel">Upload Logs</a>
         </nav>
 
-        <section class="panel panel-wide" id="faculty-panel">
+        <section class="panel dashboard-main" id="faculty-panel">
           <div class="panel-heading">
             <div>
               <p class="section-kicker">Faculty Record</p>
@@ -144,7 +144,7 @@
           <div id="faculty-result" class="notice">No faculty record saved yet.</div>
         </section>
 
-        <section class="panel panel-wide" id="draft-points-panel">
+        <section class="panel dashboard-side panel-sticky" id="draft-points-panel">
           <div class="panel-heading">
             <div>
               <p class="section-kicker">Approximate Scoring</p>
@@ -166,7 +166,7 @@
           <div id="upload-panel-grid" class="upload-groups"></div>
         </section>
 
-        <section class="panel panel-wide" id="uploaded-files-panel">
+        <section class="panel dashboard-main" id="uploaded-files-panel">
           <details class="collapsible-section" open>
             <summary>
               <div class="panel-heading" style="margin-bottom:0">
@@ -202,7 +202,7 @@
           </details>
         </section>
 
-        <section class="panel" id="employee-profiles-panel">
+        <section class="panel dashboard-side" id="employee-profiles-panel">
           <details class="collapsible-section">
             <summary>
               <div class="panel-heading" style="margin-bottom:0">
@@ -219,7 +219,7 @@
           </details>
         </section>
 
-        <section class="panel" id="employee-logs-panel">
+        <section class="panel panel-wide" id="employee-logs-panel">
           <details class="collapsible-section">
             <summary>
               <div class="panel-heading" style="margin-bottom:0">
