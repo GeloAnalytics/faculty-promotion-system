@@ -1,5 +1,20 @@
 # Release Notes
 
+## 2026-05-31
+
+### Summary
+
+This update tightens the employee portal's sticky approximate-scoring sidebar so it stays readable while scrolling and no longer gets visually covered by the upload panels.
+
+### What Changed
+
+- Lowered the employee scoring sidebar's sticky offset for a cleaner scroll position.
+- Adjusted the upload panels' stacking order so they overlay the sticky summary when the layout reaches that section.
+
+### Verification
+
+- Visual layout adjustment only; no automated test run was required.
+
 ## 2026-05-27
 
 ### Summary
