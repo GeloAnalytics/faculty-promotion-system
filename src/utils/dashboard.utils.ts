@@ -567,9 +567,9 @@ function resolveOfficialRankOutcome(
       rankGroupLabel: currentGroupLabel,
       appliedWeightProfile: activeGroup.label,
       pendingRequirement:
-        'Associate Professor and Professor ranks require at least doctoral units or a completed doctoral degree.',
+        'Associate Professor and Professor ranks require at least doctorate-level units or a completed doctorate degree.',
       note: buildRankResolutionNote(
-        `The weighted KRA result reaches ${normalizedProjectedRank}, but the award is capped at ${highestQualifiedRank} until the faculty member has at least doctoral units or a completed doctoral degree.`,
+        `The weighted KRA result reaches ${normalizedProjectedRank}, but the award is capped at ${highestQualifiedRank} until the faculty member has at least doctorate-level units or a completed doctorate degree.`,
         bonusApplied,
       ),
     };
@@ -586,7 +586,7 @@ function resolveOfficialRankOutcome(
       appliedWeightProfile: activeGroup.label,
       pendingRequirement: doctoralQualified
         ? 'EAC accreditation is still required before the Professor rank can be awarded for the first time.'
-        : 'Professor rank requires doctoral units or a completed doctoral degree, plus EAC accreditation.',
+        : 'Professor rank requires doctorate-level units or a completed doctorate degree, plus EAC accreditation.',
       note: buildRankResolutionNote(
         'The employee qualifies for a Professor rank based on the official score, but the award remains pending until EAC accreditation is completed.',
         bonusApplied,
@@ -757,7 +757,7 @@ function buildRankResolutionNote(baseNote: string, bonusApplied: boolean) {
     return baseNote;
   }
 
-  return `${baseNote} A one-time +1 rank adjustment for a doctoral graduate was applied.`;
+  return `${baseNote} A one-time +1 rank adjustment for a doctorate qualification was applied.`;
 }
 
 function normalizeAcademicRank(rank: string | null) {

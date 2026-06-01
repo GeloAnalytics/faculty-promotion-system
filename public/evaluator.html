@@ -33,10 +33,23 @@
         </header>
 
         <nav class="section-nav" id="section-nav">
+          <a class="nav-chip" href="#insights-panel">Insights</a>
           <a class="nav-chip" href="#review-queue-panel">Review Queue</a>
           <a class="nav-chip" href="#scoring-panel">Actual Scoring</a>
           <a class="nav-chip" href="#database-panel">Database Viewer</a>
         </nav>
+
+        <section class="panel panel-wide" id="insights-panel">
+          <div class="panel-heading">
+            <div>
+              <p class="section-kicker">Evaluator Insights</p>
+              <h2>Visual summary of employee review data</h2>
+            </div>
+          </div>
+          <div id="evaluator-insights" class="evaluator-insights">
+            <div class="notice">Loading evaluation insights...</div>
+          </div>
+        </section>
 
         <section class="panel dashboard-main" id="review-queue-panel">
           <div class="panel-heading">
@@ -61,7 +74,7 @@
                 <option value="ready">Ready</option>
                 <option value="preliminary">Preliminary</option>
                 <option value="needs-exact-rank">Needs exact rank</option>
-                <option value="pending-doctoral-attainment">Pending doctoral attainment</option>
+                <option value="pending-doctoral-attainment">Pending doctorate attainment</option>
                 <option value="pending-professor-accreditation">Pending professor accreditation</option>
                 <option value="pending-cup-certification">Pending committee certification</option>
                 <option value="pending-review">Pending review</option>

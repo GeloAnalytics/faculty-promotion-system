@@ -27,6 +27,7 @@ const reviewQueueStatusFilter = byId("review-queue-status-filter");
 const reviewQueueConfidenceFilter = byId("review-queue-confidence-filter");
 const reviewQueuePanelFilter = byId("review-queue-panel-filter");
 const reviewQueueFilterStatus = byId("review-queue-filter-status");
+const evaluatorInsights = byId("evaluator-insights");
 const databaseViewer = byId("database-viewer");
 const trainingCriteria = byId("training-criteria");
 const trainingScoreTotal = byId("training-score-total");
@@ -369,6 +370,7 @@ async function loadReviewQueue() {
     const data = await apiFetch(buildApiUrl("/api/evaluator/review-queue"), { method: "GET" });
     evaluatorQueueItems = Array.isArray(data.items) ? data.items : [];
     renderReviewQueue(evaluatorQueueItems);
+    renderEvaluatorInsights(evaluatorQueueItems);
   } catch (error) {
     evaluatorQueueItems = [];
     syncReviewQueueFilterOptions([]);
@@ -376,6 +378,7 @@ async function loadReviewQueue() {
       reviewQueueFilterStatus.textContent = "Unable to load the review queue.";
     }
     reviewQueue.innerHTML = `<div class="notice notice-error">${escapeHtml(toErrorMessage(error))}</div>`;
+    renderEvaluatorInsights([]);
   }
 }
 
@@ -1128,6 +1131,184 @@ function renderReviewQueue(items) {
       trainingForm?.scrollIntoView({ behavior: "smooth", block: "start" });
     });
   });
+}
+
+function renderEvaluatorInsights(items) {
+  if (!evaluatorInsights) {
+    return;
+  }
+
+  const queueItems = Array.isArray(items) ? items : [];
+  if (!queueItems.length) {
+    evaluatorInsights.innerHTML = '<div class="notice">No employee records are available for charting yet.</div>';
+    return;
+  }
+
+  const summary = summarizeEvaluatorInsights(queueItems);
+  evaluatorInsights.innerHTML = `
+    <div class="insight-stat-grid">
+      ${renderInsightStatCard("Queue records", String(summary.totalRecords))}
+      ${renderInsightStatCard("Evaluator-backed", String(summary.evaluatorBackedCount))}
+      ${renderInsightStatCard("Pending review", String(summary.pendingReviewCount))}
+      ${renderInsightStatCard("Avg coverage", `${summary.averageCoverage}%`)}
+    </div>
+    <div class="insight-chart-grid">
+      ${renderInsightChartCard(
+        "Review status mix",
+        "Where the current queue sits across status categories.",
+        summary.statusSeries,
+        "status",
+        "No status data is available for the current records.",
+      )}
+      ${renderInsightChartCard(
+        "Confidence mix",
+        "How confident the evaluator pipeline is for the queue.",
+        summary.confidenceSeries,
+        "confidence",
+        "No confidence data is available for the current records.",
+      )}
+      ${renderInsightChartCard(
+        "Evidence coverage",
+        "How complete the uploaded evidence sets are across employees.",
+        summary.coverageSeries,
+        "coverage",
+        "No coverage data is available for the current records.",
+      )}
+    </div>
+  `;
+}
+
+function summarizeEvaluatorInsights(items) {
+  const statusOrder = [
+    "ready",
+    "preliminary",
+    "needs-exact-rank",
+    "pending-doctoral-attainment",
+    "pending-professor-accreditation",
+    "pending-cup-certification",
+    "pending-review",
+  ];
+  const confidenceOrder = ["high", "medium", "low", "pending"];
+  const coverageOrder = ["complete", "strong", "partial", "missing"];
+
+  const statusCounts = new Map();
+  const confidenceCounts = new Map();
+  const coverageCounts = new Map();
+  let totalCoverage = 0;
+  let evaluatorBackedCount = 0;
+  let pendingReviewCount = 0;
+
+  items.forEach((item) => {
+    const promotionDraft = item?.draftPoints?.promotionDraft || {};
+    const statusKey = normalizeReviewQueueStatus(promotionDraft.status);
+    const confidenceKey = getReviewQueueConfidenceValue(promotionDraft);
+    const uploadedPanels = Number(item?.draftPoints?.evidenceCoverage?.uploadedPanelCount ?? 0);
+    const expectedPanels = Number(item?.draftPoints?.evidenceCoverage?.expectedPanelCount ?? 0);
+    const coverageRatio = expectedPanels > 0 ? uploadedPanels / expectedPanels : 0;
+
+    statusCounts.set(statusKey, (statusCounts.get(statusKey) || 0) + 1);
+    confidenceCounts.set(confidenceKey, (confidenceCounts.get(confidenceKey) || 0) + 1);
+    coverageCounts.set(getCoverageBucket(coverageRatio), (coverageCounts.get(getCoverageBucket(coverageRatio)) || 0) + 1);
+    totalCoverage += coverageRatio;
+
+    if (promotionDraft.basis === "evaluator") {
+      evaluatorBackedCount += 1;
+    }
+    if (statusKey === "pending-review") {
+      pendingReviewCount += 1;
+    }
+  });
+
+  return {
+    totalRecords: items.length,
+    evaluatorBackedCount,
+    pendingReviewCount,
+    averageCoverage: items.length ? Math.round((totalCoverage / items.length) * 100) : 0,
+    statusSeries: buildInsightSeries(statusOrder, statusCounts, getPromotionStatusLabel, "status"),
+    confidenceSeries: buildInsightSeries(confidenceOrder, confidenceCounts, getPromotionConfidenceLabel, "confidence"),
+    coverageSeries: buildInsightSeries(coverageOrder, coverageCounts, getCoverageBucketLabel, "coverage"),
+  };
+}
+
+function buildInsightSeries(order, counts, labelResolver, tonePrefix) {
+  return order
+    .map((key) => ({
+      key,
+      label: labelResolver(key),
+      value: counts.get(key) || 0,
+      tone: `${tonePrefix}-${key}`,
+    }))
+    .filter((item) => item.value > 0);
+}
+
+function renderInsightStatCard(label, value) {
+  return `
+    <article class="insight-stat-card">
+      <span class="insight-stat-label">${escapeHtml(label)}</span>
+      <strong class="insight-stat-value">${escapeHtml(value)}</strong>
+    </article>
+  `;
+}
+
+function renderInsightChartCard(title, description, series, tonePrefix, emptyMessage) {
+  const maxValue = series.reduce((max, item) => Math.max(max, item.value), 0);
+  return `
+    <article class="insight-chart-card">
+      <div class="insight-chart-heading">
+        <div>
+          <h3>${escapeHtml(title)}</h3>
+          <p class="card-copy">${escapeHtml(description)}</p>
+        </div>
+        <span class="insight-chart-total">${escapeHtml(String(series.reduce((sum, item) => sum + item.value, 0)))} records</span>
+      </div>
+      ${
+        series.length
+          ? `<div class="insight-bar-chart">
+              ${series
+                .map((item) => {
+                  const width = maxValue ? Math.max(8, Math.round((item.value / maxValue) * 100)) : 0;
+                  return `
+                    <div class="insight-bar-row">
+                      <span class="insight-bar-label">${escapeHtml(item.label)}</span>
+                      <div class="insight-bar-track" aria-hidden="true">
+                        <span class="insight-bar-fill" data-tone="${escapeHtml(`${tonePrefix}-${item.key}`)}" style="width:${width}%"></span>
+                      </div>
+                      <span class="insight-bar-value">${escapeHtml(String(item.value))}</span>
+                    </div>
+                  `;
+                })
+                .join("")}
+            </div>`
+          : `<div class="notice">${escapeHtml(emptyMessage)}</div>`
+      }
+    </article>
+  `;
+}
+
+function getCoverageBucket(ratio) {
+  if (ratio >= 1) {
+    return "complete";
+  }
+  if (ratio >= 0.75) {
+    return "strong";
+  }
+  if (ratio > 0) {
+    return "partial";
+  }
+  return "missing";
+}
+
+function getCoverageBucketLabel(bucket) {
+  if (bucket === "complete") {
+    return "100% coverage";
+  }
+  if (bucket === "strong") {
+    return "75-99% coverage";
+  }
+  if (bucket === "partial") {
+    return "1-74% coverage";
+  }
+  return "No coverage";
 }
 
 function getReviewQueueFilterState() {
@@ -2275,7 +2456,7 @@ function getPromotionStatusLabel(status) {
     return "Needs exact rank";
   }
   if (status === "pending-doctoral-attainment") {
-    return "Pending doctoral attainment";
+    return "Pending doctorate attainment";
   }
   if (status === "pending-professor-accreditation") {
     return "Pending professor accreditation";
