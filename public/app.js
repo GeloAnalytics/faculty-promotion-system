@@ -1486,12 +1486,20 @@ function renderSummarySheetDocument(values) {
         <section class="summary-signature-left">
           <div class="summary-sheet-section-title">EVALUATED BY:</div>
           <div class="summary-sheet-reviewer-list">
-            ${reviewerSignatures.map(renderSummarySheetSignatureBox).join("")}
+            ${reviewerSignatures
+              .map((signature, index) => renderSummarySheetSignatureBox(signature, {
+                variant: "reviewer",
+                index,
+                total: reviewerSignatures.length,
+              }))
+              .join("")}
           </div>
         </section>
         <section class="summary-signature-right">
           <div class="summary-sheet-right-stack">
-            ${rightSignatures.map(renderSummarySheetSignatureBox).join("")}
+            ${rightSignatures.map((signature) => renderSummarySheetSignatureBox(signature, {
+              variant: "featured",
+            })).join("")}
           </div>
         </section>
       </div>
@@ -1499,9 +1507,17 @@ function renderSummarySheetDocument(values) {
   `;
 }
 
-function renderSummarySheetSignatureBox(signature) {
+function renderSummarySheetSignatureBox(signature, options = {}) {
+  const boxClasses = ["summary-signature-box"];
+  if (options.variant === "featured") {
+    boxClasses.push("summary-signature-box--featured");
+  }
+  if (options.variant === "reviewer" && typeof options.index === "number" && typeof options.total === "number" && options.total % 2 === 1 && options.index === options.total - 1) {
+    boxClasses.push("summary-signature-box--span-two");
+  }
+
   return `
-    <div class="summary-signature-box">
+    <div class="${boxClasses.join(" ")}">
       ${signature.boxLabel ? `<div class="summary-signature-box-label">${escapeHtml(signature.boxLabel)}</div>` : ""}
       <div class="summary-signature-name">${escapeHtml(signature.name || " ")}</div>
       <div class="summary-signature-role">${escapeHtml(signature.role)}</div>
@@ -1679,7 +1695,7 @@ function buildSummarySheetPrintHtml(values) {
     <style>
       @page {
         size: A4 portrait;
-        margin: 8mm;
+        margin: 5mm;
       }
 
       * {
@@ -1698,6 +1714,8 @@ function buildSummarySheetPrintHtml(values) {
       body {
         -webkit-print-color-adjust: exact;
         print-color-adjust: exact;
+        font-size: 10.25px;
+        line-height: 1.22;
       }
 
       .summary-sheet-paper {
@@ -1707,7 +1725,7 @@ function buildSummarySheetPrintHtml(values) {
 
       .summary-sheet-document {
         display: grid;
-        gap: 6px;
+        gap: 4px;
         width: 100%;
       }
 
@@ -1715,26 +1733,26 @@ function buildSummarySheetPrintHtml(values) {
         margin: 0;
         text-align: center;
         font-family: Arial, Helvetica, sans-serif;
-        font-size: 10px;
+        font-size: 11px;
         font-weight: 700;
-        letter-spacing: 0.08em;
+        letter-spacing: 0.09em;
         text-transform: uppercase;
       }
 
       .summary-sheet-title {
         margin: 0;
         text-align: center;
-        font-size: 12px;
+        font-size: 15px;
         font-weight: 700;
-        letter-spacing: 0.08em;
+        letter-spacing: 0.09em;
       }
 
       .summary-sheet-subtitle {
-        margin: 0 0 2px;
+        margin: 0 0 1px;
         text-align: center;
-        font-size: 8.5px;
+        font-size: 9.25px;
         color: #444;
-        line-height: 1.35;
+        line-height: 1.28;
       }
 
       .summary-top-table,
@@ -1752,7 +1770,7 @@ function buildSummarySheetPrintHtml(values) {
       .summary-metric-table th,
       .summary-metric-table td {
         border: 1px solid rgba(17, 17, 17, 0.45);
-        padding: 3px 4px;
+        padding: 4px 5px;
         vertical-align: middle;
         word-break: break-word;
       }
@@ -1760,7 +1778,7 @@ function buildSummarySheetPrintHtml(values) {
       .summary-top-table th,
       .summary-metric-table th {
         background: #f3f5f3;
-        font-size: 8px;
+        font-size: 9px;
         letter-spacing: 0.06em;
         text-transform: uppercase;
         text-align: left;
@@ -1769,13 +1787,13 @@ function buildSummarySheetPrintHtml(values) {
 
       .summary-top-table td,
       .summary-metric-table td {
-        font-size: 8.5px;
+        font-size: 10px;
         font-weight: 700;
       }
 
       .summary-criteria-table thead th {
         background: #d5ebf4;
-        font-size: 8.5px;
+        font-size: 9px;
         font-weight: 700;
         letter-spacing: 0.05em;
         text-transform: uppercase;
@@ -1783,7 +1801,7 @@ function buildSummarySheetPrintHtml(values) {
 
       .summary-kra-row th {
         background: #e3f2f7;
-        font-size: 8.5px;
+        font-size: 9px;
         font-weight: 700;
         text-align: left;
         letter-spacing: 0.04em;
@@ -1791,12 +1809,12 @@ function buildSummarySheetPrintHtml(values) {
       }
 
       .summary-criteria-table td {
-        font-size: 8.5px;
-        line-height: 1.2;
+        font-size: 9.25px;
+        line-height: 1.18;
       }
 
       .summary-score-cell {
-        width: 95px;
+        width: 108px;
         text-align: right;
         font-variant-numeric: tabular-nums;
       }
@@ -1809,14 +1827,15 @@ function buildSummarySheetPrintHtml(values) {
       .summary-empty-row td {
         text-align: center;
         color: #555;
-        font-size: 8.5px;
+        font-size: 9px;
       }
 
       .summary-metric-table th {
-        width: 42%;
+        width: 40%;
       }
 
       .summary-metric-table td {
+        font-size: 10px;
         text-align: right;
         font-variant-numeric: tabular-nums;
       }
@@ -1824,56 +1843,69 @@ function buildSummarySheetPrintHtml(values) {
       .summary-signature-layout {
         display: grid;
         grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
-        gap: 8px;
+        gap: 6px;
         align-items: start;
         break-inside: avoid;
       }
 
       .summary-sheet-section-title {
-        margin: 0 0 6px;
-        font-size: 9px;
+        margin: 0 0 4px;
+        font-size: 9.5px;
         font-weight: 700;
-        letter-spacing: 0.08em;
+        letter-spacing: 0.09em;
         text-transform: uppercase;
       }
 
       .summary-sheet-reviewer-list,
       .summary-sheet-right-stack {
         display: grid;
-        gap: 6px;
+        gap: 5px;
+      }
+
+      .summary-sheet-reviewer-list {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
       }
 
       .summary-signature-box {
         display: grid;
-        gap: 4px;
-        min-height: 82px;
+        gap: 3px;
+        min-height: 96px;
         border: 1px solid rgba(17, 17, 17, 0.45);
-        padding: 8px 9px;
+        padding: 9px 10px;
         background: #fff;
         break-inside: avoid;
       }
 
+      .summary-signature-box--span-two {
+        grid-column: 1 / -1;
+        min-height: 102px;
+      }
+
+      .summary-signature-box--featured {
+        min-height: 122px;
+      }
+
       .summary-signature-box-label {
-        font-size: 8px;
+        font-size: 8.5px;
         font-weight: 700;
         text-transform: uppercase;
       }
 
       .summary-signature-name {
-        min-height: 12px;
-        font-size: 8.5px;
+        min-height: 14px;
+        font-size: 9.75px;
         font-weight: 700;
-        line-height: 1.2;
+        line-height: 1.15;
       }
 
       .summary-signature-role {
-        font-size: 7.5px;
-        line-height: 1.25;
+        font-size: 8px;
+        line-height: 1.22;
       }
 
       .summary-signature-date {
         margin-top: auto;
-        font-size: 7.5px;
+        font-size: 8px;
       }
     </style>
   </head>
