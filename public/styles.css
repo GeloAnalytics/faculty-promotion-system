@@ -1515,10 +1515,16 @@ body[data-portal="evaluator"] #scoring-panel {
   padding: 22px;
 }
 
-body[data-portal="employee"] #upload-panels,
-body[data-portal="employee"] #employee-logs-panel,
-body[data-portal="evaluator"] #database-panel {
+body[data-portal="employee"] #upload-panels {
+  grid-column: 1 / span 8;
+}
+
+body[data-portal="employee"] #employee-logs-panel {
   grid-column: 1 / -1;
+}
+
+body[data-portal="evaluator"] #database-panel {
+  grid-column: 1 / span 8;
 }
 
 body[data-portal="employee"] #draft-points-panel .database-viewer,

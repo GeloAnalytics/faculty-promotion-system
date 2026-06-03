@@ -1,5 +1,21 @@
 # Release Notes
 
+## 2026-06-03
+
+### Summary
+
+This update fixes overlapping panels in both active dashboards by keeping the employee upload panels on the left side and the evaluator database viewer on the left side, while their sticky scoring summaries remain in the right rail.
+
+### What Changed
+
+- Repositioned the employee `Upload Panels` section so it stays in the left dashboard column instead of spanning under the sticky approximate-scoring card.
+- Repositioned the evaluator `Database Viewer` section so it stays in the left dashboard column instead of spanning under the sticky scoring form.
+- Kept the sticky right-side scoring panels intact so the side utilities remain visible without overlapping the main workspace.
+
+### Verification
+
+- Visual layout adjustment only; no automated test run was required.
+
 ## 2026-05-31
 
 ### Summary
