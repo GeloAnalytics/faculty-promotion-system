@@ -261,7 +261,7 @@ trainingForm?.addEventListener("submit", async (event) => {
 
   const employeeId = sanitizeEmployeeId(valueOf("training-employee-id"));
   if (!employeeId) {
-    setNotice(trainingResult, "Enter an employee ID from the review queue first.", true);
+    setNotice(trainingResult, "Enter an employee ID first.", true);
     return;
   }
 
@@ -284,8 +284,6 @@ trainingForm?.addEventListener("submit", async (event) => {
       method: "PATCH",
       body: JSON.stringify({
         labelPromoted: valueOf("training-label") === "true",
-        labelSource: valueOf("training-source"),
-        datasetSplit: valueOf("training-split"),
         notes: valueOf("training-notes"),
         criterionScores: collectCriterionScores(),
       }),
@@ -2542,18 +2540,10 @@ function hydrateTrainingForm(trainingItem) {
   }
 
   const labelField = byId("training-label");
-  const sourceField = byId("training-source");
-  const splitField = byId("training-split");
   const notesField = byId("training-notes");
 
   if (labelField) {
     labelField.value = String(trainingItem?.labelPromoted ?? true);
-  }
-  if (sourceField) {
-    sourceField.value = trainingItem?.labelSource || "Committee decision";
-  }
-  if (splitField) {
-    splitField.value = trainingItem?.datasetSplit || "train";
   }
   if (notesField) {
     notesField.value = trainingItem?.evaluatorAssessment?.freeformNotes || trainingItem?.notes || "";
