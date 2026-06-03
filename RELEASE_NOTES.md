@@ -4,6 +4,22 @@
 
 ### Summary
 
+This update adds an evaluator-facing printable summary sheet editor so the top name block and bottom signature lines can be modified before exporting the document as a PDF through the browser print flow.
+
+### What Changed
+
+- Added a new summary-sheet panel to the evaluator portal.
+- Made the top name block and sign-off lines editable from the evaluator workspace.
+- Added a print-ready preview and a PDF export button that opens the browser print dialog.
+
+### Verification
+
+- Visual layout and print-flow addition only; no automated test run was required.
+
+## 2026-06-03
+
+### Summary
+
 This update fixes overlapping panels in both active dashboards by keeping the employee upload panels on the left side and the evaluator database viewer on the left side, while their sticky scoring summaries remain in the right rail.
 
 ### What Changed

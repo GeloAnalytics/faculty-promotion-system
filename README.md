@@ -16,6 +16,7 @@ The active user-facing interface is the static portal in `public/`. The Vue app 
 - The backend and active `public/` interface are the main working system.
 - The employee and evaluator portals now use a wider desktop-first dashboard layout so full-screen views make better use of available horizontal space.
 - The employee upload panels and evaluator database viewer stay anchored in the left dashboard column so they no longer overlap the sticky right-side scoring utilities.
+- The evaluator portal now includes a printable summary-sheet editor so the subject name block and signature lines can be adjusted before exporting to PDF.
 - Employee profile maintenance now separates baseline profile data from current promotion-cycle inputs.
 - Employees can receive a preliminary rank estimate even before evaluator scoring is completed.
 - The employee-side approximate score summary now stays sticky during scroll without being covered by the upload panels.
@@ -45,6 +46,7 @@ The active user-facing interface is the static portal in `public/`. The Vue app 
 - PDF parsing and image OCR
 - Upload-to-profile linkage using explicit profile selection or filename matching fallback
 - Evaluator scoring workflow and review queue
+- Printable evaluator summary-sheet export through the browser print flow
 - Employee-side evidence coverage summary
 - Preliminary employee-side rank estimation from inputs and uploaded evidence
 - Evaluator-backed draft-rank computation from criterion scores

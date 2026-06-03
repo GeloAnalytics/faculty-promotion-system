@@ -164,6 +164,150 @@
           <div id="training-result" class="notice">Choose a record from the review queue to begin scoring.</div>
         </section>
 
+        <section class="panel panel-wide" id="summary-sheet-panel">
+          <div class="panel-heading summary-sheet-heading">
+            <div>
+              <p class="section-kicker">Printable Summary Sheet</p>
+              <h2>Edit the name block and sign-off lines before exporting to PDF</h2>
+              <p class="card-copy">
+                Load a selected record from the review queue, adjust the fields to match the reference sheet, then download the printable PDF version.
+              </p>
+            </div>
+            <div class="summary-sheet-actions">
+              <button class="button button-ghost" id="summary-sheet-load-button" type="button">Load Selected Record</button>
+              <button class="button button-primary" id="summary-sheet-download-button" type="button">Download PDF</button>
+            </div>
+          </div>
+          <div id="summary-sheet-status" class="notice">
+            Select a review queue record to populate the summary sheet fields.
+          </div>
+          <div class="summary-sheet-layout">
+            <form id="summary-sheet-form" class="stack-form summary-sheet-editor">
+              <section class="form-section-card">
+                <div class="form-section-heading">
+                  <div>
+                    <h3>Top Name Block</h3>
+                    <p class="field-help">These values print at the top of the summary sheet.</p>
+                  </div>
+                </div>
+                <div class="field-row">
+                  <label class="field">
+                    <span>Last name</span>
+                    <input type="text" id="summary-sheet-last-name" placeholder="Last name" />
+                  </label>
+                  <label class="field">
+                    <span>First name</span>
+                    <input type="text" id="summary-sheet-first-name" placeholder="First name" />
+                  </label>
+                </div>
+                <div class="field-row">
+                  <label class="field">
+                    <span>Middle name</span>
+                    <input type="text" id="summary-sheet-middle-name" placeholder="Middle name" />
+                  </label>
+                  <label class="field">
+                    <span>Extension</span>
+                    <input type="text" id="summary-sheet-extension-name" placeholder="Jr., Sr., III, etc." />
+                  </label>
+                </div>
+                <div class="field-row">
+                  <label class="field">
+                    <span>Employee ID</span>
+                    <input type="text" id="summary-sheet-employee-id" placeholder="Employee ID" />
+                  </label>
+                  <label class="field">
+                    <span>Record label</span>
+                    <input type="text" id="summary-sheet-record-label" placeholder="Cycle or record label" />
+                  </label>
+                </div>
+              </section>
+              <section class="form-section-card">
+                <div class="form-section-heading">
+                  <div>
+                    <h3>Sign-Off Lines</h3>
+                    <p class="field-help">Edit the names and dates so the PDF matches the reference sheet.</p>
+                  </div>
+                </div>
+                <div class="summary-signature-grid">
+                  <div class="summary-signature-column">
+                    <label class="field summary-signature-field">
+                      <span>IEC Member 1 name</span>
+                      <input type="text" id="summary-sheet-member-1-name" placeholder="Name" />
+                    </label>
+                    <label class="field summary-signature-field">
+                      <span>Date</span>
+                      <input type="text" id="summary-sheet-member-1-date" placeholder="MM/DD/YYYY" />
+                    </label>
+                  </div>
+                  <div class="summary-signature-column">
+                    <label class="field summary-signature-field">
+                      <span>IEC Member 2 name</span>
+                      <input type="text" id="summary-sheet-member-2-name" placeholder="Name" />
+                    </label>
+                    <label class="field summary-signature-field">
+                      <span>Date</span>
+                      <input type="text" id="summary-sheet-member-2-date" placeholder="MM/DD/YYYY" />
+                    </label>
+                  </div>
+                  <div class="summary-signature-column">
+                    <label class="field summary-signature-field">
+                      <span>IEC Member 3 name</span>
+                      <input type="text" id="summary-sheet-member-3-name" placeholder="Name" />
+                    </label>
+                    <label class="field summary-signature-field">
+                      <span>Date</span>
+                      <input type="text" id="summary-sheet-member-3-date" placeholder="MM/DD/YYYY" />
+                    </label>
+                  </div>
+                  <div class="summary-signature-column">
+                    <label class="field summary-signature-field">
+                      <span>IEC Member 4 name</span>
+                      <input type="text" id="summary-sheet-member-4-name" placeholder="Name" />
+                    </label>
+                    <label class="field summary-signature-field">
+                      <span>Date</span>
+                      <input type="text" id="summary-sheet-member-4-date" placeholder="MM/DD/YYYY" />
+                    </label>
+                  </div>
+                  <div class="summary-signature-column">
+                    <label class="field summary-signature-field">
+                      <span>IEC Chair name</span>
+                      <input type="text" id="summary-sheet-chair-name" placeholder="Name" />
+                    </label>
+                    <label class="field summary-signature-field">
+                      <span>Date</span>
+                      <input type="text" id="summary-sheet-chair-date" placeholder="MM/DD/YYYY" />
+                    </label>
+                  </div>
+                  <div class="summary-signature-column">
+                    <label class="field summary-signature-field">
+                      <span>Conforme name</span>
+                      <input type="text" id="summary-sheet-conforme-name" placeholder="Name" />
+                    </label>
+                    <label class="field summary-signature-field">
+                      <span>Date</span>
+                      <input type="text" id="summary-sheet-conforme-date" placeholder="MM/DD/YYYY" />
+                    </label>
+                  </div>
+                  <div class="summary-signature-column">
+                    <label class="field summary-signature-field">
+                      <span>Acknowledgment name</span>
+                      <input type="text" id="summary-sheet-acknowledgment-name" placeholder="Name" />
+                    </label>
+                    <label class="field summary-signature-field">
+                      <span>Date</span>
+                      <input type="text" id="summary-sheet-acknowledgment-date" placeholder="MM/DD/YYYY" />
+                    </label>
+                  </div>
+                </div>
+              </section>
+            </form>
+            <div class="summary-sheet-preview card">
+              <div id="summary-sheet-preview" class="summary-sheet-paper"></div>
+            </div>
+          </div>
+        </section>
+
         <section class="panel dashboard-main" id="database-panel">
           <div class="panel-heading">
             <div>

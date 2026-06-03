@@ -31,6 +31,11 @@ const evaluatorInsights = byId("evaluator-insights");
 const databaseViewer = byId("database-viewer");
 const trainingCriteria = byId("training-criteria");
 const trainingScoreTotal = byId("training-score-total");
+const summarySheetForm = byId("summary-sheet-form");
+const summarySheetPreview = byId("summary-sheet-preview");
+const summarySheetStatus = byId("summary-sheet-status");
+const summarySheetLoadButton = byId("summary-sheet-load-button");
+const summarySheetDownloadButton = byId("summary-sheet-download-button");
 const workspaceGreeting = byId("workspace-greeting");
 const uploadedFilesViewer = byId("uploaded-files-viewer");
 const uploadedFilesSearch = byId("uploaded-files-search");
@@ -62,6 +67,57 @@ const CYCLE_METRIC_DEFINITIONS = [
   { key: "researchOutputs", label: "Research Outputs", min: 0, step: 0.01, scaleLabel: "Non-negative value" },
   { key: "extensionServices", label: "Extension Services", min: 0, step: 0.01, scaleLabel: "Non-negative value" },
 ];
+const SUMMARY_SHEET_SIGNATURES = [
+  {
+    key: "member-1",
+    label: "IEC Member 1",
+    role: "Name and Signature of IEC Member",
+    nameFieldId: "summary-sheet-member-1-name",
+    dateFieldId: "summary-sheet-member-1-date",
+  },
+  {
+    key: "member-2",
+    label: "IEC Member 2",
+    role: "Name and Signature of IEC Member",
+    nameFieldId: "summary-sheet-member-2-name",
+    dateFieldId: "summary-sheet-member-2-date",
+  },
+  {
+    key: "member-3",
+    label: "IEC Member 3",
+    role: "Name and Signature of IEC Member",
+    nameFieldId: "summary-sheet-member-3-name",
+    dateFieldId: "summary-sheet-member-3-date",
+  },
+  {
+    key: "member-4",
+    label: "IEC Member 4",
+    role: "Name and Signature of IEC Member",
+    nameFieldId: "summary-sheet-member-4-name",
+    dateFieldId: "summary-sheet-member-4-date",
+  },
+  {
+    key: "chair",
+    label: "IEC Chair",
+    role: "Name and Signature of IEC Chair",
+    nameFieldId: "summary-sheet-chair-name",
+    dateFieldId: "summary-sheet-chair-date",
+  },
+  {
+    key: "conforme",
+    label: "Conforme",
+    role: "Name and Signature of Faculty",
+    nameFieldId: "summary-sheet-conforme-name",
+    dateFieldId: "summary-sheet-conforme-date",
+  },
+  {
+    key: "acknowledgment",
+    label: "Acknowledgment",
+    role: "Name and Signature of Faculty",
+    nameFieldId: "summary-sheet-acknowledgment-name",
+    dateFieldId: "summary-sheet-acknowledgment-date",
+  },
+];
 
 let authMode = "login";
 let currentUser = null;
@@ -71,6 +127,7 @@ let facultyOptionCatalog = { academicRanks: [], educationalAttainments: [] };
 let employeeUploads = [];
 let evaluatorQueueItems = [];
 let promotionHistoryState = [];
+let selectedSummarySheetRecord = null;
 const employeeProfileRecords = new Map();
 const latestTrainingItemById = new Map();
 uploadPanelGrid?.addEventListener("click", handleDeleteUploadClick);
@@ -95,6 +152,22 @@ addPromotionHistoryButton?.addEventListener("click", () => {
   promotionHistoryState.push(createEmptyPromotionHistoryEntry());
   renderPromotionHistoryRows();
 });
+
+summarySheetForm?.addEventListener("input", renderSummarySheetPreview);
+summarySheetLoadButton?.addEventListener("click", () => {
+  if (selectedSummarySheetRecord) {
+    loadSummarySheetFromRecord(selectedSummarySheetRecord);
+    return;
+  }
+
+  if (evaluatorQueueItems.length) {
+    loadSummarySheetFromRecord(evaluatorQueueItems[0]);
+    return;
+  }
+
+  setNotice(summarySheetStatus, "Load a review queue record first so the summary sheet can be personalized.", true);
+});
+summarySheetDownloadButton?.addEventListener("click", downloadSummarySheetPdf);
 
 document.querySelectorAll("[data-scroll-target]").forEach((button) => {
   button.addEventListener("click", () => {
@@ -284,6 +357,7 @@ async function loadEmployeeWorkspace() {
 async function loadEvaluatorWorkspace() {
   await Promise.all([loadUploadPanelCatalog(), loadReviewQueue(), loadDatabaseOverview()]);
   renderEvaluatorCriteria(uploadPanelCatalog);
+  renderSummarySheetPreview();
 }
 
 async function loadHealth() {
@@ -1124,6 +1198,8 @@ function renderReviewQueue(items) {
         target.value = trainingId;
       }
       const latestTrainingItem = latestTrainingItemById.get(trainingId);
+      selectedSummarySheetRecord = item;
+      loadSummarySheetFromRecord(item);
       hydrateTrainingForm(latestTrainingItem);
       if (trainingResult) {
         setNotice(trainingResult, `Training example ${trainingId} selected for evaluator scoring.`);
@@ -1283,6 +1359,345 @@ function renderInsightChartCard(title, description, series, tonePrefix, emptyMes
       }
     </article>
   `;
+}
+
+function renderSummarySheetPreview() {
+  if (!summarySheetPreview) {
+    return;
+  }
+
+  summarySheetPreview.innerHTML = renderSummarySheetDocument(collectSummarySheetValues());
+}
+
+function loadSummarySheetFromRecord(record) {
+  if (!record) {
+    return;
+  }
+
+  const parsedName = splitSummarySheetName(record.name || "");
+  const formalName = buildSummarySheetFormalName(parsedName);
+  const recordLabel = record.cycleData?.performanceReview?.reviewPeriod || record.semester || FIXED_REVIEW_PERIOD;
+
+  setFieldValue("summary-sheet-last-name", parsedName.lastName);
+  setFieldValue("summary-sheet-first-name", parsedName.firstName);
+  setFieldValue("summary-sheet-middle-name", parsedName.middleName);
+  setFieldValue("summary-sheet-extension-name", parsedName.extensionName);
+  setFieldValue("summary-sheet-employee-id", record.employeeId || "");
+  setFieldValue("summary-sheet-record-label", recordLabel);
+  setFieldValue("summary-sheet-conforme-name", formalName);
+  setFieldValue("summary-sheet-acknowledgment-name", formalName);
+
+  selectedSummarySheetRecord = record;
+  setNotice(summarySheetStatus, `Loaded ${record.name || "the selected record"} into the summary sheet editor.`, false);
+  renderSummarySheetPreview();
+}
+
+function collectSummarySheetValues() {
+  return {
+    subject: {
+      lastName: valueOf("summary-sheet-last-name").trim(),
+      firstName: valueOf("summary-sheet-first-name").trim(),
+      middleName: valueOf("summary-sheet-middle-name").trim(),
+      extensionName: valueOf("summary-sheet-extension-name").trim(),
+      employeeId: valueOf("summary-sheet-employee-id").trim(),
+      recordLabel: valueOf("summary-sheet-record-label").trim(),
+    },
+    signatures: SUMMARY_SHEET_SIGNATURES.map((signature) => ({
+      ...signature,
+      name: valueOf(signature.nameFieldId).trim(),
+      date: valueOf(signature.dateFieldId).trim(),
+    })),
+  };
+}
+
+function renderSummarySheetDocument(values) {
+  const topRows = [
+    ["Last name", values.subject.lastName],
+    ["First name", values.subject.firstName],
+    ["Middle name", values.subject.middleName],
+    ["Extension", values.subject.extensionName],
+    ["Employee ID", values.subject.employeeId],
+    ["Record label", values.subject.recordLabel],
+  ];
+  const reviewerSignatures = values.signatures.slice(0, 5);
+  const rightSignatures = values.signatures.slice(5);
+
+  return `
+    <p class="summary-sheet-title">INDIVIDUAL SUMMARY SHEET</p>
+    <p class="summary-sheet-subtitle">
+      ${escapeHtml(values.subject.recordLabel || "Editable summary sheet prepared from the evaluator panel.")}
+    </p>
+    <div class="summary-sheet-top-grid">
+      ${topRows
+        .map(
+          ([label, value]) => `
+            <div class="summary-sheet-top-row">
+              <span class="summary-sheet-top-label">${escapeHtml(label)}</span>
+              <span class="summary-sheet-top-value">${escapeHtml(value || " ")}</span>
+            </div>
+          `,
+        )
+        .join("")}
+    </div>
+    <div class="summary-sheet-divider"></div>
+    <div class="summary-sheet-bottom-grid">
+      <section>
+        <div class="summary-sheet-section-title">Evaluated By</div>
+        <div class="summary-sheet-reviewer-list">
+          ${reviewerSignatures.map(renderSummarySheetSignatureBox).join("")}
+        </div>
+      </section>
+      <section class="summary-sheet-right-stack">
+        ${rightSignatures.map(renderSummarySheetSignatureBox).join("")}
+      </section>
+    </div>
+  `;
+}
+
+function renderSummarySheetSignatureBox(signature) {
+  return `
+    <div class="summary-signature-box">
+      <div class="summary-signature-name">${escapeHtml(signature.name || " ")}</div>
+      <div class="summary-signature-role">${escapeHtml(signature.role)}</div>
+      <div class="summary-signature-date">Date: ${escapeHtml(signature.date || " ")}</div>
+    </div>
+  `;
+}
+
+function splitSummarySheetName(name) {
+  const normalizedName = String(name || "").trim();
+  if (!normalizedName) {
+    return {
+      lastName: "",
+      firstName: "",
+      middleName: "",
+      extensionName: "",
+    };
+  }
+
+  const extensionMatch = normalizedName.match(/\b(JR|SR|II|III|IV|V|VI)\.?\s*$/i);
+  let workingName = normalizedName;
+  let extensionName = "";
+
+  if (extensionMatch && typeof extensionMatch.index === "number") {
+    extensionName = extensionMatch[1].toUpperCase();
+    workingName = workingName.slice(0, extensionMatch.index).trim().replace(/[,\s]+$/, "");
+  }
+
+  if (workingName.includes(",")) {
+    const [lastPart, ...restParts] = workingName.split(",");
+    const remainder = restParts.join(",").trim();
+    const nameParts = remainder.split(/\s+/).filter(Boolean);
+    return {
+      lastName: lastPart.trim(),
+      firstName: nameParts.shift() || "",
+      middleName: nameParts.join(" "),
+      extensionName,
+    };
+  }
+
+  const nameParts = workingName.split(/\s+/).filter(Boolean);
+  if (nameParts.length <= 1) {
+    return {
+      lastName: nameParts[0] || workingName,
+      firstName: "",
+      middleName: "",
+      extensionName,
+    };
+  }
+
+  if (nameParts.length === 2) {
+    return {
+      firstName: nameParts[0],
+      middleName: "",
+      lastName: nameParts[1],
+      extensionName,
+    };
+  }
+
+  return {
+    firstName: nameParts[0],
+    middleName: nameParts.slice(1, -1).join(" "),
+    lastName: nameParts[nameParts.length - 1],
+    extensionName,
+  };
+}
+
+function buildSummarySheetFormalName(parts) {
+  return [parts.firstName, parts.middleName, parts.lastName, parts.extensionName]
+    .filter(Boolean)
+    .join(" ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function buildSummarySheetPrintHtml(values) {
+  const sheetHtml = renderSummarySheetDocument(values);
+  return `<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Individual Summary Sheet</title>
+    <style>
+      @page {
+        size: letter landscape;
+        margin: 0.45in;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        background: #fff;
+        color: #111;
+        font-family: Arial, Helvetica, sans-serif;
+      }
+
+      body {
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+      }
+
+      .summary-sheet-paper {
+        display: grid;
+        gap: 12px;
+        width: 100%;
+        border: 1px solid #1f1f1f;
+        padding: 16px;
+      }
+
+      .summary-sheet-title {
+        margin: 0;
+        text-align: center;
+        font-size: 14px;
+        font-weight: 700;
+        letter-spacing: 0.12em;
+      }
+
+      .summary-sheet-subtitle {
+        margin: 0;
+        text-align: center;
+        font-size: 10px;
+        color: #444;
+        line-height: 1.4;
+      }
+
+      .summary-sheet-top-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 6px 12px;
+      }
+
+      .summary-sheet-top-row {
+        display: grid;
+        grid-template-columns: 132px minmax(0, 1fr);
+        gap: 8px;
+        align-items: end;
+        padding-bottom: 3px;
+        border-bottom: 1px solid rgba(17, 17, 17, 0.45);
+      }
+
+      .summary-sheet-top-label {
+        font-size: 9px;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .summary-sheet-top-value {
+        min-height: 14px;
+        font-size: 11px;
+        font-weight: 700;
+        line-height: 1.35;
+      }
+
+      .summary-sheet-divider {
+        height: 1px;
+        background: rgba(17, 17, 17, 0.45);
+      }
+
+      .summary-sheet-bottom-grid {
+        display: grid;
+        grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+        gap: 12px;
+      }
+
+      .summary-sheet-reviewer-list,
+      .summary-sheet-right-stack {
+        display: grid;
+        gap: 10px;
+      }
+
+      .summary-sheet-section-title {
+        margin: 0 0 8px;
+        font-size: 10px;
+        font-weight: 700;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+      }
+
+      .summary-signature-box {
+        display: grid;
+        gap: 6px;
+        min-height: 104px;
+        border: 1px solid rgba(17, 17, 17, 0.45);
+        padding: 10px;
+      }
+
+      .summary-signature-name {
+        min-height: 16px;
+        font-size: 11px;
+        font-weight: 700;
+        line-height: 1.35;
+      }
+
+      .summary-signature-role {
+        font-size: 9px;
+        line-height: 1.35;
+      }
+
+      .summary-signature-date {
+        margin-top: auto;
+        font-size: 9px;
+      }
+    </style>
+    <script>
+      window.addEventListener('load', () => {
+        setTimeout(() => {
+          window.print();
+        }, 200);
+      });
+      window.addEventListener('afterprint', () => {
+        window.close();
+      });
+    </script>
+  </head>
+  <body>
+    <div class="summary-sheet-paper">
+      ${sheetHtml}
+    </div>
+  </body>
+</html>`;
+}
+
+function downloadSummarySheetPdf() {
+  const values = collectSummarySheetValues();
+  const popup = window.open("", "_blank", "noopener,noreferrer,width=1200,height=900");
+  if (!popup) {
+    setNotice(summarySheetStatus, "Allow pop-ups in your browser so the printable PDF view can open.", true);
+    return;
+  }
+
+  popup.document.open();
+  popup.document.write(buildSummarySheetPrintHtml(values));
+  popup.document.close();
+  popup.focus();
+  setNotice(summarySheetStatus, "Print dialog opened. Choose Save as PDF to download the summary sheet.", false);
 }
 
 function getCoverageBucket(ratio) {
