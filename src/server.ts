@@ -43,7 +43,7 @@ app.get('/employee', (_req: Request, res: Response) => {
 app.get('/evaluator', (_req: Request, res: Response) => {
   res.sendFile(path.join(publicDir, 'evaluator.html'));
 });
-app.use(express.static(publicDir, { extensions: ['html'], maxAge: isProduction ? '1h' : 0 }));
+app.use(express.static(publicDir, { extensions: ['html'], maxAge: 0 }));
 
 // Mount API routes
 app.use('/api', apiRoutes);
