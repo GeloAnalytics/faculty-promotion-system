@@ -31,6 +31,7 @@ const evaluatorInsights = byId("evaluator-insights");
 const databaseViewer = byId("database-viewer");
 const trainingCriteria = byId("training-criteria");
 const trainingScoreTotal = byId("training-score-total");
+const trainingEmployeeIdField = byId("training-employee-id");
 const summarySheetForm = byId("summary-sheet-form");
 const summarySheetPreview = byId("summary-sheet-preview");
 const summarySheetStatus = byId("summary-sheet-status");
@@ -144,6 +145,7 @@ reviewQueueSearch?.addEventListener("input", () => renderReviewQueue(evaluatorQu
 reviewQueueStatusFilter?.addEventListener("change", () => renderReviewQueue(evaluatorQueueItems));
 reviewQueueConfidenceFilter?.addEventListener("change", () => renderReviewQueue(evaluatorQueueItems));
 reviewQueuePanelFilter?.addEventListener("change", () => renderReviewQueue(evaluatorQueueItems));
+trainingEmployeeIdField?.addEventListener("input", enforceEmployeeIdDigits);
 employeeIdField?.addEventListener("input", enforceEmployeeIdDigits);
 cycleMetricsGrid?.addEventListener("input", handleCycleMetricInput);
 facultyResetButton?.addEventListener("click", () => {
@@ -257,9 +259,21 @@ facultyForm?.addEventListener("submit", async (event) => {
 trainingForm?.addEventListener("submit", async (event) => {
   event.preventDefault();
 
-  const trainingExampleId = valueOf("training-example-id");
+  const employeeId = sanitizeEmployeeId(valueOf("training-employee-id"));
+  if (!employeeId) {
+    setNotice(trainingResult, "Enter an employee ID from the review queue first.", true);
+    return;
+  }
+
+  const queueRecord = findEvaluatorQueueItemByEmployeeId(employeeId);
+  if (!queueRecord) {
+    setNotice(trainingResult, `No review queue record was found for employee ID ${employeeId}.`, true);
+    return;
+  }
+
+  const trainingExampleId = queueRecord.latestTrainingItem?.id || queueRecord.latestTrainingExampleId || "";
   if (!trainingExampleId) {
-    setNotice(trainingResult, "Select a training example from the review queue first.", true);
+    setNotice(trainingResult, `Employee ID ${employeeId} does not have a labelable training record yet.`, true);
     return;
   }
 
@@ -277,7 +291,7 @@ trainingForm?.addEventListener("submit", async (event) => {
       }),
     });
 
-    setNotice(trainingResult, `Record scored successfully. Status is now ${data.status}.`);
+    setNotice(trainingResult, `Employee ID ${employeeId} scored successfully. Status is now ${data.status}.`);
     await loadEvaluatorWorkspace();
   } catch (error) {
     setNotice(trainingResult, toErrorMessage(error), true);
@@ -1107,6 +1121,7 @@ function renderReviewQueue(items) {
           const uploads = Array.isArray(item.uploadLogs) ? item.uploadLogs : [];
           const latestTrainingItem = item.latestTrainingItem || null;
           const latestTrainingId = latestTrainingItem?.id || item.latestTrainingExampleId || "";
+          const employeeId = sanitizeEmployeeId(item.employeeId || "");
           const promotionDraft = item.draftPoints?.promotionDraft || {};
           const reviewRankLabel =
             promotionDraft.basis === "evaluator"
@@ -1181,7 +1196,13 @@ function renderReviewQueue(items) {
               </details>
               ${renderEvaluatorDeleteManager(item)}
               <div class="review-card-actions">
-                <button class="button button-secondary queue-score-button" type="button" data-training-id="${escapeHtml(latestTrainingId)}" ${latestTrainingId ? "" : "disabled"}>
+                <button
+                  class="button button-secondary queue-score-button"
+                  type="button"
+                  data-training-id="${escapeHtml(latestTrainingId)}"
+                  data-employee-id="${escapeHtml(employeeId)}"
+                  ${latestTrainingId && employeeId ? "" : "disabled"}
+                >
                   Score Latest Record
                 </button>
               </div>
@@ -1194,17 +1215,23 @@ function renderReviewQueue(items) {
 
   reviewQueue.querySelectorAll(".queue-score-button").forEach((button) => {
     button.addEventListener("click", () => {
+      const employeeId = sanitizeEmployeeId(button.dataset.employeeId || "");
       const trainingId = button.dataset.trainingId || "";
-      const target = byId("training-example-id");
-      if (target) {
-        target.value = trainingId;
+      const selectedItem = findEvaluatorQueueItemByEmployeeId(employeeId);
+      const latestTrainingItem = trainingId ? latestTrainingItemById.get(trainingId) : selectedItem?.latestTrainingItem || null;
+
+      if (trainingEmployeeIdField && employeeId) {
+        trainingEmployeeIdField.value = employeeId;
       }
-      const latestTrainingItem = latestTrainingItemById.get(trainingId);
-      selectedSummarySheetRecord = item;
-      loadSummarySheetFromRecord(item);
+
+      if (selectedItem) {
+        selectedSummarySheetRecord = selectedItem;
+        loadSummarySheetFromRecord(selectedItem);
+      }
+
       hydrateTrainingForm(latestTrainingItem);
-      if (trainingResult) {
-        setNotice(trainingResult, `Training example ${trainingId} selected for evaluator scoring.`);
+      if (trainingResult && employeeId) {
+        setNotice(trainingResult, `Employee ID ${employeeId} selected for evaluator scoring.`);
       }
       trainingForm?.scrollIntoView({ behavior: "smooth", block: "start" });
     });
@@ -1306,6 +1333,18 @@ function summarizeEvaluatorInsights(items) {
     confidenceSeries: buildInsightSeries(confidenceOrder, confidenceCounts, getPromotionConfidenceLabel, "confidence"),
     coverageSeries: buildInsightSeries(coverageOrder, coverageCounts, getCoverageBucketLabel, "coverage"),
   };
+}
+
+function findEvaluatorQueueItemByEmployeeId(employeeId) {
+  const normalizedEmployeeId = sanitizeEmployeeId(employeeId);
+  if (!normalizedEmployeeId) {
+    return null;
+  }
+
+  return (
+    evaluatorQueueItems.find((item) => sanitizeEmployeeId(item?.employeeId) === normalizedEmployeeId) ||
+    null
+  );
 }
 
 function buildInsightSeries(order, counts, labelResolver, tonePrefix) {
