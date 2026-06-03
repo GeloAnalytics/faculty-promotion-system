@@ -109,6 +109,7 @@ const SUMMARY_SHEET_SIGNATURES = [
     role: "Name and Signature of Faculty",
     nameFieldId: "summary-sheet-conforme-name",
     dateFieldId: "summary-sheet-conforme-date",
+    boxLabel: "Conforme:",
   },
   {
     key: "acknowledgment",
@@ -116,6 +117,7 @@ const SUMMARY_SHEET_SIGNATURES = [
     role: "Name and Signature of Faculty",
     nameFieldId: "summary-sheet-acknowledgment-name",
     dateFieldId: "summary-sheet-acknowledgment-date",
+    boxLabel: "Acknowledgment:",
   },
 ];
 
@@ -1393,6 +1395,8 @@ function loadSummarySheetFromRecord(record) {
 }
 
 function collectSummarySheetValues() {
+  const record = selectedSummarySheetRecord || null;
+  const assessment = getSummarySheetAssessment(record);
   return {
     subject: {
       lastName: valueOf("summary-sheet-last-name").trim(),
@@ -1402,6 +1406,9 @@ function collectSummarySheetValues() {
       employeeId: valueOf("summary-sheet-employee-id").trim(),
       recordLabel: valueOf("summary-sheet-record-label").trim(),
     },
+    record,
+    criteriaSections: buildSummarySheetCriteriaSections(record, assessment),
+    summaryMetrics: buildSummarySheetSummaryMetrics(record, assessment),
     signatures: SUMMARY_SHEET_SIGNATURES.map((signature) => ({
       ...signature,
       name: valueOf(signature.nameFieldId).trim(),
@@ -1411,45 +1418,83 @@ function collectSummarySheetValues() {
 }
 
 function renderSummarySheetDocument(values) {
-  const topRows = [
-    ["Last name", values.subject.lastName],
-    ["First name", values.subject.firstName],
-    ["Middle name", values.subject.middleName],
-    ["Extension", values.subject.extensionName],
-    ["Employee ID", values.subject.employeeId],
-    ["Record label", values.subject.recordLabel],
-  ];
+  const displayFirstName = [values.subject.firstName, values.subject.extensionName].filter(Boolean).join(" ");
+  const criteriaSections = Array.isArray(values.criteriaSections) ? values.criteriaSections : [];
+  const summaryMetrics = Array.isArray(values.summaryMetrics) ? values.summaryMetrics : [];
   const reviewerSignatures = values.signatures.slice(0, 5);
   const rightSignatures = values.signatures.slice(5);
 
   return `
-    <p class="summary-sheet-title">INDIVIDUAL SUMMARY SHEET</p>
-    <p class="summary-sheet-subtitle">
-      ${escapeHtml(values.subject.recordLabel || "Editable summary sheet prepared from the evaluator panel.")}
-    </p>
-    <div class="summary-sheet-top-grid">
-      ${topRows
-        .map(
-          ([label, value]) => `
-            <div class="summary-sheet-top-row">
-              <span class="summary-sheet-top-label">${escapeHtml(label)}</span>
-              <span class="summary-sheet-top-value">${escapeHtml(value || " ")}</span>
-            </div>
-          `,
-        )
-        .join("")}
-    </div>
-    <div class="summary-sheet-divider"></div>
-    <div class="summary-sheet-bottom-grid">
-      <section>
-        <div class="summary-sheet-section-title">Evaluated By</div>
-        <div class="summary-sheet-reviewer-list">
-          ${reviewerSignatures.map(renderSummarySheetSignatureBox).join("")}
-        </div>
-      </section>
-      <section class="summary-sheet-right-stack">
-        ${rightSignatures.map(renderSummarySheetSignatureBox).join("")}
-      </section>
+    <div class="summary-sheet-document">
+      <p class="summary-sheet-meta-header">FACULTY POSITION RECLASSIFICATION FOR SUCs</p>
+      <p class="summary-sheet-title">INDIVIDUAL SUMMARY SHEET</p>
+      <p class="summary-sheet-subtitle">${escapeHtml(values.subject.recordLabel || "Printable evaluator summary prepared from the selected record.")}</p>
+
+      <table class="summary-top-table">
+        <tbody>
+          <tr>
+            <th>LAST NAME:</th>
+            <td>${escapeHtml(values.subject.lastName || " ")}</td>
+            <th>FIRST NAME, EXT.:</th>
+            <td>${escapeHtml(displayFirstName || " ")}</td>
+          </tr>
+          <tr>
+            <th>MIDDLE NAME:</th>
+            <td>${escapeHtml(values.subject.middleName || " ")}</td>
+            <th>EMPLOYEE ID:</th>
+            <td>${escapeHtml(values.subject.employeeId || " ")}</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <table class="summary-criteria-table">
+        <thead>
+          <tr>
+            <th>CRITERIA</th>
+            <th>FACULTY SCORE</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${criteriaSections.length
+            ? criteriaSections
+                .map((section) => renderSummarySheetCriteriaSection(section))
+                .join("")
+            : `
+              <tr class="summary-empty-row">
+                <td colspan="2">Load a selected record from the review queue to populate the criteria table.</td>
+              </tr>
+            `}
+        </tbody>
+      </table>
+
+      <table class="summary-metric-table">
+        <tbody>
+          ${summaryMetrics
+            .map(
+              (metric) => `
+                <tr>
+                  <th>${escapeHtml(metric.label)}</th>
+                  <td>${escapeHtml(metric.value)}</td>
+                </tr>
+              `,
+            )
+            .join("")}
+        </tbody>
+      </table>
+
+      <div class="summary-signature-layout">
+        <section class="summary-signature-left">
+          <div class="summary-sheet-section-title">EVALUATED BY:</div>
+          <div class="summary-sheet-reviewer-list">
+            ${reviewerSignatures.map(renderSummarySheetSignatureBox).join("")}
+          </div>
+        </section>
+        <section class="summary-signature-right">
+          <div class="summary-sheet-right-stack">
+            ${rightSignatures.map(renderSummarySheetSignatureBox).join("")}
+          </div>
+        </section>
+      </div>
     </div>
   `;
 }
@@ -1457,11 +1502,103 @@ function renderSummarySheetDocument(values) {
 function renderSummarySheetSignatureBox(signature) {
   return `
     <div class="summary-signature-box">
+      ${signature.boxLabel ? `<div class="summary-signature-box-label">${escapeHtml(signature.boxLabel)}</div>` : ""}
       <div class="summary-signature-name">${escapeHtml(signature.name || " ")}</div>
       <div class="summary-signature-role">${escapeHtml(signature.role)}</div>
       <div class="summary-signature-date">Date: ${escapeHtml(signature.date || " ")}</div>
     </div>
   `;
+}
+
+function renderSummarySheetCriteriaSection(section) {
+  const rows = Array.isArray(section.criteria) ? section.criteria : [];
+  const rowsHtml = rows
+    .map(
+      (row) => `
+        <tr>
+          <td>${escapeHtml(row.label)}</td>
+          <td class="summary-score-cell">${escapeHtml(row.score)}</td>
+        </tr>
+      `,
+    )
+    .join("");
+
+  return `
+    <tr class="summary-kra-row">
+      <th colspan="2">${escapeHtml(section.heading)}</th>
+    </tr>
+    ${rowsHtml}
+    <tr class="summary-total-row">
+      <td>TOTAL</td>
+      <td class="summary-score-cell">${escapeHtml(section.total)}</td>
+    </tr>
+  `;
+}
+
+function buildSummarySheetCriteriaSections(record, assessment) {
+  const groupedPanels = uploadPanelCatalog.length ? groupPanelsByKra(uploadPanelCatalog) : [];
+  const criterionScores = assessment?.criterionScores || record?.latestTrainingItem?.evaluatorAssessment?.criterionScores || {};
+
+  return groupedPanels.map(([kraTitle, panels], index) => {
+    const sectionTotalMax = panels.reduce((sum, panel) => sum + Number(panel.maxScore || 0), 0);
+    const criteria = panels.map((panel, criterionIndex) => ({
+      label: `Criterion ${getSummarySheetCriterionLetter(criterionIndex)} - ${panel.title} (${formatSummarySheetPoints(panel.maxScore)} points)`,
+      score: formatMetricNumber(criterionScores?.[panel.key]),
+    }));
+    const sectionTotal = formatMetricNumber(
+      criteria.reduce((sum, item) => sum + Number.parseFloat(item.score || "0"), 0),
+    );
+
+    return {
+      heading: `KRA ${getSummarySheetRomanNumeral(index)} - ${formatSummarySheetKraLabel(kraTitle)} (${formatSummarySheetPoints(sectionTotalMax)} POINTS)`,
+      criteria,
+      total: sectionTotal,
+    };
+  });
+}
+
+function buildSummarySheetSummaryMetrics(record, assessment) {
+  const promotionDraft = record?.draftPoints?.promotionDraft || {};
+  const evaluatorTotal = formatOptionalMetricNumber(
+    promotionDraft.evaluatorTotalScore ?? assessment?.totalScore ?? null,
+    "Pending",
+  );
+
+  return [
+    { label: "Current Rank", value: promotionDraft.currentRank || "Not set" },
+    { label: "Suggested Rank", value: promotionDraft.suggestedRank || "Pending" },
+    { label: "Projected Rank", value: promotionDraft.projectedRank || "Pending" },
+    { label: "Evaluator Total", value: evaluatorTotal },
+    { label: "Weighted Score", value: formatOptionalMetricNumber(promotionDraft.weightedScore, "Pending") },
+    { label: "Sub-rank Increments", value: formatOptionalMetricNumber(promotionDraft.subrankIncrements, "Pending") },
+  ];
+}
+
+function getSummarySheetAssessment(record) {
+  return record?.latestTrainingItem?.evaluatorAssessment || record?.latestEvaluatorTrainingItem?.evaluatorAssessment || null;
+}
+
+function getSummarySheetRomanNumeral(index) {
+  return ["I", "II", "III", "IV"][index] || String(index + 1);
+}
+
+function getSummarySheetCriterionLetter(index) {
+  return String.fromCharCode(65 + index);
+}
+
+function formatSummarySheetPoints(value) {
+  const numericValue = Number(value);
+  if (!Number.isFinite(numericValue)) {
+    return "0";
+  }
+  return Number.isInteger(numericValue) ? String(numericValue) : formatMetricNumber(numericValue);
+}
+
+function formatSummarySheetKraLabel(kraTitle) {
+  return String(kraTitle || "")
+    .replace(/^KRA\s*\d+:\s*/i, "")
+    .trim()
+    .toUpperCase();
 }
 
 function splitSummarySheetName(name) {
@@ -1541,8 +1678,8 @@ function buildSummarySheetPrintHtml(values) {
     <title>Individual Summary Sheet</title>
     <style>
       @page {
-        size: letter landscape;
-        margin: 0.45in;
+        size: A4 portrait;
+        margin: 8mm;
       }
 
       * {
@@ -1564,106 +1701,179 @@ function buildSummarySheetPrintHtml(values) {
       }
 
       .summary-sheet-paper {
-        display: grid;
-        gap: 12px;
         width: 100%;
-        border: 1px solid #1f1f1f;
-        padding: 16px;
+        padding: 0;
+      }
+
+      .summary-sheet-document {
+        display: grid;
+        gap: 6px;
+        width: 100%;
+      }
+
+      .summary-sheet-meta-header {
+        margin: 0;
+        text-align: center;
+        font-family: Arial, Helvetica, sans-serif;
+        font-size: 10px;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
       }
 
       .summary-sheet-title {
         margin: 0;
         text-align: center;
-        font-size: 14px;
+        font-size: 12px;
         font-weight: 700;
-        letter-spacing: 0.12em;
+        letter-spacing: 0.08em;
       }
 
       .summary-sheet-subtitle {
-        margin: 0;
+        margin: 0 0 2px;
         text-align: center;
-        font-size: 10px;
+        font-size: 8.5px;
         color: #444;
-        line-height: 1.4;
+        line-height: 1.35;
       }
 
-      .summary-sheet-top-grid {
-        display: grid;
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-        gap: 6px 12px;
+      .summary-top-table,
+      .summary-criteria-table,
+      .summary-metric-table {
+        width: 100%;
+        border-collapse: collapse;
+        table-layout: fixed;
       }
 
-      .summary-sheet-top-row {
+      .summary-top-table th,
+      .summary-top-table td,
+      .summary-criteria-table th,
+      .summary-criteria-table td,
+      .summary-metric-table th,
+      .summary-metric-table td {
+        border: 1px solid rgba(17, 17, 17, 0.45);
+        padding: 3px 4px;
+        vertical-align: middle;
+        word-break: break-word;
+      }
+
+      .summary-top-table th,
+      .summary-metric-table th {
+        background: #f3f5f3;
+        font-size: 8px;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        text-align: left;
+        width: 15%;
+      }
+
+      .summary-top-table td,
+      .summary-metric-table td {
+        font-size: 8.5px;
+        font-weight: 700;
+      }
+
+      .summary-criteria-table thead th {
+        background: #d5ebf4;
+        font-size: 8.5px;
+        font-weight: 700;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+      }
+
+      .summary-kra-row th {
+        background: #e3f2f7;
+        font-size: 8.5px;
+        font-weight: 700;
+        text-align: left;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+      }
+
+      .summary-criteria-table td {
+        font-size: 8.5px;
+        line-height: 1.2;
+      }
+
+      .summary-score-cell {
+        width: 95px;
+        text-align: right;
+        font-variant-numeric: tabular-nums;
+      }
+
+      .summary-total-row td {
+        background: #f3f5f3;
+        font-weight: 700;
+      }
+
+      .summary-empty-row td {
+        text-align: center;
+        color: #555;
+        font-size: 8.5px;
+      }
+
+      .summary-metric-table th {
+        width: 42%;
+      }
+
+      .summary-metric-table td {
+        text-align: right;
+        font-variant-numeric: tabular-nums;
+      }
+
+      .summary-signature-layout {
         display: grid;
-        grid-template-columns: 132px minmax(0, 1fr);
+        grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
         gap: 8px;
-        align-items: end;
-        padding-bottom: 3px;
-        border-bottom: 1px solid rgba(17, 17, 17, 0.45);
+        align-items: start;
+        break-inside: avoid;
       }
 
-      .summary-sheet-top-label {
+      .summary-sheet-section-title {
+        margin: 0 0 6px;
         font-size: 9px;
         font-weight: 700;
         letter-spacing: 0.08em;
         text-transform: uppercase;
       }
 
-      .summary-sheet-top-value {
-        min-height: 14px;
-        font-size: 11px;
-        font-weight: 700;
-        line-height: 1.35;
-      }
-
-      .summary-sheet-divider {
-        height: 1px;
-        background: rgba(17, 17, 17, 0.45);
-      }
-
-      .summary-sheet-bottom-grid {
-        display: grid;
-        grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
-        gap: 12px;
-      }
-
       .summary-sheet-reviewer-list,
       .summary-sheet-right-stack {
         display: grid;
-        gap: 10px;
-      }
-
-      .summary-sheet-section-title {
-        margin: 0 0 8px;
-        font-size: 10px;
-        font-weight: 700;
-        letter-spacing: 0.1em;
-        text-transform: uppercase;
+        gap: 6px;
       }
 
       .summary-signature-box {
         display: grid;
-        gap: 6px;
-        min-height: 104px;
+        gap: 4px;
+        min-height: 82px;
         border: 1px solid rgba(17, 17, 17, 0.45);
-        padding: 10px;
+        padding: 8px 9px;
+        background: #fff;
+        break-inside: avoid;
+      }
+
+      .summary-signature-box-label {
+        font-size: 8px;
+        font-weight: 700;
+        text-transform: uppercase;
       }
 
       .summary-signature-name {
-        min-height: 16px;
-        font-size: 11px;
+        min-height: 12px;
+        font-size: 8.5px;
         font-weight: 700;
-        line-height: 1.35;
+        line-height: 1.2;
       }
 
       .summary-signature-role {
-        font-size: 9px;
-        line-height: 1.35;
+        font-size: 7.5px;
+        line-height: 1.25;
       }
 
       .summary-signature-date {
         margin-top: auto;
-        font-size: 9px;
+        font-size: 7.5px;
       }
     </style>
   </head>

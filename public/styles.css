@@ -1191,90 +1191,157 @@ select {
 }
 
 .summary-sheet-paper {
-  display: grid;
-  gap: 14px;
-  background: #fffdf8;
-  border: 1px solid rgba(24, 33, 31, 0.12);
-  border-radius: 18px;
-  padding: 18px;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.75);
+  display: block;
+  width: 100%;
+  padding: 0;
+  background: transparent;
+  border: none;
+  box-shadow: none;
 }
 
-.summary-sheet-preview .summary-sheet-paper {
-  min-height: 100%;
+.summary-sheet-document {
+  display: grid;
+  gap: 8px;
+  width: 100%;
+}
+
+.summary-sheet-meta-header {
+  margin: 0;
+  text-align: center;
+  font-family: "Space Grotesk", sans-serif;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text);
 }
 
 .summary-sheet-title {
   margin: 0;
   text-align: center;
   font-family: "Space Grotesk", sans-serif;
-  font-size: 1.1rem;
-  letter-spacing: 0.08em;
+  font-size: 1rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
 }
 
 .summary-sheet-subtitle {
-  margin: 0;
+  margin: 0 0 2px;
   text-align: center;
   color: var(--muted);
-  font-size: 0.82rem;
-  line-height: 1.45;
-}
-
-.summary-sheet-top-grid {
-  display: grid;
-  gap: 8px 14px;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
-.summary-sheet-top-row {
-  display: grid;
-  grid-template-columns: 132px minmax(0, 1fr);
-  gap: 8px;
-  align-items: end;
-  padding-bottom: 4px;
-  border-bottom: 1px solid rgba(24, 33, 31, 0.12);
-}
-
-.summary-sheet-top-label {
-  font-size: 0.7rem;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--muted);
-}
-
-.summary-sheet-top-value {
-  font-size: 0.92rem;
-  font-weight: 700;
+  font-size: 0.8rem;
   line-height: 1.35;
-  min-height: 1.35em;
+}
+
+.summary-top-table,
+.summary-criteria-table,
+.summary-metric-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  background: #fff;
+}
+
+.summary-top-table th,
+.summary-top-table td,
+.summary-criteria-table th,
+.summary-criteria-table td,
+.summary-metric-table th,
+.summary-metric-table td {
+  border: 1px solid rgba(24, 33, 31, 0.42);
+  padding: 4px 6px;
+  vertical-align: middle;
+  word-break: break-word;
+}
+
+.summary-top-table th,
+.summary-metric-table th {
+  background: #f2f5f2;
+  font-size: 0.68rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  text-align: left;
+  width: 15%;
+}
+
+.summary-top-table td,
+.summary-metric-table td {
+  font-size: 0.76rem;
+  font-weight: 700;
+}
+
+.summary-top-table td {
+  width: 35%;
+}
+
+.summary-criteria-table thead th {
+  background: #d5ebf4;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.summary-kra-row th {
+  background: #dfeef4;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-align: left;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.summary-criteria-table td {
+  font-size: 0.72rem;
+  line-height: 1.25;
+}
+
+.summary-score-cell {
+  width: 110px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.summary-total-row td {
+  background: #f2f5f2;
+  font-weight: 700;
+}
+
+.summary-empty-row td {
+  text-align: center;
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+.summary-metric-table th {
+  width: 42%;
+}
+
+.summary-metric-table td {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.summary-signature-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
 }
 
 .summary-sheet-section-title {
-  margin: 0 0 10px;
+  margin: 0 0 8px;
   font-family: "Space Grotesk", sans-serif;
-  font-size: 0.8rem;
-  letter-spacing: 0.09em;
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--accent);
-}
-
-.summary-sheet-divider {
-  height: 1px;
-  background: rgba(24, 33, 31, 0.12);
-}
-
-.summary-sheet-bottom-grid {
-  display: grid;
-  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
-  gap: 12px;
-  align-items: start;
 }
 
 .summary-sheet-reviewer-list,
 .summary-sheet-right-stack {
   display: grid;
-  gap: 10px;
+  gap: 8px;
 }
 
 .summary-sheet-right-stack {
@@ -1298,29 +1365,36 @@ select {
 
 .summary-signature-box {
   display: grid;
-  gap: 8px;
-  min-height: 112px;
-  padding: 12px 14px;
-  border-radius: 16px;
-  background: rgba(255, 255, 255, 0.78);
-  border: 1px solid rgba(24, 33, 31, 0.12);
+  gap: 6px;
+  min-height: 94px;
+  padding: 10px 12px;
+  border: 1px solid rgba(24, 33, 31, 0.42);
+  background: #fff;
+}
+
+.summary-signature-box-label {
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--text);
 }
 
 .summary-signature-name {
-  min-height: 1.5em;
+  min-height: 1.3em;
   font-weight: 700;
-  line-height: 1.35;
+  line-height: 1.25;
+  font-size: 0.8rem;
 }
 
 .summary-signature-role {
   color: var(--muted);
-  font-size: 0.8rem;
-  line-height: 1.45;
+  font-size: 0.7rem;
+  line-height: 1.3;
 }
 
 .summary-signature-date {
   margin-top: auto;
-  font-size: 0.82rem;
+  font-size: 0.7rem;
   color: var(--muted);
 }
 
@@ -1540,6 +1614,10 @@ select {
   }
 
   .summary-sheet-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .summary-signature-layout {
     grid-template-columns: 1fr;
   }
 

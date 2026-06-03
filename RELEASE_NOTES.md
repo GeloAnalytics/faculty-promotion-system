@@ -4,29 +4,16 @@
 
 ### Summary
 
-This update adds an evaluator-facing printable summary sheet editor so the top name block and bottom signature lines can be modified before exporting the document as a PDF through the browser print flow.
+This update fixes the active dashboard overlap issues and revises the printable evaluator summary sheet so it exports as an A4 portrait PDF with a table-based middle section for criteria scores.
 
 ### What Changed
 
-- Added a new summary-sheet panel to the evaluator portal.
-- Made the top name block and sign-off lines editable from the evaluator workspace.
-- Added a print-ready preview and a PDF export button that opens the browser print dialog.
-
-### Verification
-
-- Visual layout and print-flow addition only; no automated test run was required.
-
-## 2026-06-03
-
-### Summary
-
-This update fixes overlapping panels in both active dashboards by keeping the employee upload panels on the left side and the evaluator database viewer on the left side, while their sticky scoring summaries remain in the right rail.
-
-### What Changed
-
-- Repositioned the employee `Upload Panels` section so it stays in the left dashboard column instead of spanning under the sticky approximate-scoring card.
-- Repositioned the evaluator `Database Viewer` section so it stays in the left dashboard column instead of spanning under the sticky scoring form.
+- Repositioned the employee `Upload Panels` and `Upload Logs` sections so they stay in the left dashboard column.
+- Repositioned the evaluator `Database Viewer` and printable summary sheet sections so they stay in the left dashboard column.
 - Kept the sticky right-side scoring panels intact so the side utilities remain visible without overlapping the main workspace.
+- Reworked the summary sheet document into a table-first layout with a visible criteria score section.
+- Switched the export target to A4 portrait for closer alignment with the reference form.
+- Kept the top name block and bottom signature area editable from the evaluator workspace.
 
 ### Verification
 
