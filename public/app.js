@@ -1666,16 +1666,6 @@ function buildSummarySheetPrintHtml(values) {
         font-size: 9px;
       }
     </style>
-    <script>
-      window.addEventListener('load', () => {
-        setTimeout(() => {
-          window.print();
-        }, 200);
-      });
-      window.addEventListener('afterprint', () => {
-        window.close();
-      });
-    </script>
   </head>
   <body>
     <div class="summary-sheet-paper">
@@ -1687,16 +1677,44 @@ function buildSummarySheetPrintHtml(values) {
 
 function downloadSummarySheetPdf() {
   const values = collectSummarySheetValues();
-  const popup = window.open("", "_blank", "noopener,noreferrer,width=1200,height=900");
-  if (!popup) {
-    setNotice(summarySheetStatus, "Allow pop-ups in your browser so the printable PDF view can open.", true);
-    return;
-  }
+  const iframe = document.createElement("iframe");
+  iframe.setAttribute("aria-hidden", "true");
+  iframe.tabIndex = -1;
+  iframe.style.position = "fixed";
+  iframe.style.right = "0";
+  iframe.style.bottom = "0";
+  iframe.style.width = "0";
+  iframe.style.height = "0";
+  iframe.style.border = "0";
+  iframe.style.opacity = "0";
+  iframe.style.pointerEvents = "none";
+  iframe.srcdoc = buildSummarySheetPrintHtml(values);
 
-  popup.document.open();
-  popup.document.write(buildSummarySheetPrintHtml(values));
-  popup.document.close();
-  popup.focus();
+  const cleanup = () => {
+    window.setTimeout(() => iframe.remove(), 1000);
+  };
+
+  iframe.addEventListener("load", () => {
+    const printWindow = iframe.contentWindow;
+    if (!printWindow) {
+      setNotice(summarySheetStatus, "The printable view could not be prepared in this browser.", true);
+      cleanup();
+      return;
+    }
+
+    printWindow.addEventListener("afterprint", cleanup, { once: true });
+    window.setTimeout(() => {
+      try {
+        printWindow.focus();
+        printWindow.print();
+      } catch {
+        cleanup();
+        setNotice(summarySheetStatus, "The printable view could not be opened. Try again or use a different browser.", true);
+      }
+    }, 250);
+  }, { once: true });
+
+  document.body.appendChild(iframe);
   setNotice(summarySheetStatus, "Print dialog opened. Choose Save as PDF to download the summary sheet.", false);
 }
 
