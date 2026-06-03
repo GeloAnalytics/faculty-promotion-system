@@ -1520,7 +1520,7 @@ body[data-portal="employee"] #upload-panels {
 }
 
 body[data-portal="employee"] #employee-logs-panel {
-  grid-column: 1 / -1;
+  grid-column: 1 / span 8;
 }
 
 body[data-portal="evaluator"] #database-panel {
