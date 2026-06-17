@@ -19,7 +19,7 @@
           <p class="eyebrow">Evaluator Portal</p>
           <h1 id="workspace-greeting">Review the uploaded PDFs, verify the OCR output, and confirm whether the system score matches the documents.</h1>
           <p class="hero-text">
-            The evaluator role is now read-only: view the upload evidence, check the OCR extraction, and double-check the computed scores.
+            The evaluator role is now read-only: view the upload evidence, check the OCR extraction, preview PDFs inside the system, and double-check the computed scores.
           </p>
           <div class="hero-meta">
             <div class="stat-card session-card">
@@ -53,7 +53,7 @@
           <div class="panel-heading">
             <div>
               <p class="section-kicker">Review Queue</p>
-              <h2>Uploaded documents and computed scores</h2>
+              <h2>Uploaded documents and computed scores by KRA or criterion</h2>
             </div>
           </div>
           <div id="review-queue-filter-status" class="uploaded-files-filter-status">Loading review queue...</div>
@@ -64,7 +64,22 @@
       </main>
     </div>
 
-    <script src="/config.js?v=334eaba"></script>
-    <script src="/workflow.js?v=334eaba"></script>
+    <div id="document-preview-modal" class="document-preview-modal" hidden>
+      <div class="document-preview-backdrop" data-preview-action="close"></div>
+      <section class="document-preview-dialog" role="dialog" aria-modal="true" aria-labelledby="document-preview-title">
+        <div class="document-preview-header">
+          <div>
+            <p class="section-kicker">Document Preview</p>
+            <h2 id="document-preview-title">Preview</h2>
+            <p id="document-preview-meta" class="document-preview-meta">Previewing uploaded file</p>
+          </div>
+          <button class="button button-ghost document-preview-close" type="button" data-preview-action="close">Close</button>
+        </div>
+        <iframe id="document-preview-frame" class="document-preview-frame" title="Document preview"></iframe>
+      </section>
+    </div>
+
+    <script src="/config.js?v=334eac1"></script>
+    <script src="/workflow.js?v=334eac1"></script>
   </body>
 </html>

@@ -1,12 +1,18 @@
 import { DocumentKind, Prisma } from '@prisma/client';
 import { z } from 'zod';
 import pdf from 'pdf-parse';
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import crypto from 'node:crypto';
 import { prisma } from '../config/db';
+import { repoRoot } from '../config/globals';
 import { uploadPanels } from '../uploadPanels';
 import { analyzeDocumentContent, inferBestUploadPanelKey } from '../utils';
 import { extractImageTextWithOcr, type OcrConfig } from '../ocr';
 import { EmployeeUploadType, UploadPanelDefinition, ProcessedUploadResult, ProfileLinkResult } from '../types';
 import { findBestMatchingProfile, scoreProfileFilename } from './profileMatching';
+
+const documentStorageRoot = path.join(repoRoot, 'uploads', 'documents');
 
 export function parseDocumentKind(input: unknown): DocumentKind {
   const normalized = typeof input === 'string' ? input.toUpperCase() : 'REQUIREMENT';
@@ -63,6 +69,7 @@ export async function processUploadedDocument(args: {
 
   const linkage = await resolveUploadProfileLink(ownerUserId, fileName, requestedProfileId);
   const profileId = linkage.profileId;
+  const storage = await persistUploadedDocumentFile(file);
 
   if (mimeType === 'application/pdf' || fileName.toLowerCase().endsWith('.pdf')) {
     const data = await pdf(file.buffer);
@@ -70,36 +77,42 @@ export async function processUploadedDocument(args: {
     const detectedPanelDefinition = findUploadPanelDefinition(detectedPanelKey);
     const analysis = analyzeDocumentContent(data.text, detectedPanelKey, 'pdf');
 
-    const savedDocument = await prisma.uploadedDocument.create({
-      data: {
-        ownerUserId,
-        profileId,
-        kind,
-        originalName: fileName,
-        mimeType: file.mimetype,
-        extractedText: data.text,
-        extractionMetadata: toPrismaJson({
-          uploadType,
-          panelKey: detectedPanelKey,
-          panelTitle: detectedPanelDefinition.title,
-          storedForTraining: true,
-          analysis,
-          linkage,
-        }),
-      },
-    });
+    try {
+      const savedDocument = await prisma.uploadedDocument.create({
+        data: {
+          ownerUserId,
+          profileId,
+          kind,
+          originalName: fileName,
+          mimeType: file.mimetype,
+          extractedText: data.text,
+          extractionMetadata: toPrismaJson({
+            uploadType,
+            panelKey: detectedPanelKey,
+            panelTitle: detectedPanelDefinition.title,
+            storedForTraining: true,
+            analysis,
+            linkage,
+            storage,
+          }),
+        },
+      });
 
-    return {
-      originalName: fileName,
-      fileType: 'pdf',
-      documentId: savedDocument.id,
-      uploadType,
-      panelKey: detectedPanelKey,
-      profileId,
-      linkage,
-      textPreview: data.text.slice(0, 1000),
-      analysis,
-    };
+      return {
+        originalName: fileName,
+        fileType: 'pdf',
+        documentId: savedDocument.id,
+        uploadType,
+        panelKey: detectedPanelKey,
+        profileId,
+        linkage,
+        textPreview: data.text.slice(0, 1000),
+        analysis,
+      };
+    } catch (error) {
+      await removePersistedDocumentFile(storage.relativePath);
+      throw error;
+    }
   }
 
   if (mimeType.startsWith('image/') || /\.(png|jpg|jpeg|bmp|tif|tiff)$/i.test(fileName)) {
@@ -109,42 +122,49 @@ export async function processUploadedDocument(args: {
     const detectedPanelDefinition = findUploadPanelDefinition(detectedPanelKey);
     const analysis = analyzeDocumentContent(extractedText, detectedPanelKey, 'image');
 
-    const savedDocument = await prisma.uploadedDocument.create({
-      data: {
-        ownerUserId,
-        profileId,
-        kind,
-        originalName: fileName,
-        mimeType: file.mimetype,
-        extractedText,
-        extractionMetadata: toPrismaJson({
-          uploadType,
-          panelKey: detectedPanelKey,
-          panelTitle: detectedPanelDefinition.title,
-          storedForTraining: true,
-          ocr: {
-            provider: ocrResult.provider,
-            lineCount: ocrResult.lineCount,
-          },
-          analysis,
-          linkage,
-        }),
-      },
-    });
+    try {
+      const savedDocument = await prisma.uploadedDocument.create({
+        data: {
+          ownerUserId,
+          profileId,
+          kind,
+          originalName: fileName,
+          mimeType: file.mimetype,
+          extractedText,
+          extractionMetadata: toPrismaJson({
+            uploadType,
+            panelKey: detectedPanelKey,
+            panelTitle: detectedPanelDefinition.title,
+            storedForTraining: true,
+            ocr: {
+              provider: ocrResult.provider,
+              lineCount: ocrResult.lineCount,
+            },
+            analysis,
+            linkage,
+            storage,
+          }),
+        },
+      });
 
-    return {
-      originalName: fileName,
-      fileType: 'image',
-      documentId: savedDocument.id,
-      uploadType,
-      panelKey: detectedPanelKey,
-      profileId,
-      linkage,
-      textPreview: extractedText.slice(0, 1000),
-      analysis,
-    };
+      return {
+        originalName: fileName,
+        fileType: 'image',
+        documentId: savedDocument.id,
+        uploadType,
+        panelKey: detectedPanelKey,
+        profileId,
+        linkage,
+        textPreview: extractedText.slice(0, 1000),
+        analysis,
+      };
+    } catch (error) {
+      await removePersistedDocumentFile(storage.relativePath);
+      throw error;
+    }
   }
 
+  await removePersistedDocumentFile(storage.relativePath);
   throw new Error('Unsupported document type');
 }
 
@@ -270,6 +290,75 @@ export async function attachExistingDocumentsToProfile(
     matchedFileNames: matchedDocuments.map((document) => document.originalName),
   };
 }
+
+export function resolveStoredDocumentPath(extractionMetadata: unknown) {
+  const metadata = readJsonObject(extractionMetadata);
+  const storage = readJsonObject(metadata.storage);
+  const relativePath = typeof storage.relativePath === 'string' ? storage.relativePath : null;
+
+  if (!relativePath) {
+    return null;
+  }
+
+  const normalizedPath = path.resolve(repoRoot, relativePath);
+  const normalizedRoot = path.resolve(repoRoot);
+  if (!normalizedPath.startsWith(normalizedRoot)) {
+    return null;
+  }
+
+  return normalizedPath;
+}
+
 export function toPrismaJson(value: unknown): Prisma.InputJsonValue {
   return JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
+}
+
+function readJsonObject(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return {};
+  }
+
+  return value as Record<string, unknown>;
+}
+
+async function persistUploadedDocumentFile(file: Express.Multer.File) {
+  await fs.mkdir(documentStorageRoot, { recursive: true });
+  const storageKey = crypto.randomUUID();
+  const extension = deriveStorageExtension(file.originalname, file.mimetype);
+  const relativePath = path.join('uploads', 'documents', `${storageKey}${extension}`);
+  const absolutePath = path.join(repoRoot, relativePath);
+
+  await fs.writeFile(absolutePath, file.buffer);
+
+  return {
+    storageKey,
+    relativePath,
+  };
+}
+
+async function removePersistedDocumentFile(relativePath: string) {
+  try {
+    const absolutePath = path.resolve(repoRoot, relativePath);
+    await fs.unlink(absolutePath);
+  } catch {
+    // Ignore cleanup failures; the document record may still be removed later.
+  }
+}
+
+function deriveStorageExtension(originalName: string, mimeType: string) {
+  const extension = path.extname(originalName).trim();
+  if (extension) {
+    return extension.toLowerCase();
+  }
+
+  if (mimeType === 'application/pdf') {
+    return '.pdf';
+  }
+
+  if (mimeType.startsWith('image/')) {
+    const subtype = mimeType.split('/')[1];
+    return subtype ? `.${subtype.replace(/[^a-z0-9]/gi, '')}` : '';
+  }
+
+  return '';
 }

@@ -17,9 +17,9 @@
       <main class="content-grid dashboard-grid dashboard-grid-employee">
         <header class="hero panel panel-wide">
           <p class="eyebrow">Employee Portal</p>
-          <h1 id="workspace-greeting">Upload your score sheet and evidence. The system will OCR the documents and prepare the draft score for review.</h1>
+          <h1 id="workspace-greeting">Upload your score sheet and evidence. The system will OCR the documents, group them by KRA or criterion, and prepare the draft score for review.</h1>
           <p class="hero-text">
-            The employee flow is now document-first: one score sheet, one evidence bundle, and no manual typing for criterion scores.
+            The employee flow is now document-first: one score sheet, one evidence bundle, and no manual typing for criterion scores. You can preview uploaded PDFs directly inside the portal.
           </p>
           <div class="hero-meta">
             <div class="stat-card session-card">
@@ -54,7 +54,7 @@
           <div class="panel-heading">
             <div>
               <p class="section-kicker">Upload Workflow</p>
-              <h2>Only two things are needed from the employee</h2>
+              <h2>Only two things are needed from the employee, organized by KRA or criterion</h2>
             </div>
           </div>
           <div id="employee-upload-workflow" class="workflow-grid"></div>
@@ -65,7 +65,7 @@
           <div class="panel-heading">
             <div>
               <p class="section-kicker">Uploaded Files</p>
-              <h2>Stored score sheet and evidence</h2>
+              <h2>Stored score sheet and evidence by KRA or criterion</h2>
             </div>
           </div>
           <div id="employee-upload-list" class="database-viewer">
@@ -75,7 +75,22 @@
       </main>
     </div>
 
-    <script src="/config.js?v=334eaba"></script>
-    <script src="/workflow.js?v=334eaba"></script>
+    <div id="document-preview-modal" class="document-preview-modal" hidden>
+      <div class="document-preview-backdrop" data-preview-action="close"></div>
+      <section class="document-preview-dialog" role="dialog" aria-modal="true" aria-labelledby="document-preview-title">
+        <div class="document-preview-header">
+          <div>
+            <p class="section-kicker">Document Preview</p>
+            <h2 id="document-preview-title">Preview</h2>
+            <p id="document-preview-meta" class="document-preview-meta">Previewing uploaded file</p>
+          </div>
+          <button class="button button-ghost document-preview-close" type="button" data-preview-action="close">Close</button>
+        </div>
+        <iframe id="document-preview-frame" class="document-preview-frame" title="Document preview"></iframe>
+      </section>
+    </div>
+
+    <script src="/config.js?v=334eac1"></script>
+    <script src="/workflow.js?v=334eac1"></script>
   </body>
 </html>
