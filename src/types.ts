@@ -19,6 +19,7 @@ export type FeatureVector = Record<FeatureKey, number>;
 export type AppUserRole = 'ADMIN' | 'EMPLOYEE' | 'EVALUATOR';
 export type UploadDocumentKind = 'REQUIREMENT' | 'GUIDELINE' | 'TRAINING_SUPPORT';
 export type TrainingStatus = 'DRAFT' | 'LABELED' | 'VALIDATED';
+export type EmployeeUploadType = 'score-sheet' | 'evidence' | 'legacy';
 export type UploadPanelKey =
   | 'kra1_teaching_effectiveness'
   | 'kra1_curriculum_instructional_materials'
@@ -92,7 +93,7 @@ export interface DocumentExtractionResult {
   detectedFields: string[];
   completenessScore: number;
   qualityScore: number;
-  extractedScores: Partial<FeatureVector>;
+  extractedScores: Record<string, number>;
 }
 
 export interface DocumentAnalysisResult {
@@ -101,11 +102,21 @@ export interface DocumentAnalysisResult {
   textLength: number;
   completenessScore: number;
   qualityScore: number;
-  extractedScores: Partial<FeatureVector>;
+  extractedScores: Record<string, number>;
   detectedFields: string[];
   detectedCategories: string[];
   keywordHits: string[];
   summary: string;
+}
+
+export interface EmployeeUploadWorkflowItem {
+  type: EmployeeUploadType;
+  title: string;
+  description: string;
+  acceptedFormats: string[];
+  maxFiles: number;
+  helperText: string;
+  uploadNotes: string[];
 }
 
 export interface FacultyIngestionPayload {
@@ -253,6 +264,7 @@ export type ProcessedUploadResult = {
   originalName: string;
   fileType: 'pdf' | 'image';
   documentId: string;
+  uploadType: EmployeeUploadType;
   panelKey: UploadPanelDefinition['key'];
   profileId: string | null;
   linkage: ProfileLinkResult;

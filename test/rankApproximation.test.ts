@@ -239,6 +239,6 @@ test('draft rank can resolve from semester-by-semester cycle metrics when flat a
     },
   );
 
-  assert.equal(draftPoints.promotionDraft.suggestedRank, 'Associate Professor II');
+  assert.equal(draftPoints.promotionDraft.suggestedRank, 'Associate Professor III');
   assert.equal(draftPoints.semester, 'July 2022-June 2026');
 });

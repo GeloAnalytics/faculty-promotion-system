@@ -40,7 +40,7 @@ app.get('/employee', (_req, res) => {
 app.get('/evaluator', (_req, res) => {
     res.sendFile(node_path_1.default.join(publicDir, 'evaluator.html'));
 });
-app.use(express_1.default.static(publicDir, { extensions: ['html'], maxAge: env_1.isProduction ? '1h' : 0 }));
+app.use(express_1.default.static(publicDir, { extensions: ['html'], maxAge: 0 }));
 // Mount API routes
 app.use('/api', index_1.default);
 // Global Error Handler

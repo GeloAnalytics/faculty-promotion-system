@@ -17,9 +17,9 @@
       <main class="content-grid dashboard-grid dashboard-grid-employee">
         <header class="hero panel panel-wide">
           <p class="eyebrow">Employee Portal</p>
-          <h1 id="workspace-greeting">Hello. Enter your faculty record and upload your supporting documents here for faculty promotion.</h1>
+          <h1 id="workspace-greeting">Upload your score sheet and evidence. The system will OCR the documents and prepare the draft score for review.</h1>
           <p class="hero-text">
-            Complete your faculty record and upload the supporting documents needed for faculty promotion.
+            The employee flow is now document-first: one score sheet, one evidence bundle, and no manual typing for criterion scores.
           </p>
           <div class="hero-meta">
             <div class="stat-card session-card">
@@ -33,212 +33,49 @@
         </header>
 
         <nav class="section-nav" id="section-nav">
-          <a class="nav-chip" href="#faculty-panel">Faculty Record</a>
-          <a class="nav-chip" href="#draft-points-panel">Scoring</a>
-          <a class="nav-chip" href="#upload-panels">Upload Evidence</a>
-          <a class="nav-chip" href="#uploaded-files-panel">Uploaded Files</a>
-          <a class="nav-chip" href="#employee-profiles-panel">Profiles</a>
-          <a class="nav-chip" href="#employee-logs-panel">Upload Logs</a>
+          <a class="nav-chip" href="#employee-summary-panel">Score Summary</a>
+          <a class="nav-chip" href="#employee-workflow-panel">Uploads</a>
+          <a class="nav-chip" href="#employee-files-panel">Uploaded Files</a>
         </nav>
 
-        <section class="panel dashboard-main" id="faculty-panel">
+        <section class="panel dashboard-side panel-sticky" id="employee-summary-panel">
           <div class="panel-heading">
             <div>
-              <p class="section-kicker">Faculty Record</p>
-              <h2>Maintain your baseline profile and current cycle data</h2>
-              <p class="card-copy" id="faculty-form-mode">Create a baseline profile, then keep the current cycle fields updated so the rank estimate stays usable.</p>
-            </div>
-            <button class="button button-secondary" id="faculty-reset-button" type="button">Start New Record</button>
-          </div>
-          <details class="faculty-form-toggle" id="faculty-form-toggle" open>
-            <summary>
-              <span>Edit faculty information</span>
-              <span class="toggle-chevron">▶</span>
-            </summary>
-          <form id="faculty-form" class="stack-form">
-            <section class="form-section-card">
-              <div class="form-section-heading">
-                <div>
-                  <h3>Baseline Profile</h3>
-                  <p class="field-help">Keep identity, rank, and attainment accurate here.</p>
-                </div>
-              </div>
-              <div class="field-row">
-                <label class="field">
-                  <span>Faculty name</span>
-                  <input type="text" id="fullName" placeholder="Enter your full name" required />
-                </label>
-                <label class="field">
-                  <span>Employee ID</span>
-                  <input
-                    type="text"
-                    id="employeeId"
-                    placeholder="Enter 10-digit employee ID"
-                    inputmode="numeric"
-                    maxlength="10"
-                    pattern="[0-9]{10}"
-                    required
-                  />
-                </label>
-              </div>
-              <div class="field-row">
-                <label class="field">
-                  <span>Current academic rank</span>
-                  <select id="academicRank" required>
-                    <option value="">Select current rank</option>
-                  </select>
-                </label>
-                <label class="field">
-                  <span>Highest attainment</span>
-                  <select id="attainment" required>
-                    <option value="">Select attainment</option>
-                  </select>
-                </label>
-              </div>
-              <div class="field-row">
-                <label class="field">
-                  <span>Years in service</span>
-                  <input type="number" id="yearsInService" min="0" step="1" />
-                </label>
-              </div>
-            </section>
-            <section class="form-section-card">
-              <div class="form-section-heading">
-                <div>
-                  <h3>Promotion History</h3>
-                  <p class="field-help">Past promotions help the system track the one-time doctorate qualification bonus correctly.</p>
-                </div>
-                <button class="button button-ghost" id="add-promotion-history" type="button">Add History Row</button>
-              </div>
-              <div id="promotion-history-list" class="promotion-history-list"></div>
-            </section>
-            <section class="form-section-card">
-              <div class="form-section-heading">
-                <div>
-                  <h3>Current Promotion Cycle</h3>
-                  <p class="field-help">Enter the semester scores for the fixed review cycle. Yearly and overall averages are computed automatically.</p>
-                </div>
-              </div>
-              <div class="cycle-period-banner">
-                <div>
-                  <span class="cycle-period-label">Review period</span>
-                  <strong id="review-period-display">July 2022-June 2026</strong>
-                </div>
-                <p class="card-copy">Inclusive academic years: 2022-2023, 2023-2024, 2024-2025, and 2025-2026.</p>
-              </div>
-              <div class="field-row">
-                <label class="field">
-                  <span>Administrative experience</span>
-                  <input type="number" id="administrativeExperience" min="0" step="0.01" />
-                </label>
-              </div>
-              <div id="cycle-metrics-grid" class="cycle-metrics-grid"></div>
-            </section>
-            <div class="form-action-row">
-              <button class="button button-primary" id="faculty-submit-button" type="submit">Save Faculty Record</button>
-              <button class="button button-ghost" type="button" data-scroll-target="#employee-profiles-panel">View Saved Profiles</button>
-            </div>
-          </form>
-          </details>
-          <div id="faculty-form-saved" class="faculty-form-summary" style="display:none"></div>
-          <div id="faculty-result" class="notice">No faculty record saved yet.</div>
-        </section>
-
-        <section class="panel dashboard-side panel-sticky" id="draft-points-panel">
-          <div class="panel-heading">
-            <div>
-              <p class="section-kicker">Approximate Scoring</p>
-              <h2>Employee-side approximate score and coverage summary</h2>
+              <p class="section-kicker">Score Summary</p>
+              <h2>OCR status and computed draft</h2>
             </div>
           </div>
           <div id="employee-points" class="database-viewer">
-            <div class="notice">Save a faculty record and upload files to generate an approximate score view.</div>
+            <div class="notice">Your OCR-backed summary will appear after the first upload.</div>
           </div>
         </section>
 
-        <section class="panel dashboard-main" id="upload-panels">
+        <section class="panel dashboard-main" id="employee-workflow-panel">
           <div class="panel-heading">
             <div>
-              <p class="section-kicker">Upload Panels</p>
-              <h2>Submit evidence for each criterion under every KRA</h2>
+              <p class="section-kicker">Upload Workflow</p>
+              <h2>Only two things are needed from the employee</h2>
             </div>
           </div>
-          <div id="upload-panel-grid" class="upload-groups"></div>
+          <div id="employee-upload-workflow" class="workflow-grid"></div>
+          <div id="employee-upload-status" class="notice workflow-status">Waiting for uploads.</div>
         </section>
 
-        <section class="panel dashboard-main" id="uploaded-files-panel">
-          <details class="collapsible-section" open>
-            <summary>
-              <div class="panel-heading" style="margin-bottom:0">
-                <div>
-                  <p class="section-kicker">Uploaded Files</p>
-                  <h2>Your submitted evidence files grouped by criterion</h2>
-                </div>
-              </div>
-              <span class="section-toggle-icon">&#9654;</span>
-            </summary>
-            <div class="uploaded-files-toolbar">
-              <label class="field uploaded-files-filter-field">
-                <span>Search files</span>
-                <input
-                  type="search"
-                  id="uploaded-files-search"
-                  placeholder="Filter by file name, criterion, or summary"
-                />
-              </label>
-              <label class="field uploaded-files-filter-field">
-                <span>Criterion</span>
-                <select id="uploaded-files-panel-filter">
-                  <option value="">All criteria</option>
-                </select>
-              </label>
+        <section class="panel dashboard-main" id="employee-files-panel">
+          <div class="panel-heading">
+            <div>
+              <p class="section-kicker">Uploaded Files</p>
+              <h2>Stored score sheet and evidence</h2>
             </div>
-            <div id="uploaded-files-filter-status" class="uploaded-files-filter-status">
-              Showing all uploaded files.
-            </div>
-            <div id="uploaded-files-viewer" class="database-viewer">
-              <div class="notice">Uploaded files will appear here after submission.</div>
-            </div>
-          </details>
-        </section>
-
-        <section class="panel dashboard-side" id="employee-profiles-panel">
-          <details class="collapsible-section">
-            <summary>
-              <div class="panel-heading" style="margin-bottom:0">
-                <div>
-                  <p class="section-kicker">Saved Profiles</p>
-                  <h2>Your faculty records</h2>
-                </div>
-              </div>
-              <span class="section-toggle-icon">&#9654;</span>
-            </summary>
-            <div id="employee-profiles" class="database-viewer">
-              <div class="notice">Saved faculty profiles will appear here.</div>
-            </div>
-          </details>
-        </section>
-
-        <section class="panel dashboard-main" id="employee-logs-panel">
-          <details class="collapsible-section">
-            <summary>
-              <div class="panel-heading" style="margin-bottom:0">
-                <div>
-                  <p class="section-kicker">Upload Logs</p>
-                  <h2>Your recent uploaded files</h2>
-                </div>
-              </div>
-              <span class="section-toggle-icon">&#9654;</span>
-            </summary>
-            <div id="employee-logs" class="database-viewer">
-              <div class="notice">Uploaded file logs will appear here.</div>
-            </div>
-          </details>
+          </div>
+          <div id="employee-upload-list" class="database-viewer">
+            <div class="notice">Uploaded files will appear here after submission.</div>
+          </div>
         </section>
       </main>
     </div>
 
     <script src="/config.js?v=334eaba"></script>
-    <script type="module" src="/app.js?v=334eaba"></script>
+    <script src="/workflow.js?v=334eaba"></script>
   </body>
 </html>

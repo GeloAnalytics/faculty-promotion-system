@@ -31,6 +31,7 @@ type PromotionDraftSnapshot = {
 };
 
 type ParsedDocumentMetadata = {
+  uploadType: string | null;
   panelKey: string | null;
   panelTitle: string | null;
   analysisSummary: string | null;
@@ -47,6 +48,7 @@ export function summarizeDocumentMetadata(value: unknown): ParsedDocumentMetadat
   const linkage = readJsonObject(metadata.linkage);
 
   return {
+    uploadType: typeof metadata.uploadType === 'string' ? metadata.uploadType : null,
     panelKey: typeof metadata.panelKey === 'string' ? metadata.panelKey : null,
     panelTitle: typeof metadata.panelTitle === 'string' ? metadata.panelTitle : null,
     analysisSummary: typeof analysis.summary === 'string' ? analysis.summary : null,

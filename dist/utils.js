@@ -4,8 +4,10 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.findGuidelinePdfPath = exports.extractGuidelineReference = exports.findClosestTqeBenchmarks = exports.summarizeTqeReferenceData = exports.loadTqeReferenceData = exports.inferPromotionOutcome = exports.runThesisWorkflow = exports.generateRecommendations = exports.compareModels = exports.selectSignificantFeatures = exports.buildFeatureVector = exports.analyzeDocumentContent = exports.extractDocumentInsights = void 0;
+exports.inferBestUploadPanelKey = inferBestUploadPanelKey;
 const types_1 = require("./types");
 const uploadPanels_1 = require("./uploadPanels");
+const uploadPanels_2 = require("./uploadPanels");
 const node_fs_1 = __importDefault(require("node:fs"));
 const node_path_1 = __importDefault(require("node:path"));
 const featureLabels = {
@@ -36,13 +38,24 @@ const metricProfiles = {
 };
 const extractDocumentInsights = (text) => {
     const normalizedText = text.replace(/\s+/g, ' ').trim();
-    const extractedScores = {
-        teachingEffectiveness: extractScore(normalizedText, /teaching effectiveness[:\s]*(\d+(\.\d+)?)/i),
-        researchOutputs: extractScore(normalizedText, /research outputs?[:\s]*(\d+(\.\d+)?)/i),
-        extensionServices: extractScore(normalizedText, /extension( services)?[:\s]*(\d+(\.\d+)?)/i),
-        ipcrAverage: extractScore(normalizedText, /ipcr( average)?[:\s]*(\d+(\.\d+)?)/i),
-        professionalDevelopmentHours: extractScore(normalizedText, /(training|professional development)( hours)?[:\s]*(\d+(\.\d+)?)/i),
-    };
+    const extractedScores = {};
+    const coreScorePatterns = [
+        ['teachingEffectiveness', /teaching effectiveness[:\s]*(\d+(\.\d+)?)/i],
+        ['researchOutputs', /research outputs?[:\s]*(\d+(\.\d+)?)/i],
+        ['extensionServices', /extension( services)?[:\s]*(\d+(\.\d+)?)/i],
+        ['ipcrAverage', /ipcr( average)?[:\s]*(\d+(\.\d+)?)/i],
+        ['professionalDevelopmentHours', /(training|professional development)( hours)?[:\s]*(\d+(\.\d+)?)/i],
+    ];
+    for (const [key, pattern] of coreScorePatterns) {
+        const score = extractScore(normalizedText, pattern);
+        if (score !== undefined) {
+            extractedScores[key] = score;
+        }
+    }
+    const criterionScores = extractCriterionScores(normalizedText);
+    for (const [key, value] of Object.entries(criterionScores)) {
+        extractedScores[key] = value;
+    }
     const detectedFields = Object.entries(extractedScores)
         .filter(([, value]) => value !== undefined)
         .map(([key]) => key);
@@ -91,6 +104,28 @@ const analyzeDocumentContent = (text, panelKey, source) => {
     };
 };
 exports.analyzeDocumentContent = analyzeDocumentContent;
+function inferBestUploadPanelKey(text, fallback = 'kra1_teaching_effectiveness') {
+    const normalizedText = text.toLowerCase();
+    let bestPanelKey = fallback;
+    let bestScore = -1;
+    for (const [panelKey, keywords] of Object.entries(uploadPanels_1.uploadPanelKeywordMap)) {
+        let score = 0;
+        for (const keyword of keywords) {
+            if (normalizedText.includes(keyword.toLowerCase())) {
+                score += 1;
+            }
+        }
+        const label = uploadPanels_1.uploadPanelLabelMap[panelKey].toLowerCase();
+        if (normalizedText.includes(label)) {
+            score += 2;
+        }
+        if (score > bestScore) {
+            bestScore = score;
+            bestPanelKey = panelKey;
+        }
+    }
+    return bestScore > 0 ? bestPanelKey : fallback;
+}
 const buildFeatureVector = (payload) => {
     const attainment = mapEducationalAttainment(payload.personalData.highestEducationalAttainment);
     const latestPromotionCount = payload.promotionHistory.filter((entry) => entry.promoted).length;
@@ -325,6 +360,42 @@ function buildDocumentSummary(panelKey, detectedFields, detectedCategories, text
     const fieldCount = detectedFields.length;
     const categoryCount = detectedCategories.length;
     return `${uploadPanels_1.uploadPanelLabelMap[panelKey]} analysis detected ${fieldCount} score field(s), ${categoryCount} panel-aligned category match(es), and ${textLength} extracted characters.`;
+}
+function extractCriterionScores(text) {
+    return uploadPanels_2.uploadPanels.reduce((scores, panel) => {
+        const patterns = buildCriterionScorePatterns(panel.title, panel.kraTitle, panel.description);
+        for (const pattern of patterns) {
+            const value = extractScore(text, pattern);
+            if (value !== undefined) {
+                scores[panel.key] = value;
+                break;
+            }
+        }
+        return scores;
+    }, {});
+}
+function buildCriterionScorePatterns(title, kraTitle, description) {
+    const tokens = [title, kraTitle, description]
+        .flatMap((value) => value.split(/[\s,/-]+/g))
+        .map((value) => value.trim())
+        .filter(Boolean);
+    const escapedTitle = escapeRegex(title);
+    const escapedKra = escapeRegex(kraTitle);
+    const tokenPattern = tokens
+        .slice(0, 6)
+        .map((token) => escapeRegex(token))
+        .join('|');
+    const patterns = [
+        new RegExp(`${escapedTitle}[\\s\\S]{0,70}?(\\d+(?:\\.\\d+)?)`, 'i'),
+        new RegExp(`${escapedKra}[\\s\\S]{0,70}?(\\d+(?:\\.\\d+)?)`, 'i'),
+    ];
+    if (tokenPattern) {
+        patterns.push(new RegExp(`(?:${tokenPattern})[\\s\\S]{0,70}?(\\d+(?:\\.\\d+)?)`, 'i'));
+    }
+    return patterns;
+}
+function escapeRegex(value) {
+    return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 function calculateBaseProbability(features) {
     const weightedSum = features.highestEducationalAttainmentLevel * 0.12 +

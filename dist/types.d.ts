@@ -4,6 +4,7 @@ export type FeatureVector = Record<FeatureKey, number>;
 export type AppUserRole = 'ADMIN' | 'EMPLOYEE' | 'EVALUATOR';
 export type UploadDocumentKind = 'REQUIREMENT' | 'GUIDELINE' | 'TRAINING_SUPPORT';
 export type TrainingStatus = 'DRAFT' | 'LABELED' | 'VALIDATED';
+export type EmployeeUploadType = 'score-sheet' | 'evidence' | 'legacy';
 export type UploadPanelKey = 'kra1_teaching_effectiveness' | 'kra1_curriculum_instructional_materials' | 'kra1_thesis_dissertation_mentorship' | 'kra2_research_outputs' | 'kra2_inventions' | 'kra2_creative_works' | 'kra3_service_to_institution' | 'kra3_service_to_community' | 'kra3_extension_involvement' | 'kra4_professional_organizations' | 'kra4_continuing_development' | 'kra4_awards_recognition' | 'kra4_academic_experience' | 'kra4_industry_experience';
 export type UploadPanelAudience = 'ALL_FACULTY' | 'NEW_ENTRANTS_ONLY';
 export interface PersonalData {
@@ -25,6 +26,23 @@ export interface PerformanceReview {
     extensionServices?: number;
     administrativeExperience?: number;
     professionalDevelopmentHours?: number;
+    cycleMetrics?: CycleMetrics;
+}
+export interface CycleMetricYearEntry {
+    yearLabel: string;
+    firstSemester?: number;
+    secondSemester?: number;
+    yearlyAverage?: number;
+}
+export interface CycleMetricSummary {
+    average?: number;
+    yearlyEntries: CycleMetricYearEntry[];
+}
+export interface CycleMetrics {
+    ipcrAverage?: CycleMetricSummary;
+    teachingEffectiveness?: CycleMetricSummary;
+    researchOutputs?: CycleMetricSummary;
+    extensionServices?: CycleMetricSummary;
 }
 export interface PromotionHistoryEntry {
     cycle?: string;
@@ -38,7 +56,7 @@ export interface DocumentExtractionResult {
     detectedFields: string[];
     completenessScore: number;
     qualityScore: number;
-    extractedScores: Partial<FeatureVector>;
+    extractedScores: Record<string, number>;
 }
 export interface DocumentAnalysisResult {
     source: 'pdf' | 'image' | 'csv' | 'manual';
@@ -46,11 +64,20 @@ export interface DocumentAnalysisResult {
     textLength: number;
     completenessScore: number;
     qualityScore: number;
-    extractedScores: Partial<FeatureVector>;
+    extractedScores: Record<string, number>;
     detectedFields: string[];
     detectedCategories: string[];
     keywordHits: string[];
     summary: string;
+}
+export interface EmployeeUploadWorkflowItem {
+    type: EmployeeUploadType;
+    title: string;
+    description: string;
+    acceptedFormats: string[];
+    maxFiles: number;
+    helperText: string;
+    uploadNotes: string[];
 }
 export interface FacultyIngestionPayload {
     personalData: PersonalData;
@@ -175,6 +202,7 @@ export type ProcessedUploadResult = {
     originalName: string;
     fileType: 'pdf' | 'image';
     documentId: string;
+    uploadType: EmployeeUploadType;
     panelKey: UploadPanelDefinition['key'];
     profileId: string | null;
     linkage: ProfileLinkResult;
