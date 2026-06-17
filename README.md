@@ -22,6 +22,9 @@ The active user-facing interface is the static portal in `public/`. The Vue app 
 - Employees can receive a preliminary rank estimate even before evaluator scoring is completed.
 - The employee-side approximate score summary now stays sticky during scroll without being covered by the upload panels.
 - Evaluator scoring still takes priority and produces the stronger draft-rank recommendation once available.
+- The backend dashboard summary now mirrors the reference workbook structure with parsed request-form name parts, KRA totals, score-bracket labels, and faculty-versus-validated score comparison.
+- KRA II terminology now matches the workbook wording: `Research, Innovation and Creative Work`.
+- The active runtime UI still needs a direct workbook-mirror presentation layer for the new summary payload.
 - Live machine-learning prediction inside the deployed API is intentionally disabled.
 - Offline ML training, comparison, and explainability reporting are implemented in `ml/`.
 
@@ -52,6 +55,7 @@ The active user-facing interface is the static portal in `public/`. The Vue app 
 - Employee-side evidence coverage summary
 - Preliminary employee-side rank estimation from inputs and uploaded evidence
 - Evaluator-backed draft-rank computation from criterion scores
+- Workbook-mirror summary payload that aligns the backend with the reference spreadsheet structure
 - Standardized faculty rank and educational-attainment option catalogs from the backend
 - Dataset export for offline machine learning
 - Admin database overview
