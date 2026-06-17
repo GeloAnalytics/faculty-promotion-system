@@ -3,9 +3,9 @@ import { z } from 'zod';
 import pdf from 'pdf-parse';
 import { prisma } from '../config/db';
 import { uploadPanels } from '../uploadPanels';
-import { analyzeDocumentContent } from '../utils';
+import { analyzeDocumentContent, inferBestUploadPanelKey } from '../utils';
 import { extractImageTextWithOcr, type OcrConfig } from '../ocr';
-import { UploadPanelDefinition, ProcessedUploadResult, ProfileLinkResult } from '../types';
+import { EmployeeUploadType, UploadPanelDefinition, ProcessedUploadResult, ProfileLinkResult } from '../types';
 import { findBestMatchingProfile, scoreProfileFilename } from './profileMatching';
 
 export function parseDocumentKind(input: unknown): DocumentKind {
@@ -25,6 +25,18 @@ export function parseUploadPanelKey(input: unknown): UploadPanelDefinition['key'
   return matched ? matched.key : uploadPanels[0].key;
 }
 
+export function parseEmployeeUploadType(input: unknown): EmployeeUploadType {
+  if (input === 'evidence') {
+    return 'evidence';
+  }
+
+  if (input === 'score-sheet') {
+    return 'score-sheet';
+  }
+
+  return 'legacy';
+}
+
 export function findUploadPanelDefinition(panelKey: UploadPanelDefinition['key']) {
   return uploadPanels.find((panel) => panel.key === panelKey) ?? uploadPanels[0];
 }
@@ -36,9 +48,10 @@ export async function processUploadedDocument(args: {
   kind: DocumentKind;
   panelKey: UploadPanelDefinition['key'];
   panelTitle: string;
+  uploadType: EmployeeUploadType;
   ocrConfig: OcrConfig;
 }): Promise<ProcessedUploadResult> {
-  const { file, ownerUserId, requestedProfileId, kind, panelKey, panelTitle, ocrConfig } = args;
+  const { file, ownerUserId, requestedProfileId, kind, panelKey, panelTitle, uploadType, ocrConfig } = args;
   const mimeType = file.mimetype.toLowerCase();
   const fileName = file.originalname;
   const isCsv = /\.csv$/i.test(fileName);
@@ -53,7 +66,9 @@ export async function processUploadedDocument(args: {
 
   if (mimeType === 'application/pdf' || fileName.toLowerCase().endsWith('.pdf')) {
     const data = await pdf(file.buffer);
-    const analysis = analyzeDocumentContent(data.text, panelKey, 'pdf');
+    const detectedPanelKey = inferBestUploadPanelKey(data.text, panelKey);
+    const detectedPanelDefinition = findUploadPanelDefinition(detectedPanelKey);
+    const analysis = analyzeDocumentContent(data.text, detectedPanelKey, 'pdf');
 
     const savedDocument = await prisma.uploadedDocument.create({
       data: {
@@ -64,8 +79,9 @@ export async function processUploadedDocument(args: {
         mimeType: file.mimetype,
         extractedText: data.text,
         extractionMetadata: toPrismaJson({
-          panelKey,
-          panelTitle,
+          uploadType,
+          panelKey: detectedPanelKey,
+          panelTitle: detectedPanelDefinition.title,
           storedForTraining: true,
           analysis,
           linkage,
@@ -77,7 +93,8 @@ export async function processUploadedDocument(args: {
       originalName: fileName,
       fileType: 'pdf',
       documentId: savedDocument.id,
-      panelKey,
+      uploadType,
+      panelKey: detectedPanelKey,
       profileId,
       linkage,
       textPreview: data.text.slice(0, 1000),
@@ -88,7 +105,9 @@ export async function processUploadedDocument(args: {
   if (mimeType.startsWith('image/') || /\.(png|jpg|jpeg|bmp|tif|tiff)$/i.test(fileName)) {
     const ocrResult = await extractImageTextWithOcr(file.buffer, fileName, ocrConfig);
     const extractedText = ocrResult.text.trim();
-    const analysis = analyzeDocumentContent(extractedText, panelKey, 'image');
+    const detectedPanelKey = inferBestUploadPanelKey(extractedText, panelKey);
+    const detectedPanelDefinition = findUploadPanelDefinition(detectedPanelKey);
+    const analysis = analyzeDocumentContent(extractedText, detectedPanelKey, 'image');
 
     const savedDocument = await prisma.uploadedDocument.create({
       data: {
@@ -99,8 +118,9 @@ export async function processUploadedDocument(args: {
         mimeType: file.mimetype,
         extractedText,
         extractionMetadata: toPrismaJson({
-          panelKey,
-          panelTitle,
+          uploadType,
+          panelKey: detectedPanelKey,
+          panelTitle: detectedPanelDefinition.title,
           storedForTraining: true,
           ocr: {
             provider: ocrResult.provider,
@@ -116,7 +136,8 @@ export async function processUploadedDocument(args: {
       originalName: fileName,
       fileType: 'image',
       documentId: savedDocument.id,
-      panelKey,
+      uploadType,
+      panelKey: detectedPanelKey,
       profileId,
       linkage,
       textPreview: extractedText.slice(0, 1000),

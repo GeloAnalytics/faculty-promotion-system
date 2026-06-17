@@ -1,6 +1,7 @@
 import type { DocumentAnalysisResult, DocumentExtractionResult, FacultyIngestionPayload, FeatureSelectionResult, FeatureVector, GuidelineReference, ModelComparisonResult, Recommendation, ThesisWorkflowResult, TqeBenchmarkMatch, TqeRecord, TqeReferenceSummary, UploadPanelKey } from './types';
 export declare const extractDocumentInsights: (text: string) => DocumentExtractionResult;
 export declare const analyzeDocumentContent: (text: string, panelKey: UploadPanelKey, source: DocumentAnalysisResult["source"]) => DocumentAnalysisResult;
+export declare function inferBestUploadPanelKey(text: string, fallback?: UploadPanelKey): UploadPanelKey;
 export declare const buildFeatureVector: (payload: FacultyIngestionPayload) => FeatureVector;
 export declare const selectSignificantFeatures: (features: FeatureVector) => FeatureSelectionResult[];
 export declare const compareModels: (features: FeatureVector) => ModelComparisonResult[];

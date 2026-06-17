@@ -17,9 +17,9 @@
       <main class="content-grid dashboard-grid dashboard-grid-evaluator">
         <header class="hero panel panel-wide">
           <p class="eyebrow">Evaluator Portal</p>
-          <h1 id="workspace-greeting">Hello. Here are the logs and records for evaluation.</h1>
+          <h1 id="workspace-greeting">Review the uploaded PDFs, verify the OCR output, and confirm whether the system score matches the documents.</h1>
           <p class="hero-text">
-            Review employee submissions, inspect uploaded evidence, and complete the scoring workflow here.
+            The evaluator role is now read-only: view the upload evidence, check the OCR extraction, and double-check the computed scores.
           </p>
           <div class="hero-meta">
             <div class="stat-card session-card">
@@ -33,17 +33,15 @@
         </header>
 
         <nav class="section-nav" id="section-nav">
-          <a class="nav-chip" href="#insights-panel">Insights</a>
-          <a class="nav-chip" href="#review-queue-panel">Review Queue</a>
-          <a class="nav-chip" href="#scoring-panel">Actual Scoring</a>
-          <a class="nav-chip" href="#database-panel">Database Viewer</a>
+          <a class="nav-chip" href="#evaluator-insights-panel">Overview</a>
+          <a class="nav-chip" href="#evaluator-queue-panel">Review Queue</a>
         </nav>
 
-        <section class="panel panel-wide" id="insights-panel">
+        <section class="panel panel-wide" id="evaluator-insights-panel">
           <div class="panel-heading">
             <div>
-              <p class="section-kicker">Evaluator Insights</p>
-              <h2>Visual summary of employee review data</h2>
+              <p class="section-kicker">Overview</p>
+              <h2>Read-only review summary</h2>
             </div>
           </div>
           <div id="evaluator-insights" class="evaluator-insights">
@@ -51,264 +49,22 @@
           </div>
         </section>
 
-        <section class="panel dashboard-main" id="review-queue-panel">
+        <section class="panel panel-wide" id="evaluator-queue-panel">
           <div class="panel-heading">
             <div>
-              <p class="section-kicker">Employee Logs</p>
-              <h2>Review queue grouped by employee profile</h2>
+              <p class="section-kicker">Review Queue</p>
+              <h2>Uploaded documents and computed scores</h2>
             </div>
           </div>
-          <div class="uploaded-files-toolbar review-queue-toolbar">
-            <label class="field uploaded-files-filter-field">
-              <span>Search queue</span>
-              <input
-                type="search"
-                id="review-queue-search"
-                placeholder="Search faculty, employee ID, file name, or upload summary"
-              />
-            </label>
-            <label class="field uploaded-files-filter-field">
-              <span>Filter by status</span>
-              <select id="review-queue-status-filter">
-                <option value="">All statuses</option>
-                <option value="ready">Ready</option>
-                <option value="preliminary">Preliminary</option>
-                <option value="needs-exact-rank">Needs exact rank</option>
-                <option value="pending-doctoral-attainment">Pending doctorate attainment</option>
-                <option value="pending-professor-accreditation">Pending professor accreditation</option>
-                <option value="pending-cup-certification">Pending committee certification</option>
-                <option value="pending-review">Pending review</option>
-              </select>
-            </label>
-            <label class="field uploaded-files-filter-field">
-              <span>Filter by confidence</span>
-              <select id="review-queue-confidence-filter">
-                <option value="">All confidence levels</option>
-                <option value="high">High</option>
-                <option value="medium">Medium</option>
-                <option value="low">Low</option>
-                <option value="pending">Pending</option>
-              </select>
-            </label>
-            <label class="field uploaded-files-filter-field">
-              <span>Filter by upload panel</span>
-              <select id="review-queue-panel-filter">
-                <option value="">All upload panels</option>
-              </select>
-            </label>
-          </div>
-          <p id="review-queue-filter-status" class="uploaded-files-filter-status">
-            Loading review queue...
-          </p>
+          <div id="review-queue-filter-status" class="uploaded-files-filter-status">Loading review queue...</div>
           <div id="review-queue" class="database-viewer">
             <div class="notice">Loading employee submission logs...</div>
-          </div>
-        </section>
-
-        <section class="panel dashboard-side panel-sticky" id="scoring-panel">
-          <div class="panel-heading">
-            <div>
-              <p class="section-kicker">Actual Scoring</p>
-              <h2>Apply evaluator decision to the selected record</h2>
-            </div>
-          </div>
-          <form id="training-form" class="stack-form">
-            <div class="field-row">
-              <label class="field">
-                <span>Employee ID</span>
-                <input type="text" id="training-employee-id" placeholder="Use an employee ID from the queue above" />
-              </label>
-              <label class="field">
-                <span>Promotion outcome</span>
-                <select id="training-label">
-                  <option value="true">Promoted</option>
-                  <option value="false">Not Promoted</option>
-                </select>
-              </label>
-            </div>
-            <div class="panel panel-inner">
-              <div class="panel-heading">
-                <div>
-                  <p class="section-kicker">Criterion Scores</p>
-                  <h3>Score each uploaded criterion using the Annex I maxima</h3>
-                </div>
-                <div class="score-total-card">
-                  <span class="stat-label">Current total</span>
-                  <strong id="training-score-total">0</strong>
-                </div>
-              </div>
-              <div id="training-criteria" class="criteria-layout">
-                <div class="notice">Loading criterion-based scoring fields...</div>
-              </div>
-            </div>
-            <label class="field">
-              <span>Notes</span>
-              <input type="text" id="training-notes" placeholder="Optional evaluator notes" />
-            </label>
-            <button class="button button-secondary" type="submit">Save Evaluator Score</button>
-          </form>
-          <div id="training-result" class="notice">Enter an employee ID to begin scoring.</div>
-        </section>
-
-        <section class="panel dashboard-main" id="summary-sheet-panel">
-          <div class="panel-heading summary-sheet-heading">
-            <div>
-              <p class="section-kicker">Printable Summary Sheet</p>
-              <h2>Edit the name block and sign-off lines before exporting to PDF</h2>
-              <p class="card-copy">
-                Load a selected record from the review queue, adjust the fields to match the reference sheet, then download the printable PDF version.
-              </p>
-            </div>
-            <div class="summary-sheet-actions">
-              <button class="button button-ghost" id="summary-sheet-load-button" type="button">Load Selected Record</button>
-              <button class="button button-primary" id="summary-sheet-download-button" type="button">Download PDF</button>
-            </div>
-          </div>
-          <div id="summary-sheet-status" class="notice">
-            Select a review queue record to populate the summary sheet fields.
-          </div>
-          <div class="summary-sheet-layout">
-            <form id="summary-sheet-form" class="stack-form summary-sheet-editor">
-              <section class="form-section-card">
-                <div class="form-section-heading">
-                  <div>
-                    <h3>Top Name Block</h3>
-                    <p class="field-help">These values print at the top of the summary sheet.</p>
-                  </div>
-                </div>
-                <div class="field-row">
-                  <label class="field">
-                    <span>Last name</span>
-                    <input type="text" id="summary-sheet-last-name" placeholder="Last name" />
-                  </label>
-                  <label class="field">
-                    <span>First name</span>
-                    <input type="text" id="summary-sheet-first-name" placeholder="First name" />
-                  </label>
-                </div>
-                <div class="field-row">
-                  <label class="field">
-                    <span>Middle name</span>
-                    <input type="text" id="summary-sheet-middle-name" placeholder="Middle name" />
-                  </label>
-                  <label class="field">
-                    <span>Extension</span>
-                    <input type="text" id="summary-sheet-extension-name" placeholder="Jr., Sr., III, etc." />
-                  </label>
-                </div>
-                <div class="field-row">
-                  <label class="field">
-                    <span>Employee ID</span>
-                    <input type="text" id="summary-sheet-employee-id" placeholder="Employee ID" />
-                  </label>
-                  <label class="field">
-                    <span>Record label</span>
-                    <input type="text" id="summary-sheet-record-label" placeholder="Cycle or record label" />
-                  </label>
-                </div>
-              </section>
-              <section class="form-section-card">
-                <div class="form-section-heading">
-                  <div>
-                    <h3>Sign-Off Lines</h3>
-                    <p class="field-help">Edit the names and dates so the PDF matches the reference sheet.</p>
-                  </div>
-                </div>
-                <div class="summary-signature-grid">
-                  <div class="summary-signature-column">
-                    <label class="field summary-signature-field">
-                      <span>IEC Member 1 name</span>
-                      <input type="text" id="summary-sheet-member-1-name" placeholder="Name" />
-                    </label>
-                    <label class="field summary-signature-field">
-                      <span>Date</span>
-                      <input type="text" id="summary-sheet-member-1-date" placeholder="MM/DD/YYYY" />
-                    </label>
-                  </div>
-                  <div class="summary-signature-column">
-                    <label class="field summary-signature-field">
-                      <span>IEC Member 2 name</span>
-                      <input type="text" id="summary-sheet-member-2-name" placeholder="Name" />
-                    </label>
-                    <label class="field summary-signature-field">
-                      <span>Date</span>
-                      <input type="text" id="summary-sheet-member-2-date" placeholder="MM/DD/YYYY" />
-                    </label>
-                  </div>
-                  <div class="summary-signature-column">
-                    <label class="field summary-signature-field">
-                      <span>IEC Member 3 name</span>
-                      <input type="text" id="summary-sheet-member-3-name" placeholder="Name" />
-                    </label>
-                    <label class="field summary-signature-field">
-                      <span>Date</span>
-                      <input type="text" id="summary-sheet-member-3-date" placeholder="MM/DD/YYYY" />
-                    </label>
-                  </div>
-                  <div class="summary-signature-column">
-                    <label class="field summary-signature-field">
-                      <span>IEC Member 4 name</span>
-                      <input type="text" id="summary-sheet-member-4-name" placeholder="Name" />
-                    </label>
-                    <label class="field summary-signature-field">
-                      <span>Date</span>
-                      <input type="text" id="summary-sheet-member-4-date" placeholder="MM/DD/YYYY" />
-                    </label>
-                  </div>
-                  <div class="summary-signature-column">
-                    <label class="field summary-signature-field">
-                      <span>IEC Chair name</span>
-                      <input type="text" id="summary-sheet-chair-name" placeholder="Name" />
-                    </label>
-                    <label class="field summary-signature-field">
-                      <span>Date</span>
-                      <input type="text" id="summary-sheet-chair-date" placeholder="MM/DD/YYYY" />
-                    </label>
-                  </div>
-                  <div class="summary-signature-column">
-                    <label class="field summary-signature-field">
-                      <span>Conforme name</span>
-                      <input type="text" id="summary-sheet-conforme-name" placeholder="Name" />
-                    </label>
-                    <label class="field summary-signature-field">
-                      <span>Date</span>
-                      <input type="text" id="summary-sheet-conforme-date" placeholder="MM/DD/YYYY" />
-                    </label>
-                  </div>
-                  <div class="summary-signature-column">
-                    <label class="field summary-signature-field">
-                      <span>Acknowledgment name</span>
-                      <input type="text" id="summary-sheet-acknowledgment-name" placeholder="Name" />
-                    </label>
-                    <label class="field summary-signature-field">
-                      <span>Date</span>
-                      <input type="text" id="summary-sheet-acknowledgment-date" placeholder="MM/DD/YYYY" />
-                    </label>
-                  </div>
-                </div>
-              </section>
-            </form>
-            <div class="summary-sheet-preview card">
-              <div id="summary-sheet-preview" class="summary-sheet-paper"></div>
-            </div>
-          </div>
-        </section>
-
-        <section class="panel dashboard-main" id="database-panel">
-          <div class="panel-heading">
-            <div>
-              <p class="section-kicker">Database Viewer</p>
-              <h2>See the latest stored records and counts</h2>
-            </div>
-          </div>
-          <div id="database-viewer" class="database-viewer">
-            <div class="notice">Loading database contents...</div>
           </div>
         </section>
       </main>
     </div>
 
     <script src="/config.js?v=334eaba"></script>
-    <script type="module" src="/app.js?v=334eaba"></script>
+    <script src="/workflow.js?v=334eaba"></script>
   </body>
 </html>

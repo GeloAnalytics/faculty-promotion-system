@@ -6,6 +6,7 @@ import { extractGuidelineReference } from '../utils';
 import { academicRankOptions, educationalAttainmentOptions } from '../constants/faculty';
 import { uploadPanels } from '../uploadPanels';
 import { tqeReferenceSummary, guidelinePdfPath } from '../config/globals';
+import { getEmployeeUploadWorkflowSummary } from '../uploadWorkflow';
 
 export const getTqeSummary = (_req: Request, res: Response) => {
   res.json({
@@ -20,6 +21,13 @@ export const getUploadPanels = (_req: Request, res: Response) => {
   res.json({
     modelStatus: 'inactive',
     panels: uploadPanels,
+  });
+};
+
+export const getEmployeeUploadWorkflow = (_req: Request, res: Response) => {
+  res.json({
+    modelStatus: 'inactive',
+    workflow: getEmployeeUploadWorkflowSummary(),
   });
 };
 

@@ -1,10 +1,61 @@
 import { uploadPanels } from '../uploadPanels';
 import { academicRankOptions, normalizeAcademicRankOption } from '../constants/faculty';
 import { fixedReviewPeriodLabel, reviewCycleMetricKeys, reviewCycleYearLabels } from '../constants/reviewCycle';
+import type { UploadPanelKey } from '../types';
 
 type EvaluatorAssessmentSnapshot = {
   totalScore: number;
   criterionScores?: Record<string, number>;
+};
+
+type NameParts = {
+  firstName: string | null;
+  middleName: string | null;
+  lastName: string | null;
+  extensionName: string | null;
+};
+
+type WorkbookCriterionSummary = {
+  key: UploadPanelKey;
+  title: string;
+  maxScore: number;
+  facultyScore: number | null;
+  validatedScore: number | null;
+  status: 'matched' | 'needs-review' | 'faculty-only' | 'validated-only' | 'missing';
+  evidenceCount: number;
+};
+
+type WorkbookKraSummary = {
+  title: string;
+  maxScore: number;
+  facultyScore: number | null;
+  validatedScore: number | null;
+  criteria: WorkbookCriterionSummary[];
+};
+
+type WorkbookSummaryMirror = {
+  requestForm: {
+    fullName: string | null;
+    nameParts: NameParts;
+    employeeId: string | null;
+    academicRank: string | null;
+    yearsInService: number | null;
+    highestEducationalAttainment: string | null;
+    reviewPeriod: string | null;
+    department: string | null;
+    notes: string | null;
+  };
+  kraSections: WorkbookKraSummary[];
+  summarySheet: {
+    facultyScore: number | null;
+    validatedScore: number | null;
+    scoreBracket: string | null;
+    comparisonStatus: 'matched' | 'needs-review' | 'faculty-only' | 'validated-only' | 'missing';
+    currentRank: string | null;
+    suggestedRank: string | null;
+    projectedRank: string | null;
+    basis: PromotionDraftSnapshot['basis'];
+  };
 };
 
 type PromotionDraftSnapshot = {
@@ -13,6 +64,7 @@ type PromotionDraftSnapshot = {
   projectedRank: string | null;
   evaluatorTotalScore: number | null;
   weightedScore: number | null;
+  scoreBracket: string | null;
   subrankIncrements: number | null;
   basis: 'employee-inputs' | 'evaluator' | 'pending-review';
   status:
@@ -31,10 +83,13 @@ type PromotionDraftSnapshot = {
 };
 
 type ParsedDocumentMetadata = {
+  uploadType: string | null;
   panelKey: string | null;
   panelTitle: string | null;
   analysisSummary: string | null;
   extractedScores: Record<string, number>;
+  panelScore: number | null;
+  panelMaxScore: number | null;
   completenessScore: number | null;
   qualityScore: number | null;
   linkage: string | null;
@@ -45,12 +100,17 @@ export function summarizeDocumentMetadata(value: unknown): ParsedDocumentMetadat
   const analysis = readJsonObject(metadata.analysis);
   const extractedScores = readNumberRecord(analysis.extractedScores);
   const linkage = readJsonObject(metadata.linkage);
+  const panelKey = typeof metadata.panelKey === 'string' ? metadata.panelKey : null;
+  const panelDefinition = panelKey ? uploadPanels.find((panel) => panel.key === panelKey) ?? null : null;
 
   return {
-    panelKey: typeof metadata.panelKey === 'string' ? metadata.panelKey : null,
+    uploadType: typeof metadata.uploadType === 'string' ? metadata.uploadType : null,
+    panelKey,
     panelTitle: typeof metadata.panelTitle === 'string' ? metadata.panelTitle : null,
     analysisSummary: typeof analysis.summary === 'string' ? analysis.summary : null,
     extractedScores,
+    panelScore: panelKey ? readOptionalNumber(extractedScores[panelKey]) : null,
+    panelMaxScore: panelDefinition ? panelDefinition.maxScore : null,
     completenessScore: readOptionalNumber(analysis.completenessScore),
     qualityScore: readOptionalNumber(analysis.qualityScore),
     linkage:
@@ -71,6 +131,8 @@ export function buildDraftPointSummary(
   const performanceReview = readJsonObject(rawInput.performanceReview);
   const promotionHistory = Array.isArray(rawInput.promotionHistory) ? rawInput.promotionHistory : [];
   const uploadedPanels = new Set<string>();
+  const panelScoreByKey = new Map<UploadPanelKey, number>();
+  const panelEvidenceCount = new Map<UploadPanelKey, number>();
 
   let instruction = resolvePerformanceMetricValue(performanceReview, 'teachingEffectiveness') ?? 0;
   let research = resolvePerformanceMetricValue(performanceReview, 'researchOutputs') ?? 0;
@@ -84,17 +146,43 @@ export function buildDraftPointSummary(
     const metadata = summarizeDocumentMetadata(document.extractionMetadata);
     if (metadata.panelKey) {
       uploadedPanels.add(metadata.panelKey);
+      const panelKey = metadata.panelKey as UploadPanelKey;
+      panelEvidenceCount.set(panelKey, (panelEvidenceCount.get(panelKey) ?? 0) + 1);
+      if (metadata.panelScore !== null) {
+        panelScoreByKey.set(panelKey, Math.max(panelScoreByKey.get(panelKey) ?? 0, metadata.panelScore));
+      }
     }
     if (metadata.completenessScore !== null) {
       completenessTotal += metadata.completenessScore;
       completenessSamples += 1;
     }
-    instruction = Math.max(instruction, metadata.extractedScores.teachingEffectiveness ?? 0);
-    research = Math.max(research, metadata.extractedScores.researchOutputs ?? 0);
-    extension = Math.max(extension, metadata.extractedScores.extensionServices ?? 0);
+    instruction = Math.max(
+      instruction,
+      getBestScore(metadata.extractedScores, ['teachingEffectiveness', 'kra1_teaching_effectiveness']),
+    );
+    research = Math.max(
+      research,
+      getBestScore(metadata.extractedScores, ['researchOutputs', 'kra2_research_outputs']),
+    );
+    extension = Math.max(
+      extension,
+      getBestScore(metadata.extractedScores, [
+        'extensionServices',
+        'kra3_service_to_institution',
+        'kra3_service_to_community',
+        'kra3_extension_involvement',
+      ]),
+    );
     professionalDevelopment = Math.max(
       professionalDevelopment,
-      metadata.extractedScores.professionalDevelopmentHours ?? 0,
+      getBestScore(metadata.extractedScores, [
+        'professionalDevelopmentHours',
+        'kra4_professional_organizations',
+        'kra4_continuing_development',
+        'kra4_awards_recognition',
+        'kra4_academic_experience',
+        'kra4_industry_experience',
+      ]),
     );
     ipcrAverage = Math.max(ipcrAverage, metadata.extractedScores.ipcrAverage ?? 0);
   }
@@ -102,11 +190,41 @@ export function buildDraftPointSummary(
   const coverage = uploadPanels.length ? uploadedPanels.size / uploadPanels.length : 0;
   const averagedCompleteness = completenessSamples ? completenessTotal / completenessSamples : 0;
   const overallEstimate = instruction + research + extension + professionalDevelopment + ipcrAverage;
+  const approximateKraTotals = computeApproximateKraTotals({
+    instruction,
+    research,
+    extension,
+    professionalDevelopment,
+    ipcrAverage,
+    coverage,
+    averagedCompleteness,
+  });
+  const currentRank =
+    typeof personalData.academicRank === 'string' ? normalizeAcademicRank(personalData.academicRank) : null;
+  const highestEducationalAttainment =
+    typeof personalData.highestEducationalAttainment === 'string' ? personalData.highestEducationalAttainment : null;
+  const hasDoctoralGraduateBonus = canUseDoctoralGraduateBonus(
+    normalizeAttainment(highestEducationalAttainment),
+    promotionHistory,
+  );
+  const preliminaryOutcome =
+    currentRank && getAcademicRankIndex(currentRank) >= 0
+      ? resolveOfficialRankOutcome(currentRank, approximateKraTotals, highestEducationalAttainment, hasDoctoralGraduateBonus)
+      : null;
+  const evaluatorAssessment = latestEvaluation?.assessment ?? null;
+  const hasEvaluatorScore =
+    (latestEvaluation?.status === 'LABELED' || latestEvaluation?.status === 'VALIDATED') &&
+    evaluatorAssessment !== null &&
+    Number.isFinite(evaluatorAssessment.totalScore);
+  const validatedCriterionScores = hasEvaluatorScore ? readNumberRecord(evaluatorAssessment?.criterionScores) : {};
+  const validatedKraTotals = hasEvaluatorScore ? computeKraTotals(validatedCriterionScores) : null;
+  const validatedOutcome =
+    currentRank && validatedKraTotals
+      ? resolveOfficialRankOutcome(currentRank, validatedKraTotals, highestEducationalAttainment, hasDoctoralGraduateBonus)
+      : null;
   const promotionDraft = buildPromotionDraftSnapshot(
-    typeof personalData.academicRank === 'string' ? personalData.academicRank : null,
-    typeof personalData.highestEducationalAttainment === 'string'
-      ? personalData.highestEducationalAttainment
-      : null,
+    currentRank,
+    highestEducationalAttainment,
     promotionHistory,
     {
       instruction,
@@ -118,7 +236,7 @@ export function buildDraftPointSummary(
       averagedCompleteness,
       uploadedPanelCount: uploadedPanels.size,
     },
-    latestEvaluation?.assessment ?? null,
+    evaluatorAssessment,
     latestEvaluation?.status ?? null,
   );
 
@@ -145,6 +263,20 @@ export function buildDraftPointSummary(
       workflowCoveragePercent: roundScore(coverage * 100),
     },
     promotionDraft,
+    workbookMirror: buildWorkbookMirrorSummary({
+      rawInput,
+      semester: profile?.semester ?? null,
+      highestEducationalAttainment,
+      currentRank,
+      panelScoreByKey,
+      panelEvidenceCount,
+      approximateKraTotals,
+      approximateOutcome: preliminaryOutcome,
+      validatedOutcome,
+      validatedKraTotals,
+      assessment: evaluatorAssessment,
+      promotionDraft,
+    }),
   };
 }
 
@@ -205,6 +337,25 @@ export function extractBaselineDataFromProfileFeatures(
       yearsInService: readOptionalNumber(personalData.yearsInService),
       highestEducationalAttainment:
         typeof personalData.highestEducationalAttainment === 'string' ? personalData.highestEducationalAttainment : '',
+      age: readOptionalNumber(personalData.age),
+      sex: typeof personalData.sex === 'string' ? personalData.sex : '',
+      civilStatus: typeof personalData.civilStatus === 'string' ? personalData.civilStatus : '',
+      department: typeof personalData.department === 'string' ? personalData.department : '',
+      nameParts: splitFullName(
+        typeof personalData.fullName === 'string' ? personalData.fullName : fallbackName,
+      ),
+    },
+    requestForm: {
+      fullName: typeof personalData.fullName === 'string' ? personalData.fullName : fallbackName,
+      employeeId: typeof personalData.employeeId === 'string' ? personalData.employeeId : fallbackEmployeeId,
+      academicRank: typeof personalData.academicRank === 'string' ? personalData.academicRank : '',
+      yearsInService: readOptionalNumber(personalData.yearsInService),
+      highestEducationalAttainment:
+        typeof personalData.highestEducationalAttainment === 'string' ? personalData.highestEducationalAttainment : '',
+      department: typeof personalData.department === 'string' ? personalData.department : '',
+      nameParts: splitFullName(
+        typeof personalData.fullName === 'string' ? personalData.fullName : fallbackName,
+      ),
     },
     promotionHistory,
   };
@@ -275,6 +426,7 @@ function buildPromotionDraftSnapshot(
       projectedRank: null,
       evaluatorTotalScore: hasEvaluatorScore ? roundScore(assessment?.totalScore ?? 0) : null,
       weightedScore: null,
+      scoreBracket: null,
       subrankIncrements: null,
       basis: hasEvaluatorScore ? 'evaluator' : 'employee-inputs',
       status: 'needs-exact-rank',
@@ -308,6 +460,7 @@ function buildPromotionDraftSnapshot(
       projectedRank: approximateOutcome.projectedRank,
       evaluatorTotalScore: null,
       weightedScore: approximateOutcome.weightedScore,
+      scoreBracket: getScoreBracketLabel(approximateOutcome.weightedScore),
       subrankIncrements: approximateOutcome.subrankIncrements,
       basis: 'employee-inputs',
       status: approximateOutcome.status === 'ready' ? 'preliminary' : approximateOutcome.status,
@@ -335,6 +488,7 @@ function buildPromotionDraftSnapshot(
     projectedRank: rankOutcome.projectedRank,
     evaluatorTotalScore,
     weightedScore: rankOutcome.weightedScore,
+    scoreBracket: getScoreBracketLabel(rankOutcome.weightedScore),
     subrankIncrements: rankOutcome.subrankIncrements,
     basis: 'evaluator',
     status: rankOutcome.status,
@@ -867,4 +1021,245 @@ function computeAverage(values: Array<number | null>) {
   }
 
   return roundScore(numericValues.reduce((sum, value) => sum + value, 0) / numericValues.length);
+}
+
+function buildWorkbookMirrorSummary(args: {
+  rawInput: ReturnType<typeof mergeFacultyRecordInput>;
+  semester: string | null;
+  highestEducationalAttainment: string | null;
+  currentRank: string | null;
+  panelScoreByKey: Map<UploadPanelKey, number>;
+  panelEvidenceCount: Map<UploadPanelKey, number>;
+  approximateKraTotals: { instruction: number; research: number; extension: number; professionalDevelopment: number };
+  approximateOutcome: RankResolution | null;
+  validatedOutcome: RankResolution | null;
+  validatedKraTotals: { instruction: number; research: number; extension: number; professionalDevelopment: number } | null;
+  assessment: EvaluatorAssessmentSnapshot | null;
+  promotionDraft: PromotionDraftSnapshot;
+}): WorkbookSummaryMirror {
+  const requestPersonalData = readJsonObject(args.rawInput.personalData);
+  const performanceReview = readJsonObject(args.rawInput.performanceReview);
+  const nameParts = splitFullName(
+    typeof requestPersonalData.fullName === 'string' ? requestPersonalData.fullName : '',
+  );
+  const sections = groupUploadPanelsByKra();
+  const evaluatorCriterionScores = readNumberRecord(args.assessment?.criterionScores);
+
+  const kraSections = sections.map((section) => {
+    const criteria = section.panels.map((panel) => {
+      const facultyScore = readOptionalNumber(args.panelScoreByKey.get(panel.key));
+      const validatedScore = readOptionalNumber(evaluatorCriterionScores[panel.key]);
+
+      return {
+        key: panel.key,
+        title: panel.title,
+        maxScore: panel.maxScore,
+        facultyScore,
+        validatedScore,
+        status: deriveScoreValidationStatus(facultyScore, validatedScore),
+        evidenceCount: args.panelEvidenceCount.get(panel.key) ?? 0,
+      } satisfies WorkbookCriterionSummary;
+    });
+
+    const criteriaFacultyScore = sumNullableScores(criteria.map((criterion) => criterion.facultyScore));
+    const criteriaValidatedScore = sumNullableScores(criteria.map((criterion) => criterion.validatedScore));
+    const fallbackFacultyScore = args.approximateKraTotals[section.metricKey];
+    const fallbackValidatedScore = args.validatedKraTotals?.[section.metricKey] ?? null;
+
+    return {
+      title: section.title,
+      maxScore: section.maxScore,
+      facultyScore: criteriaFacultyScore ?? fallbackFacultyScore,
+      validatedScore: criteriaValidatedScore ?? fallbackValidatedScore,
+      criteria,
+    } satisfies WorkbookKraSummary;
+  });
+
+  const facultyScore = args.approximateOutcome?.weightedScore ?? null;
+  const validatedScore = args.validatedOutcome?.weightedScore ?? null;
+  const comparisonStatus =
+    facultyScore !== null && validatedScore !== null
+      ? Math.abs(facultyScore - validatedScore) <= 0.01
+        ? 'matched'
+        : 'needs-review'
+      : facultyScore !== null
+        ? 'faculty-only'
+        : validatedScore !== null
+          ? 'validated-only'
+          : 'missing';
+
+  return {
+    requestForm: {
+      fullName: typeof requestPersonalData.fullName === 'string' ? requestPersonalData.fullName : null,
+      nameParts,
+      employeeId: typeof requestPersonalData.employeeId === 'string' ? requestPersonalData.employeeId : null,
+      academicRank: typeof requestPersonalData.academicRank === 'string' ? requestPersonalData.academicRank : null,
+      yearsInService: readOptionalNumber(requestPersonalData.yearsInService),
+      highestEducationalAttainment:
+        typeof requestPersonalData.highestEducationalAttainment === 'string'
+          ? requestPersonalData.highestEducationalAttainment
+          : args.highestEducationalAttainment,
+      reviewPeriod:
+        (typeof performanceReview.reviewPeriod === 'string' && performanceReview.reviewPeriod) ||
+        args.semester ||
+        fixedReviewPeriodLabel,
+      department: typeof requestPersonalData.department === 'string' ? requestPersonalData.department : null,
+      notes: typeof args.rawInput.notes === 'string' ? args.rawInput.notes : null,
+    },
+    kraSections,
+    summarySheet: {
+      facultyScore,
+      validatedScore,
+      scoreBracket: getScoreBracketLabel(validatedScore ?? facultyScore),
+      comparisonStatus,
+      currentRank: args.currentRank,
+      suggestedRank: args.promotionDraft.suggestedRank,
+      projectedRank: args.promotionDraft.projectedRank,
+      basis: args.promotionDraft.basis,
+    },
+  };
+}
+
+function groupUploadPanelsByKra() {
+  const sections = new Map<
+    string,
+    {
+      title: string;
+      metricKey: 'instruction' | 'research' | 'extension' | 'professionalDevelopment';
+      maxScore: number;
+      panels: Array<(typeof uploadPanels)[number]>;
+    }
+  >();
+
+  for (const panel of uploadPanels) {
+    const existing = sections.get(panel.kraTitle);
+    if (existing) {
+      existing.panels.push(panel);
+      existing.maxScore += panel.maxScore;
+      continue;
+    }
+
+    sections.set(panel.kraTitle, {
+      title: panel.kraTitle,
+      metricKey: getKraMetricKey(panel.kraTitle),
+      maxScore: panel.maxScore,
+      panels: [panel],
+    });
+  }
+
+  return Array.from(sections.values());
+}
+
+function getKraMetricKey(kraTitle: string): 'instruction' | 'research' | 'extension' | 'professionalDevelopment' {
+  if (kraTitle.includes('Instruction')) {
+    return 'instruction';
+  }
+  if (kraTitle.includes('Research')) {
+    return 'research';
+  }
+  if (kraTitle.includes('Extension')) {
+    return 'extension';
+  }
+  return 'professionalDevelopment';
+}
+
+function deriveScoreValidationStatus(
+  facultyScore: number | null,
+  validatedScore: number | null,
+): WorkbookCriterionSummary['status'] {
+  if (facultyScore !== null && validatedScore !== null) {
+    return Math.abs(facultyScore - validatedScore) <= 0.01 ? 'matched' : 'needs-review';
+  }
+  if (facultyScore !== null) {
+    return 'faculty-only';
+  }
+  if (validatedScore !== null) {
+    return 'validated-only';
+  }
+  return 'missing';
+}
+
+function sumNullableScores(values: Array<number | null>) {
+  const numericValues = values.filter((value): value is number => typeof value === 'number' && Number.isFinite(value));
+  if (!numericValues.length) {
+    return null;
+  }
+
+  return roundScore(numericValues.reduce((sum, value) => sum + value, 0));
+}
+
+function splitFullName(fullName: string): NameParts {
+  const normalized = fullName.trim().replace(/\s+/g, ' ');
+  if (!normalized) {
+    return {
+      firstName: null,
+      middleName: null,
+      lastName: null,
+      extensionName: null,
+    };
+  }
+
+  const commaParts = normalized.split(',').map((part) => part.trim()).filter(Boolean);
+  if (commaParts.length >= 2) {
+    return splitNameTokens(commaParts[0] ?? null, commaParts.slice(1).join(' '));
+  }
+
+  return splitNameTokens(null, normalized);
+}
+
+function splitNameTokens(lastName: string | null, value: string): NameParts {
+  const tokens = value.split(' ').filter(Boolean);
+  let extensionName: string | null = null;
+  let workingTokens = [...tokens];
+
+  const extensionCandidate = workingTokens[workingTokens.length - 1];
+  if (extensionCandidate && /^(JR\.?|SR\.?|I{1,3}|IV|V|VI)$/i.test(extensionCandidate)) {
+    extensionName = extensionCandidate.replace(/\.$/, '');
+    workingTokens = workingTokens.slice(0, -1);
+  }
+
+  if (lastName) {
+    return {
+      firstName: workingTokens[0] ?? null,
+      middleName: workingTokens.slice(1).join(' ') || null,
+      lastName,
+      extensionName,
+    };
+  }
+
+  if (workingTokens.length === 1) {
+    return {
+      firstName: workingTokens[0] ?? null,
+      middleName: null,
+      lastName: null,
+      extensionName,
+    };
+  }
+
+  return {
+    firstName: workingTokens[0] ?? null,
+    middleName: workingTokens.length > 2 ? workingTokens.slice(1, -1).join(' ') || null : null,
+    lastName: workingTokens[workingTokens.length - 1] ?? null,
+    extensionName,
+  };
+}
+
+function getBestScore(scores: Record<string, number>, keys: string[]) {
+  return keys.reduce((best, key) => {
+    const value = readOptionalNumber(scores[key]);
+    return value !== null ? Math.max(best, value) : best;
+  }, 0);
+}
+
+function getScoreBracketLabel(score: number | null) {
+  if (score === null) {
+    return null;
+  }
+  if (score >= 91) return '91-100';
+  if (score >= 81) return '81-90';
+  if (score >= 71) return '71-80';
+  if (score >= 61) return '61-70';
+  if (score >= 51) return '51-60';
+  if (score >= 41) return '41-50';
+  return '0-40';
 }

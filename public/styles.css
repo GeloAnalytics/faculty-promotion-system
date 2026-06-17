@@ -272,6 +272,68 @@ select {
   gap: 24px;
 }
 
+.workflow-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.workflow-card {
+  display: grid;
+  gap: 14px;
+  background:
+    radial-gradient(circle at top right, rgba(13, 107, 87, 0.06), transparent 30%),
+    linear-gradient(180deg, rgba(255, 253, 248, 0.98) 0%, rgba(248, 244, 236, 0.94) 100%);
+}
+
+.workflow-card .upload-card-header {
+  align-items: flex-start;
+}
+
+.workflow-card .upload-audience-chip {
+  margin-top: 0;
+}
+
+.workflow-notes {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--muted);
+  line-height: 1.55;
+}
+
+.workflow-notes li + li {
+  margin-top: 6px;
+}
+
+.workflow-upload-form {
+  display: grid;
+  gap: 12px;
+}
+
+.workflow-upload-form .button {
+  justify-self: start;
+}
+
+.workflow-status {
+  margin-top: 16px;
+}
+
+.rank-panel-mini {
+  padding: 16px;
+}
+
+.rank-panel-mini .rank-panel-hero {
+  padding: 14px;
+}
+
+.uploaded-file-summary {
+  display: grid;
+  gap: 8px;
+  align-items: start;
+  min-width: 240px;
+  max-width: 380px;
+}
+
 .upload-panel-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
@@ -2551,10 +2613,19 @@ body[data-portal="evaluator"] #scoring-panel .stack-form {
     grid-template-columns: 1fr;
   }
 
+  .workflow-grid {
+    grid-template-columns: 1fr;
+  }
+
   .uploaded-file-row {
     flex-direction: column;
     align-items: stretch;
     gap: 8px;
+  }
+
+  .uploaded-file-summary {
+    max-width: none;
+    min-width: 0;
   }
 
   .uploaded-file-row .delete-upload-button {

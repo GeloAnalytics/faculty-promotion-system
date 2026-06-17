@@ -1,5 +1,24 @@
 # Release Notes
 
+## 2026-06-17
+
+### Summary
+
+This update brings the backend dashboard summaries closer to the uploaded workbook by mirroring the request form structure, KRA naming, score comparison data, and summary-sheet scoring context. It also refreshes the project documentation to reflect what is now complete and what still remains in the active UI.
+
+### What Changed
+
+- Aligned KRA II terminology with the workbook title `Research, Innovation and Creative Work`.
+- Added workbook-mirror summary data in the dashboard utilities, including parsed request-form name parts, per-KRA totals, score-bracket labels, and faculty-versus-validated score comparison.
+- Extended uploaded-document metadata with panel score previews and panel max-score context for workbook-aligned review.
+- Updated the mirroring plan to distinguish achieved items from the remaining UI and OCR workflow work.
+- Updated `README.md` to describe the mirrored backend summary payload and the remaining runtime UI gap.
+
+### Verification
+
+- `npm test` passed.
+- `npm run build` passed.
+
 ## 2026-06-03
 
 ### Summary

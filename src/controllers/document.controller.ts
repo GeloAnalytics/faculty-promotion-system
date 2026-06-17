@@ -1,7 +1,14 @@
 import { Request, Response } from 'express';
 import { prisma } from '../config/db';
 import { UserRole } from '@prisma/client';
-import { parseDocumentKind, parseUploadPanelKey, findUploadPanelDefinition, processUploadedDocument, describeUploadProcessingError } from '../utils/document.utils';
+import {
+  parseDocumentKind,
+  parseEmployeeUploadType,
+  parseUploadPanelKey,
+  findUploadPanelDefinition,
+  processUploadedDocument,
+  describeUploadProcessingError,
+} from '../utils/document.utils';
 import { ocrConfig } from '../config/globals';
 import { ProcessedUploadResult } from '../types';
 
@@ -12,12 +19,19 @@ export const extractDocuments = async (req: Request, res: Response) => {
   }
 
   const kind = parseDocumentKind(req.body.kind);
+  const uploadType = parseEmployeeUploadType(req.body.uploadType);
   const panelKey = parseUploadPanelKey(req.body.panelKey);
   const panelDefinition = findUploadPanelDefinition(panelKey);
   const requestedProfileId =
     typeof req.body.profileId === 'string' && req.body.profileId.trim() ? req.body.profileId : null;
   const results: ProcessedUploadResult[] = [];
   const failures: Array<{ originalName: string; error: string }> = [];
+
+  if (uploadType === 'score-sheet' && uploadedFiles.length > 1) {
+    return res.status(400).json({
+      error: 'Score sheet uploads accept one file only',
+    });
+  }
 
   for (const file of uploadedFiles) {
     try {
@@ -28,6 +42,7 @@ export const extractDocuments = async (req: Request, res: Response) => {
         kind,
         panelKey,
         panelTitle: panelDefinition.title,
+        uploadType,
         ocrConfig,
       });
       results.push(result);
@@ -50,6 +65,7 @@ export const extractDocuments = async (req: Request, res: Response) => {
     fileType: results[0].fileType,
     documentId: results[0].documentId,
     panelKey,
+    uploadType,
     profileId: results[0].profileId,
     linkage: results[0].linkage,
     textPreview: results[0].textPreview,
