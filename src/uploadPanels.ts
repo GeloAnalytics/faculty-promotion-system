@@ -30,7 +30,7 @@ export const uploadPanels: UploadPanelDefinition[] = [
   },
   {
     key: 'kra2_research_outputs',
-    kraTitle: 'KRA 2: Research, Invention and Creative Work',
+    kraTitle: 'KRA 2: Research, Innovation and Creative Work',
     title: 'Research Outputs',
     description: 'Upload published research outputs, citations, and research translated into policy, product, or project.',
     acceptedFormats: ['pdf', 'png', 'jpg', 'jpeg', 'bmp', 'tif', 'tiff'],
@@ -39,7 +39,7 @@ export const uploadPanels: UploadPanelDefinition[] = [
   },
   {
     key: 'kra2_inventions',
-    kraTitle: 'KRA 2: Research, Invention and Creative Work',
+    kraTitle: 'KRA 2: Research, Innovation and Creative Work',
     title: 'Inventions',
     description: 'Upload patent, utility model, industrial design, software, or commercialization evidence.',
     acceptedFormats: ['pdf', 'png', 'jpg', 'jpeg', 'bmp', 'tif', 'tiff'],
@@ -48,7 +48,7 @@ export const uploadPanels: UploadPanelDefinition[] = [
   },
   {
     key: 'kra2_creative_works',
-    kraTitle: 'KRA 2: Research, Invention and Creative Work',
+    kraTitle: 'KRA 2: Research, Innovation and Creative Work',
     title: 'Creative Works',
     description: 'Upload creative performing arts, exhibitions, designs, and literary publication evidence.',
     acceptedFormats: ['pdf', 'png', 'jpg', 'jpeg', 'bmp', 'tif', 'tiff'],
@@ -152,7 +152,7 @@ export const uploadPanelKeywordMap: Record<UploadPanelKey, string[]> = {
   kra1_teaching_effectiveness: ['teaching effectiveness', 'student evaluation', 'supervisor evaluation', 'instruction'],
   kra1_curriculum_instructional_materials: ['curriculum', 'instructional material', 'module', 'manual', 'textbook', 'testing material'],
   kra1_thesis_dissertation_mentorship: ['thesis', 'dissertation', 'mentorship', 'mentor', 'capstone', 'special project', 'panel'],
-  kra2_research_outputs: ['research output', 'journal article', 'book chapter', 'monograph', 'citation', 'publication'],
+  kra2_research_outputs: ['research output', 'research innovation', 'journal article', 'book chapter', 'monograph', 'citation', 'publication'],
   kra2_inventions: ['invention', 'patent', 'utility model', 'industrial design', 'software', 'commercialized'],
   kra2_creative_works: ['creative work', 'performing art', 'exhibition', 'design', 'literary', 'poetry', 'novel'],
   kra3_service_to_institution: ['institution', 'partnership', 'linkage', 'networking', 'income generation'],

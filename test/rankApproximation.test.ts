@@ -242,3 +242,34 @@ test('draft rank can resolve from semester-by-semester cycle metrics when flat a
   assert.equal(draftPoints.promotionDraft.suggestedRank, 'Associate Professor III');
   assert.equal(draftPoints.semester, 'July 2022-June 2026');
 });
+
+test('workbook mirror follows the reference workbook naming and parses request form names', () => {
+  const draftPoints = buildDraftPointSummary(
+    {
+      features: {
+        rawInput: {
+          personalData: {
+            fullName: 'Mia V. Villarica',
+            academicRank: 'Assistant Professor IV',
+            highestEducationalAttainment: 'Masteral Graduate',
+          },
+          performanceReview: {
+            teachingEffectiveness: 90,
+            researchOutputs: 3,
+            extensionServices: 2,
+            professionalDevelopmentHours: 12,
+            ipcrAverage: 4.4,
+          },
+          promotionHistory: [],
+        },
+      },
+      semester: '2026-1',
+    },
+    [],
+  );
+
+  assert.equal(draftPoints.workbookMirror.requestForm.nameParts.firstName, 'Mia');
+  assert.equal(draftPoints.workbookMirror.requestForm.nameParts.lastName, 'Villarica');
+  assert.equal(draftPoints.workbookMirror.kraSections[1].title, 'KRA 2: Research, Innovation and Creative Work');
+  assert.equal(draftPoints.workbookMirror.summarySheet.scoreBracket, draftPoints.promotionDraft.scoreBracket);
+});
