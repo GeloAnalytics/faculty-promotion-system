@@ -284,10 +284,15 @@ select {
   background:
     radial-gradient(circle at top right, rgba(13, 107, 87, 0.06), transparent 30%),
     linear-gradient(180deg, rgba(255, 253, 248, 0.98) 0%, rgba(248, 244, 236, 0.94) 100%);
+  min-width: 0;
 }
 
 .workflow-card .upload-card-header {
   align-items: flex-start;
+}
+
+.workflow-card .upload-card-header > div {
+  min-width: 0;
 }
 
 .workflow-card .upload-audience-chip {
@@ -299,6 +304,7 @@ select {
   padding-left: 18px;
   color: var(--muted);
   line-height: 1.55;
+  overflow-wrap: anywhere;
 }
 
 .workflow-notes li + li {
@@ -312,6 +318,10 @@ select {
 
 .workflow-upload-form .button {
   justify-self: start;
+}
+
+.workflow-upload-form .field {
+  min-width: 0;
 }
 
 .workflow-status {
@@ -330,8 +340,14 @@ select {
   display: grid;
   gap: 8px;
   align-items: start;
-  min-width: 240px;
-  max-width: 380px;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.uploaded-file-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 .upload-panel-grid {
@@ -426,14 +442,18 @@ select {
 .upload-audience-chip {
   display: inline-flex;
   align-items: center;
-  width: fit-content;
+  width: 100%;
+  max-width: 100%;
   padding: 6px 10px;
   border-radius: 999px;
   background: var(--accent-soft);
   color: var(--accent-strong);
   font-size: 0.78rem;
   font-weight: 700;
-  white-space: nowrap;
+  white-space: normal;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+  justify-content: flex-start;
 }
 
 .upload-audience-chip {
@@ -1616,6 +1636,7 @@ select {
   .dashboard-grid,
   .reference-grid,
   .auth-grid,
+  .workflow-grid,
   .upload-groups,
   .upload-panel-grid,
   .criteria-grid,
@@ -1700,6 +1721,11 @@ select {
   .summary-signature-grid {
     grid-template-columns: 1fr;
   }
+
+  .document-preview-dialog {
+    width: min(calc(100vw - 24px), 1180px);
+    height: min(82vh, 920px);
+  }
 }
 
 @media (max-width: 640px) {
@@ -1714,6 +1740,16 @@ select {
 
   .insight-bar-value {
     justify-self: end;
+  }
+
+  .document-preview-dialog {
+    width: calc(100vw - 16px);
+    height: min(78vh, 840px);
+    padding: 14px;
+  }
+
+  .document-preview-header {
+    flex-direction: column;
   }
 }
 
@@ -1831,6 +1867,66 @@ select {
   background: var(--accent-soft);
   color: var(--accent-strong);
   border-color: var(--border-strong);
+}
+
+.document-preview-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 120;
+  display: grid;
+  place-items: center;
+  padding: 22px;
+}
+
+.document-preview-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(18, 25, 23, 0.68);
+  backdrop-filter: blur(8px);
+}
+
+.document-preview-dialog {
+  position: relative;
+  z-index: 1;
+  width: min(1180px, calc(100vw - 32px));
+  height: min(86vh, 980px);
+  display: grid;
+  gap: 14px;
+  padding: 18px;
+  border-radius: 24px;
+  background: rgba(255, 252, 246, 0.98);
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  box-shadow: 0 28px 80px rgba(10, 17, 16, 0.35);
+}
+
+.document-preview-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.document-preview-header h2 {
+  margin: 0;
+  font-family: "Space Grotesk", sans-serif;
+}
+
+.document-preview-meta {
+  margin: 4px 0 0;
+  color: var(--muted);
+}
+
+.document-preview-frame {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: #ffffff;
+}
+
+body.preview-open {
+  overflow: hidden;
 }
 
 body[data-portal="employee"] #faculty-panel,

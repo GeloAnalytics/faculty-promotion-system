@@ -1,6 +1,9 @@
 import { Request, Response } from 'express';
 import { prisma } from '../config/db';
 import { UserRole } from '@prisma/client';
+import fs from 'node:fs/promises';
+import { createReadStream } from 'node:fs';
+import { pipeline } from 'node:stream/promises';
 import {
   parseDocumentKind,
   parseEmployeeUploadType,
@@ -8,6 +11,7 @@ import {
   findUploadPanelDefinition,
   processUploadedDocument,
   describeUploadProcessingError,
+  resolveStoredDocumentPath,
 } from '../utils/document.utils';
 import { ocrConfig } from '../config/globals';
 import { ProcessedUploadResult } from '../types';
@@ -80,6 +84,45 @@ export const extractDocuments = async (req: Request, res: Response) => {
   });
 };
 
+export const viewDocument = async (req: Request, res: Response) => {
+  const document = await prisma.uploadedDocument.findUnique({
+    where: { id: req.params.documentId },
+    select: {
+      id: true,
+      ownerUserId: true,
+      originalName: true,
+      mimeType: true,
+      extractionMetadata: true,
+    },
+  });
+
+  if (!document) {
+    return res.status(404).json({ error: 'Uploaded document not found' });
+  }
+
+  if (req.user!.role === UserRole.EMPLOYEE && document.ownerUserId !== req.user!.id) {
+    return res.status(403).json({ error: 'You can only view your own uploaded documents' });
+  }
+
+  const storedPath = resolveStoredDocumentPath(document.extractionMetadata);
+  if (!storedPath) {
+    return res.status(404).json({ error: 'Stored document file is unavailable for preview' });
+  }
+
+  try {
+    await fs.access(storedPath);
+  } catch {
+    return res.status(404).json({ error: 'Stored document file is unavailable for preview' });
+  }
+
+  const contentType = document.mimeType || 'application/octet-stream';
+  res.setHeader('Content-Type', contentType);
+  res.setHeader('Content-Disposition', `inline; filename="${document.originalName.replace(/"/g, '\\"')}"`);
+  res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+  res.setHeader('Content-Security-Policy', "frame-ancestors 'self'");
+  await pipeline(createReadStream(storedPath), res);
+};
+
 export const deleteDocument = async (req: Request, res: Response) => {
   const document = await prisma.uploadedDocument.findUnique({
     where: { id: req.params.documentId },
@@ -87,6 +130,7 @@ export const deleteDocument = async (req: Request, res: Response) => {
       id: true,
       ownerUserId: true,
       originalName: true,
+      extractionMetadata: true,
     },
   });
 
@@ -98,9 +142,18 @@ export const deleteDocument = async (req: Request, res: Response) => {
     return res.status(403).json({ error: 'You can only delete your own uploaded documents' });
   }
 
+  const storedPath = resolveStoredDocumentPath(document.extractionMetadata);
   await prisma.uploadedDocument.delete({
     where: { id: document.id },
   });
+
+  if (storedPath) {
+    try {
+      await fs.unlink(storedPath);
+    } catch {
+      // Ignore file cleanup failures so deletion still succeeds.
+    }
+  }
 
   return res.json({
     deleted: true,

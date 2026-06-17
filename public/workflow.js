@@ -7,6 +7,10 @@ const employeePoints = byId('employee-points');
 const employeeUploadWorkflow = byId('employee-upload-workflow');
 const employeeUploadStatus = byId('employee-upload-status');
 const employeeUploadList = byId('employee-upload-list');
+const documentPreviewModal = byId('document-preview-modal');
+const documentPreviewFrame = byId('document-preview-frame');
+const documentPreviewTitle = byId('document-preview-title');
+const documentPreviewMeta = byId('document-preview-meta');
 const evaluatorInsights = byId('evaluator-insights');
 const reviewQueue = byId('review-queue');
 const reviewQueueFilterStatus = byId('review-queue-filter-status');
@@ -19,6 +23,18 @@ let reviewerQueueItems = [];
 document.querySelectorAll("[data-action='logout']").forEach((button) => {
   button.addEventListener('click', logoutAndReturnHome);
 });
+employeeUploadList?.addEventListener('click', handleUploadListActionClick);
+reviewQueue?.addEventListener('click', handleReviewQueueActionClick);
+document.addEventListener('keydown', handleDocumentPreviewKeydown);
+documentPreviewModal?.addEventListener('click', (event) => {
+  const target = event.target;
+  if (target instanceof HTMLElement && target.dataset.previewAction === 'close') {
+    closeDocumentPreview();
+  }
+  if (target === documentPreviewModal) {
+    closeDocumentPreview();
+  }
+});
 
 bootstrap().catch((error) => {
   console.error(error);
@@ -26,6 +42,7 @@ bootstrap().catch((error) => {
 });
 
 async function bootstrap() {
+  ensureDocumentPreviewShell();
   const session = await refreshSession();
   if (!session) {
     window.location.assign('/');
@@ -83,7 +100,7 @@ async function loadEmployeeWorkspace() {
   renderEmployeeSummary(employeeDashboard);
   renderEmployeeWorkflow(uploadWorkflow, employeeDashboard?.uploads || []);
   renderEmployeeUploads(employeeDashboard?.uploads || []);
-  setNotice(employeeUploadStatus, 'Upload the score sheet first, then add the evidence bundle.');
+  setNotice(employeeUploadStatus, 'Upload the score sheet first, then add the evidence bundle. PDFs can be previewed inside the portal.');
 }
 
 async function loadEvaluatorWorkspace() {
@@ -215,8 +232,14 @@ function renderEmployeeUploads(uploads) {
     return;
   }
 
-  const grouped = groupUploadsByType(uploads);
-  const groupOrder = ['score-sheet', 'evidence', 'legacy'];
+  const grouped = groupUploadsByKra(uploads);
+  const groupOrder = [
+    'KRA I - Instruction',
+    'KRA II - Research, Innovation and Creative Work',
+    'KRA III - Extension Services',
+    'KRA IV - Professional Development',
+    'Unassigned',
+  ];
 
   if (!uploads.length) {
     employeeUploadList.innerHTML = '<div class="notice">No files uploaded yet.</div>';
@@ -227,7 +250,7 @@ function renderEmployeeUploads(uploads) {
     .filter((type) => grouped[type] && grouped[type].length)
     .map((type) => {
       const groupUploads = grouped[type];
-      const label = type === 'score-sheet' ? 'Score Sheet' : type === 'evidence' ? 'Evidence Bundle' : 'Other Uploads';
+      const label = type === 'Unassigned' ? 'Unassigned Uploads' : type;
       return `
         <article class="uploaded-files-group">
           <div class="uploaded-files-group-header">
@@ -247,18 +270,24 @@ function renderUploadRow(item) {
   const metadata = item.metadata || {};
   const summary = metadata.analysisSummary || 'OCR summary pending.';
   const panel = metadata.panelTitle || metadata.panelKey || 'Unassigned panel';
+  const kraLabel = getKraLabel(metadata.panelKey) || 'Unassigned';
+  const previewLabel = getPreviewActionLabel(item.mimeType);
 
   return `
     <article class="uploaded-file-row">
       <div class="uploaded-file-info">
         <strong>${escapeHtml(item.originalName)}</strong>
-        <span class="uploaded-file-panel">${escapeHtml(metadata.uploadType || 'legacy')}</span>
+        <span class="uploaded-file-panel">${escapeHtml(getUploadTypeLabel(metadata.uploadType))}</span>
+        <span class="uploaded-file-panel">${escapeHtml(kraLabel)}</span>
         <span class="uploaded-file-panel">${escapeHtml(panel)}</span>
         <span class="uploaded-file-date">${escapeHtml(formatDate(item.createdAt))}</span>
       </div>
       <div class="uploaded-file-summary">
         <p class="card-copy">${escapeHtml(summary)}</p>
-        <button class="button button-secondary delete-upload-button" data-document-id="${escapeHtml(item.id)}" data-file-name="${escapeHtml(item.originalName)}" type="button">Delete</button>
+        <div class="uploaded-file-actions">
+          <button class="button button-secondary preview-upload-button" data-document-id="${escapeHtml(item.id)}" data-file-name="${escapeHtml(item.originalName)}" data-mime-type="${escapeHtml(item.mimeType || '')}" data-upload-action="preview" type="button">${escapeHtml(previewLabel)}</button>
+          <button class="button button-secondary delete-upload-button" data-document-id="${escapeHtml(item.id)}" data-file-name="${escapeHtml(item.originalName)}" data-upload-action="delete" type="button">Delete</button>
+        </div>
       </div>
     </article>
   `;
@@ -350,16 +379,23 @@ function renderReviewCard(item) {
 }
 
 function renderEvaluatorUploadRow(upload) {
+  const kraLabel = getKraLabel(upload.metadata?.panelKey) || 'Unassigned';
+  const previewLabel = getPreviewActionLabel(upload.mimeType);
+
   return `
     <article class="uploaded-file-row">
       <div class="uploaded-file-info">
         <strong>${escapeHtml(upload.originalName)}</strong>
-        <span class="uploaded-file-panel">${escapeHtml(upload.metadata?.uploadType || 'legacy')}</span>
+        <span class="uploaded-file-panel">${escapeHtml(getUploadTypeLabel(upload.metadata?.uploadType))}</span>
+        <span class="uploaded-file-panel">${escapeHtml(kraLabel)}</span>
         <span class="uploaded-file-panel">${escapeHtml(upload.metadata?.panelTitle || upload.metadata?.panelKey || 'Unassigned')}</span>
         <span class="uploaded-file-date">${escapeHtml(formatDate(upload.createdAt))}</span>
       </div>
       <div class="uploaded-file-summary">
         <p class="card-copy">${escapeHtml(upload.metadata?.analysisSummary || 'OCR summary pending.')}</p>
+        <div class="uploaded-file-actions">
+          <button class="button button-secondary preview-upload-button" data-document-id="${escapeHtml(upload.id)}" data-file-name="${escapeHtml(upload.originalName)}" data-mime-type="${escapeHtml(upload.mimeType || '')}" data-upload-action="preview" type="button">${escapeHtml(previewLabel)}</button>
+        </div>
       </div>
     </article>
   `;
@@ -425,15 +461,168 @@ function buildUploadTypeCounts(uploads) {
   }, {});
 }
 
-function groupUploadsByType(uploads) {
+function ensureDocumentPreviewShell() {
+  if (!documentPreviewModal || !documentPreviewFrame || !documentPreviewTitle || !documentPreviewMeta) {
+    console.warn('Document preview shell is missing from the page.');
+  }
+}
+
+function groupUploadsByKra(uploads) {
   return uploads.reduce((groups, upload) => {
-    const key = upload.metadata?.uploadType || 'legacy';
+    const key = getKraLabel(upload.metadata?.panelKey);
     if (!groups[key]) {
       groups[key] = [];
     }
     groups[key].push(upload);
     return groups;
   }, {});
+}
+
+function getKraLabel(panelKey) {
+  if (typeof panelKey !== 'string') {
+    return null;
+  }
+
+  if (panelKey.startsWith('kra1_')) {
+    return 'KRA I - Instruction';
+  }
+
+  if (panelKey.startsWith('kra2_')) {
+    return 'KRA II - Research, Innovation and Creative Work';
+  }
+
+  if (panelKey.startsWith('kra3_')) {
+    return 'KRA III - Extension Services';
+  }
+
+  if (panelKey.startsWith('kra4_')) {
+    return 'KRA IV - Professional Development';
+  }
+
+  return null;
+}
+
+function getPreviewActionLabel(mimeType) {
+  if (typeof mimeType === 'string' && mimeType.toLowerCase() === 'application/pdf') {
+    return 'View PDF';
+  }
+
+  return 'View File';
+}
+
+function getUploadTypeLabel(uploadType) {
+  if (uploadType === 'score-sheet') {
+    return 'Score Sheet';
+  }
+
+  if (uploadType === 'evidence') {
+    return 'Evidence';
+  }
+
+  return 'Legacy';
+}
+
+function handleUploadListActionClick(event) {
+  const button = event.target.closest('button[data-upload-action]');
+  if (!button) {
+    return;
+  }
+
+  const action = button.dataset.uploadAction;
+  const documentId = button.dataset.documentId || '';
+  const fileName = button.dataset.fileName || 'this file';
+  const mimeType = button.dataset.mimeType || '';
+
+  if (!documentId) {
+    return;
+  }
+
+  if (action === 'preview') {
+    openDocumentPreview({
+      documentId,
+      fileName,
+      mimeType,
+    });
+    return;
+  }
+
+  if (action === 'delete') {
+    void deleteUploadDocument(documentId, fileName);
+  }
+}
+
+function handleReviewQueueActionClick(event) {
+  const button = event.target.closest('button[data-upload-action="preview"]');
+  if (!button) {
+    return;
+  }
+
+  const documentId = button.dataset.documentId || '';
+  const fileName = button.dataset.fileName || 'this file';
+  const mimeType = button.dataset.mimeType || '';
+  if (!documentId) {
+    return;
+  }
+
+  openDocumentPreview({
+    documentId,
+    fileName,
+    mimeType,
+  });
+}
+
+async function deleteUploadDocument(documentId, fileName) {
+  const confirmed = window.confirm(`Delete ${fileName}? This cannot be undone.`);
+  if (!confirmed) {
+    return;
+  }
+
+  try {
+    setNotice(employeeUploadStatus || reviewQueueFilterStatus, `Deleting ${fileName}...`);
+    await apiFetch(`/api/documents/${encodeURIComponent(documentId)}`, {
+      method: 'DELETE',
+    });
+    setNotice(employeeUploadStatus || reviewQueueFilterStatus, `${fileName} was deleted.`);
+    await loadEmployeeWorkspace();
+    if (portal === 'evaluator') {
+      await loadEvaluatorWorkspace();
+    }
+  } catch (error) {
+    setNotice(employeeUploadStatus || reviewQueueFilterStatus, toErrorMessage(error), true);
+  }
+}
+
+function openDocumentPreview({ documentId, fileName, mimeType }) {
+  if (!documentPreviewModal || !documentPreviewFrame || !documentPreviewTitle || !documentPreviewMeta) {
+    return;
+  }
+
+  const previewUrl = buildApiUrl(`/api/documents/${encodeURIComponent(documentId)}/view`);
+  documentPreviewTitle.textContent = fileName;
+  documentPreviewMeta.textContent = mimeType ? `Previewing ${mimeType}` : 'Previewing uploaded file';
+  documentPreviewFrame.src = previewUrl;
+  documentPreviewModal.dataset.open = 'true';
+  documentPreviewModal.hidden = false;
+  document.body.classList.add('preview-open');
+}
+
+function closeDocumentPreview() {
+  if (!documentPreviewModal || !documentPreviewFrame) {
+    return;
+  }
+
+  documentPreviewFrame.src = 'about:blank';
+  documentPreviewModal.dataset.open = 'false';
+  documentPreviewModal.hidden = true;
+  document.body.classList.remove('preview-open');
+}
+
+function handleDocumentPreviewKeydown(event) {
+  if (event.key !== 'Escape') {
+    return;
+  }
+
+  closeDocumentPreview();
 }
 
 function renderInsightStatCard(label, value) {
