@@ -75,7 +75,14 @@
           </div>
           <button class="button button-ghost document-preview-close" type="button" data-preview-action="close">Close</button>
         </div>
-        <iframe id="document-preview-frame" class="document-preview-frame" title="Document preview"></iframe>
+        <div class="document-preview-body">
+          <div id="document-preview-status" class="document-preview-status" hidden aria-live="polite">
+            <p class="document-preview-status-title">Loading preview...</p>
+            <p class="document-preview-status-body">Fetching the file so you can review it here.</p>
+            <button class="button button-secondary document-preview-retry" type="button" data-preview-action="retry">Retry</button>
+          </div>
+          <iframe id="document-preview-frame" class="document-preview-frame" title="Document preview" hidden></iframe>
+        </div>
       </section>
     </div>
 

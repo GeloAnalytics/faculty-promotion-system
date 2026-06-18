@@ -8,6 +8,7 @@ const employeeUploadWorkflow = byId('employee-upload-workflow');
 const employeeUploadStatus = byId('employee-upload-status');
 const employeeUploadList = byId('employee-upload-list');
 const documentPreviewModal = byId('document-preview-modal');
+const documentPreviewStatus = byId('document-preview-status');
 const documentPreviewFrame = byId('document-preview-frame');
 const documentPreviewTitle = byId('document-preview-title');
 const documentPreviewMeta = byId('document-preview-meta');
@@ -21,6 +22,8 @@ let uploadWorkflow = [];
 let reviewerQueueItems = [];
 let currentDocumentPreviewUrl = null;
 let documentPreviewRequestToken = 0;
+let documentPreviewLoadTimer = null;
+let lastDocumentPreviewRequest = null;
 
 document.querySelectorAll("[data-action='logout']").forEach((button) => {
   button.addEventListener('click', logoutAndReturnHome);
@@ -30,6 +33,12 @@ reviewQueue?.addEventListener('click', handleReviewQueueActionClick);
 document.addEventListener('keydown', handleDocumentPreviewKeydown);
 documentPreviewModal?.addEventListener('click', (event) => {
   const target = event.target;
+  if (target instanceof HTMLElement && target.dataset.previewAction === 'retry') {
+    if (lastDocumentPreviewRequest) {
+      void openDocumentPreview(lastDocumentPreviewRequest);
+    }
+    return;
+  }
   if (target instanceof HTMLElement && target.dataset.previewAction === 'close') {
     closeDocumentPreview();
   }
@@ -600,15 +609,22 @@ async function openDocumentPreview({ documentId, fileName, mimeType }) {
   }
 
   const requestToken = ++documentPreviewRequestToken;
+  lastDocumentPreviewRequest = { documentId, fileName, mimeType };
   const previewUrl = buildApiUrl(`/api/documents/${encodeURIComponent(documentId)}/view`);
   if (currentDocumentPreviewUrl) {
     URL.revokeObjectURL(currentDocumentPreviewUrl);
     currentDocumentPreviewUrl = null;
   }
+  if (documentPreviewLoadTimer) {
+    window.clearTimeout(documentPreviewLoadTimer);
+    documentPreviewLoadTimer = null;
+  }
 
   documentPreviewTitle.textContent = fileName;
-  documentPreviewMeta.textContent = 'Loading preview...';
+  documentPreviewMeta.textContent = mimeType ? `Previewing ${mimeType}` : 'Previewing uploaded file';
   documentPreviewFrame.src = 'about:blank';
+  documentPreviewFrame.hidden = true;
+  setDocumentPreviewStatus('loading', 'Loading preview...', 'Fetching the file so you can review it here.', false);
   documentPreviewModal.dataset.open = 'true';
   documentPreviewModal.hidden = false;
   document.body.classList.add('preview-open');
@@ -628,15 +644,37 @@ async function openDocumentPreview({ documentId, fileName, mimeType }) {
     }
 
     currentDocumentPreviewUrl = URL.createObjectURL(fileBlob);
+    documentPreviewFrame.addEventListener(
+      'load',
+      () => {
+        if (requestToken !== documentPreviewRequestToken) {
+          return;
+        }
+
+        if (documentPreviewLoadTimer) {
+          window.clearTimeout(documentPreviewLoadTimer);
+          documentPreviewLoadTimer = null;
+        }
+
+        setDocumentPreviewStatus('ready', '', '', false);
+        documentPreviewFrame.hidden = false;
+      },
+      { once: true },
+    );
     documentPreviewFrame.src = currentDocumentPreviewUrl;
-    documentPreviewMeta.textContent = mimeType ? `Previewing ${mimeType}` : 'Previewing uploaded file';
+    documentPreviewLoadTimer = window.setTimeout(() => {
+      if (requestToken !== documentPreviewRequestToken) {
+        return;
+      }
+
+      showDocumentPreviewError('The preview is taking longer than expected. Try opening it again.');
+    }, 12000);
   } catch (error) {
     if (requestToken !== documentPreviewRequestToken) {
       return;
     }
 
-    documentPreviewMeta.textContent = toErrorMessage(error);
-    documentPreviewFrame.src = 'about:blank';
+    showDocumentPreviewError(toErrorMessage(error));
   }
 }
 
@@ -650,10 +688,16 @@ function closeDocumentPreview() {
     URL.revokeObjectURL(currentDocumentPreviewUrl);
     currentDocumentPreviewUrl = null;
   }
+  if (documentPreviewLoadTimer) {
+    window.clearTimeout(documentPreviewLoadTimer);
+    documentPreviewLoadTimer = null;
+  }
   documentPreviewFrame.src = 'about:blank';
+  documentPreviewFrame.hidden = true;
   documentPreviewModal.dataset.open = 'false';
   documentPreviewModal.hidden = true;
   document.body.classList.remove('preview-open');
+  setDocumentPreviewStatus('idle', '', '', true);
 }
 
 function handleDocumentPreviewKeydown(event) {
@@ -766,6 +810,46 @@ function readErrorMessage(data, status) {
 async function readFetchErrorMessage(response) {
   const data = await response.json().catch(() => ({}));
   return readErrorMessage(data, response.status);
+}
+
+function setDocumentPreviewStatus(state, message, detail, showRetry) {
+  if (!documentPreviewStatus) {
+    return;
+  }
+
+  const title = documentPreviewStatus.querySelector('.document-preview-status-title');
+  const body = documentPreviewStatus.querySelector('.document-preview-status-body');
+  const retryButton = documentPreviewStatus.querySelector('button[data-preview-action="retry"]');
+
+  documentPreviewStatus.dataset.state = state;
+  documentPreviewStatus.hidden = state === 'idle' || state === 'ready';
+
+  if (title) {
+    title.textContent = message;
+  }
+
+  if (body) {
+    body.textContent = detail;
+  }
+
+  if (retryButton instanceof HTMLButtonElement) {
+    retryButton.hidden = !showRetry;
+  }
+}
+
+function showDocumentPreviewError(message) {
+  if (!documentPreviewModal || !documentPreviewFrame) {
+    return;
+  }
+
+  if (documentPreviewLoadTimer) {
+    window.clearTimeout(documentPreviewLoadTimer);
+    documentPreviewLoadTimer = null;
+  }
+
+  documentPreviewMeta.textContent = 'Preview unavailable';
+  documentPreviewFrame.hidden = true;
+  setDocumentPreviewStatus('error', 'Preview unavailable', message, true);
 }
 
 function buildApiUrl(path) {
