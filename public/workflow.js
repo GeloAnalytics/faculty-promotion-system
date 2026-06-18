@@ -19,6 +19,8 @@ let currentUser = null;
 let employeeDashboard = null;
 let uploadWorkflow = [];
 let reviewerQueueItems = [];
+let currentDocumentPreviewUrl = null;
+let documentPreviewRequestToken = 0;
 
 document.querySelectorAll("[data-action='logout']").forEach((button) => {
   button.addEventListener('click', logoutAndReturnHome);
@@ -538,7 +540,7 @@ function handleUploadListActionClick(event) {
   }
 
   if (action === 'preview') {
-    openDocumentPreview({
+    void openDocumentPreview({
       documentId,
       fileName,
       mimeType,
@@ -564,7 +566,7 @@ function handleReviewQueueActionClick(event) {
     return;
   }
 
-  openDocumentPreview({
+  void openDocumentPreview({
     documentId,
     fileName,
     mimeType,
@@ -592,18 +594,50 @@ async function deleteUploadDocument(documentId, fileName) {
   }
 }
 
-function openDocumentPreview({ documentId, fileName, mimeType }) {
+async function openDocumentPreview({ documentId, fileName, mimeType }) {
   if (!documentPreviewModal || !documentPreviewFrame || !documentPreviewTitle || !documentPreviewMeta) {
     return;
   }
 
+  const requestToken = ++documentPreviewRequestToken;
   const previewUrl = buildApiUrl(`/api/documents/${encodeURIComponent(documentId)}/view`);
+  if (currentDocumentPreviewUrl) {
+    URL.revokeObjectURL(currentDocumentPreviewUrl);
+    currentDocumentPreviewUrl = null;
+  }
+
   documentPreviewTitle.textContent = fileName;
-  documentPreviewMeta.textContent = mimeType ? `Previewing ${mimeType}` : 'Previewing uploaded file';
-  documentPreviewFrame.src = previewUrl;
+  documentPreviewMeta.textContent = 'Loading preview...';
+  documentPreviewFrame.src = 'about:blank';
   documentPreviewModal.dataset.open = 'true';
   documentPreviewModal.hidden = false;
   document.body.classList.add('preview-open');
+
+  try {
+    const response = await fetch(previewUrl, {
+      credentials: 'include',
+    });
+
+    if (!response.ok) {
+      throw new Error(await readFetchErrorMessage(response));
+    }
+
+    const fileBlob = await response.blob();
+    if (requestToken !== documentPreviewRequestToken) {
+      return;
+    }
+
+    currentDocumentPreviewUrl = URL.createObjectURL(fileBlob);
+    documentPreviewFrame.src = currentDocumentPreviewUrl;
+    documentPreviewMeta.textContent = mimeType ? `Previewing ${mimeType}` : 'Previewing uploaded file';
+  } catch (error) {
+    if (requestToken !== documentPreviewRequestToken) {
+      return;
+    }
+
+    documentPreviewMeta.textContent = toErrorMessage(error);
+    documentPreviewFrame.src = 'about:blank';
+  }
 }
 
 function closeDocumentPreview() {
@@ -611,6 +645,11 @@ function closeDocumentPreview() {
     return;
   }
 
+  documentPreviewRequestToken += 1;
+  if (currentDocumentPreviewUrl) {
+    URL.revokeObjectURL(currentDocumentPreviewUrl);
+    currentDocumentPreviewUrl = null;
+  }
   documentPreviewFrame.src = 'about:blank';
   documentPreviewModal.dataset.open = 'false';
   documentPreviewModal.hidden = true;
@@ -722,6 +761,11 @@ function readErrorMessage(data, status) {
   }
 
   return `Request failed with status ${status}`;
+}
+
+async function readFetchErrorMessage(response) {
+  const data = await response.json().catch(() => ({}));
+  return readErrorMessage(data, response.status);
 }
 
 function buildApiUrl(path) {
