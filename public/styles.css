@@ -204,6 +204,10 @@ select {
   align-items: start;
 }
 
+.dashboard-grid-employee {
+  grid-auto-flow: row dense;
+}
+
 .dashboard-grid > * {
   min-width: 0;
 }
@@ -2394,10 +2398,10 @@ body[data-portal="evaluator"] #scoring-panel .stack-form {
 }
 
 .uploaded-file-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 12px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 1.1fr);
+  gap: 16px;
+  align-items: start;
   padding: 10px 14px;
   border-radius: 12px;
   background: var(--surface-strong);
@@ -2415,12 +2419,15 @@ body[data-portal="evaluator"] #scoring-panel .stack-form {
   align-items: baseline;
   gap: 6px 14px;
   min-width: 0;
-  flex: 1;
 }
 
 .uploaded-file-info strong {
+  display: block;
+  flex: 0 1 100%;
   font-size: 0.88rem;
-  word-break: break-word;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+  word-break: normal;
 }
 
 .uploaded-file-panel {
@@ -2718,9 +2725,8 @@ body[data-portal="evaluator"] #scoring-panel .stack-form {
   }
 
   .uploaded-file-row {
-    flex-direction: column;
-    align-items: stretch;
-    gap: 8px;
+    grid-template-columns: 1fr;
+    gap: 10px;
   }
 
   .uploaded-file-summary {
@@ -2729,7 +2735,7 @@ body[data-portal="evaluator"] #scoring-panel .stack-form {
   }
 
   .uploaded-file-row .delete-upload-button {
-    align-self: flex-end;
+    justify-self: end;
   }
 
   .cycle-period-banner,
