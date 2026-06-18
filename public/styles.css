@@ -1878,6 +1878,10 @@ select {
   padding: 22px;
 }
 
+.document-preview-modal[hidden] {
+  display: none;
+}
+
 .document-preview-backdrop {
   position: absolute;
   inset: 0;
