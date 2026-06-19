@@ -60,6 +60,15 @@ Make the evaluator workspace read-only for scoring:
 3. Compare OCR score values with the submitted documents
 4. Confirm whether the computed system score matches the evidence
 
+## Evidence Validation Matrix
+
+Treat the uploaded workbook as a strict validation guide:
+
+1. `AND` clauses mean every listed document is required.
+2. `OR` clauses mean any one valid alternative may satisfy that slot, but at least one must be present.
+3. Missing a required document keeps the packet incomplete and blocks promotion review.
+4. Bonus criteria do not replace missing required criteria.
+
 ## Page Plan
 
 ### 1. Request Form Page
@@ -104,8 +113,9 @@ Create an individual summary sheet view that combines:
 
 1. Score sheet OCR should read the faculty score values.
 2. Evidence uploads should be checked for file type and relevance.
-3. The system should flag mismatches between OCR scores and the expected criterion total.
-4. The evaluator should only confirm or reject the system result, not retype scores.
+3. The system should flag missing evidence as an incomplete validation state, not just a warning.
+4. The system should flag mismatches between OCR scores and the expected criterion total.
+5. The evaluator should only confirm or reject the system result, not retype scores.
 
 ## Upload Restrictions
 

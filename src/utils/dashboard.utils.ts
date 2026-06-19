@@ -2,6 +2,7 @@ import { uploadPanels } from '../uploadPanels';
 import { academicRankOptions, normalizeAcademicRankOption } from '../constants/faculty';
 import { fixedReviewPeriodLabel, reviewCycleMetricKeys, reviewCycleYearLabels } from '../constants/reviewCycle';
 import type { UploadPanelKey } from '../types';
+import { validateEvidencePacket, type EvidenceValidationSummary } from './evidenceValidation';
 
 type EvaluatorAssessmentSnapshot = {
   totalScore: number;
@@ -51,6 +52,8 @@ type WorkbookSummaryMirror = {
     validatedScore: number | null;
     scoreBracket: string | null;
     comparisonStatus: 'matched' | 'needs-review' | 'faculty-only' | 'validated-only' | 'missing';
+    evidenceStatus: EvidenceValidationSummary['status'];
+    missingEvidencePanels: string[];
     currentRank: string | null;
     suggestedRank: string | null;
     projectedRank: string | null;
@@ -133,6 +136,7 @@ export function buildDraftPointSummary(
   const uploadedPanels = new Set<string>();
   const panelScoreByKey = new Map<UploadPanelKey, number>();
   const panelEvidenceCount = new Map<UploadPanelKey, number>();
+  const uploadTypeCounts = new Map<string, number>();
 
   let instruction = resolvePerformanceMetricValue(performanceReview, 'teachingEffectiveness') ?? 0;
   let research = resolvePerformanceMetricValue(performanceReview, 'researchOutputs') ?? 0;
@@ -151,6 +155,9 @@ export function buildDraftPointSummary(
       if (metadata.panelScore !== null) {
         panelScoreByKey.set(panelKey, Math.max(panelScoreByKey.get(panelKey) ?? 0, metadata.panelScore));
       }
+    }
+    if (metadata.uploadType) {
+      uploadTypeCounts.set(metadata.uploadType, (uploadTypeCounts.get(metadata.uploadType) ?? 0) + 1);
     }
     if (metadata.completenessScore !== null) {
       completenessTotal += metadata.completenessScore;
@@ -203,6 +210,21 @@ export function buildDraftPointSummary(
     typeof personalData.academicRank === 'string' ? normalizeAcademicRank(personalData.academicRank) : null;
   const highestEducationalAttainment =
     typeof personalData.highestEducationalAttainment === 'string' ? personalData.highestEducationalAttainment : null;
+  const evidenceValidation = validateEvidencePacket({
+    requestForm: {
+      fullName: typeof personalData.fullName === 'string' ? personalData.fullName : null,
+      employeeId: typeof personalData.employeeId === 'string' ? personalData.employeeId : null,
+      academicRank: typeof personalData.academicRank === 'string' ? personalData.academicRank : null,
+      highestEducationalAttainment,
+      reviewPeriod:
+        (typeof performanceReview.reviewPeriod === 'string' && performanceReview.reviewPeriod) ||
+        profile?.semester ||
+        fixedReviewPeriodLabel,
+      department: typeof personalData.department === 'string' ? personalData.department : null,
+    },
+    uploadedPanelKeys: uploadedPanels as Iterable<UploadPanelKey>,
+    uploadTypeCounts: Object.fromEntries(uploadTypeCounts),
+  });
   const hasDoctoralGraduateBonus = canUseDoctoralGraduateBonus(
     normalizeAttainment(highestEducationalAttainment),
     promotionHistory,
@@ -239,9 +261,12 @@ export function buildDraftPointSummary(
     evaluatorAssessment,
     latestEvaluation?.status ?? null,
   );
+  const evidenceAwarePromotionDraft = applyEvidenceValidationToPromotionDraft(promotionDraft, evidenceValidation);
 
   return {
-    note: 'Approximate estimate only. Evaluator review is still required for the official score.',
+    note: evidenceValidation.status === 'complete'
+      ? 'Approximate estimate only. Evaluator review is still required for the official score.'
+      : evidenceValidation.note,
     facultyName: typeof personalData.fullName === 'string' ? personalData.fullName : null,
     semester:
       (typeof performanceReview.reviewPeriod === 'string' && performanceReview.reviewPeriod) ||
@@ -261,8 +286,11 @@ export function buildDraftPointSummary(
       expectedPanelCount: uploadPanels.length,
       documentCompletenessAverage: roundScore(averagedCompleteness * 100),
       workflowCoveragePercent: roundScore(coverage * 100),
+      validationStatus: evidenceValidation.status,
+      missingPanels: evidenceValidation.missingPanelTitles,
+      missingRequestFields: evidenceValidation.missingRequestFields,
     },
-    promotionDraft,
+    promotionDraft: evidenceAwarePromotionDraft,
     workbookMirror: buildWorkbookMirrorSummary({
       rawInput,
       semester: profile?.semester ?? null,
@@ -275,7 +303,8 @@ export function buildDraftPointSummary(
       validatedOutcome,
       validatedKraTotals,
       assessment: evaluatorAssessment,
-      promotionDraft,
+      promotionDraft: evidenceAwarePromotionDraft,
+      evidenceValidation,
     }),
   };
 }
@@ -1036,6 +1065,7 @@ function buildWorkbookMirrorSummary(args: {
   validatedKraTotals: { instruction: number; research: number; extension: number; professionalDevelopment: number } | null;
   assessment: EvaluatorAssessmentSnapshot | null;
   promotionDraft: PromotionDraftSnapshot;
+  evidenceValidation: EvidenceValidationSummary;
 }): WorkbookSummaryMirror {
   const requestPersonalData = readJsonObject(args.rawInput.personalData);
   const performanceReview = readJsonObject(args.rawInput.performanceReview);
@@ -1056,7 +1086,7 @@ function buildWorkbookMirrorSummary(args: {
         maxScore: panel.maxScore,
         facultyScore,
         validatedScore,
-        status: deriveScoreValidationStatus(facultyScore, validatedScore),
+        status: deriveScoreValidationStatus(facultyScore, validatedScore, args.panelEvidenceCount.get(panel.key) ?? 0),
         evidenceCount: args.panelEvidenceCount.get(panel.key) ?? 0,
       } satisfies WorkbookCriterionSummary;
     });
@@ -1112,6 +1142,8 @@ function buildWorkbookMirrorSummary(args: {
       validatedScore,
       scoreBracket: getScoreBracketLabel(validatedScore ?? facultyScore),
       comparisonStatus,
+      evidenceStatus: args.evidenceValidation.status,
+      missingEvidencePanels: args.evidenceValidation.missingPanelTitles,
       currentRank: args.currentRank,
       suggestedRank: args.promotionDraft.suggestedRank,
       projectedRank: args.promotionDraft.projectedRank,
@@ -1166,7 +1198,11 @@ function getKraMetricKey(kraTitle: string): 'instruction' | 'research' | 'extens
 function deriveScoreValidationStatus(
   facultyScore: number | null,
   validatedScore: number | null,
+  evidenceCount: number,
 ): WorkbookCriterionSummary['status'] {
+  if (evidenceCount < 1) {
+    return 'missing';
+  }
   if (facultyScore !== null && validatedScore !== null) {
     return Math.abs(facultyScore - validatedScore) <= 0.01 ? 'matched' : 'needs-review';
   }
@@ -1177,6 +1213,28 @@ function deriveScoreValidationStatus(
     return 'validated-only';
   }
   return 'missing';
+}
+
+function applyEvidenceValidationToPromotionDraft(
+  draft: PromotionDraftSnapshot,
+  evidenceValidation: EvidenceValidationSummary,
+): PromotionDraftSnapshot {
+  if (evidenceValidation.status === 'complete') {
+    return draft;
+  }
+
+  const validationNote = evidenceValidation.note;
+  const pendingRequirement = draft.pendingRequirement
+    ? `${draft.pendingRequirement} ${validationNote}`
+    : validationNote;
+  const note = draft.note.includes(validationNote) ? draft.note : `${validationNote} ${draft.note}`.trim();
+
+  return {
+    ...draft,
+    status: draft.status === 'needs-exact-rank' || draft.status === 'pending-doctoral-attainment' || draft.status === 'pending-professor-accreditation' || draft.status === 'pending-cup-certification' ? draft.status : 'pending',
+    pendingRequirement,
+    note,
+  };
 }
 
 function sumNullableScores(values: Array<number | null>) {

@@ -1,3 +1,20 @@
+
+## 2026-06-19
+
+### Summary
+
+This update aligns the repository documentation with the workbook-derived documentary evidence rules, including strict `AND`/`OR` completeness handling for promotion packets.
+
+### What Changed
+
+- Added a dedicated documentary evidence validation matrix that summarizes the packet-level and KRA-level rules extracted from the reference workbook.
+- Updated the README, mirroring plan, and dissertation revision guide to state that missing required evidence keeps a promotion packet incomplete.
+- Clarified that `AND` clauses are mandatory bundles while `OR` clauses are alternative evidence paths that still require at least one qualifying document.
+
+### Verification
+
+- Documentation-only update; no build or test run was required.
+
 # Release Notes
 
 ## 2026-06-17

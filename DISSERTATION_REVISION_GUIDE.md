@@ -24,6 +24,7 @@ The current repository supports:
 - document completeness and quality scoring
 - preliminary employee-side rank estimation before evaluator scoring
 - evaluator-backed draft-rank computation after criterion scoring
+- workbook-derived documentary evidence validation with strict `AND`/`OR` completeness rules
 - training-example labeling and validation
 - export of machine-learning-ready datasets
 - offline comparison of boosting-based machine learning models
@@ -115,7 +116,7 @@ Describe the project as a combined software-engineering and machine-learning pip
 3. The system stores structured faculty data and extracted document metadata.
 4. The employee uploads supporting documents per KRA criterion.
 5. The system parses PDFs or performs OCR on images.
-6. The system summarizes evidence quality, completeness, and coverage.
+6. The system summarizes evidence quality, completeness, and coverage, and flags incomplete required evidence bundles.
 7. The dashboard may show a preliminary rank estimate.
 8. Evaluators review employee records and assign criterion scores.
 9. Evaluator scoring produces a stronger draft-rank result.
@@ -310,6 +311,7 @@ Then clearly state:
 - Integration of operational workflow and ML dataset curation in one platform
 - Use of document-derived evidence features, not only manually entered data
 - Availability of preliminary rank estimation before evaluator scoring
+- Explicit evidence-completeness validation so missing required documents stay blocked from promotion review
 - Human-in-the-loop evaluator validation before model training
 - Reproducible offline model comparison with explainability outputs
 - Alignment of upload capture with KRA/NBC-style promotion criteria

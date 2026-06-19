@@ -24,6 +24,7 @@ The active user-facing interface is the static portal in `public/`. The Vue app 
 - Evaluator scoring still takes priority and produces the stronger draft-rank recommendation once available.
 - The backend dashboard summary now mirrors the reference workbook structure with parsed request-form name parts, KRA totals, score-bracket labels, and faculty-versus-validated score comparison.
 - KRA II terminology now matches the workbook wording: `Research, Innovation and Creative Work`.
+- The repository now includes a documentary evidence validation matrix that treats missing required evidence as an incomplete promotion packet.
 - The active runtime UI still needs a direct workbook-mirror presentation layer for the new summary payload.
 - Live machine-learning prediction inside the deployed API is intentionally disabled.
 - Offline ML training, comparison, and explainability reporting are implemented in `ml/`.
@@ -46,7 +47,7 @@ The active user-facing interface is the static portal in `public/`. The Vue app 
 - Left-column employee upload panels and evaluator database viewer that avoid colliding with the sticky scoring rail
 - Faculty profile capture with baseline identity, rank, attainment, and promotion history
 - Current-cycle submission fields for review-period performance metrics and cycle notes
-- Criterion-based uploads grouped by KRA
+- Criterion-based uploads grouped by KRA with strict completeness validation
 - PDF parsing and image OCR
 - Upload-to-profile linkage using explicit profile selection or filename matching fallback
 - Evaluator scoring workflow and review queue
@@ -99,6 +100,8 @@ When evaluator scoring is not yet available, the system can still generate a pre
 
 This estimate is advisory and is labeled as preliminary.
 
+The workbook-derived evidence matrix treats `AND` clauses as mandatory bundles and `OR` clauses as alternative evidence paths. If a required bundle is incomplete, the record should stay in an incomplete state and should not be treated as promotable.
+
 ### Evaluator-backed mode
 
 When the latest training item is `LABELED` or `VALIDATED` and contains criterion scores, the system computes the rank result from evaluator-backed KRA totals.
@@ -116,7 +119,7 @@ The draft-rank feature is a decision-support aid. It is not a final committee de
 3. Employees maintain the current promotion-cycle fields for the active review period.
 4. Employees upload PDF or image evidence to criterion-specific KRA panels.
 5. The backend parses PDFs or runs OCR on images and stores extracted text and metadata.
-6. The system summarizes evidence coverage and can compute a preliminary rank estimate.
+6. The system summarizes evidence coverage, checks validation completeness, and can compute a preliminary rank estimate.
 7. Evaluators review submissions and assign criterion scores.
 8. The dashboard upgrades the rank result to an evaluator-backed draft recommendation when scoring exists.
 9. Labeled and validated examples can be exported for offline ML training and comparison.
@@ -254,6 +257,8 @@ python ml/train_boosting_models.py --cv-folds 5 --small-dataset-threshold 60
 - Spreadsheet and CSV uploads are rejected in criterion-based upload panels.
 - The old PDF naming-convention requirement is no longer enforced as an upload restriction.
 - Filename matching may still be used as a fallback for linking uploads to a faculty profile when explicit profile linkage is unavailable.
+- Documentary evidence validation follows the workbook structure: all mandatory `AND` items must be present, while `OR` groups accept one valid alternative but still require at least one qualifying document.
+- A missing required evidence item should be treated as a blocker for promotion review, not as a minor warning.
 
 ## Deployment Notes
 
@@ -280,3 +285,7 @@ For day-to-day system usage and implementation details, use this file:
 For dissertation and paper revision work, use:
 
 - `DISSERTATION_REVISION_GUIDE.md`
+
+For the evidence-completeness rules extracted from the workbook, use:
+
+- `EVIDENCE_VALIDATION_MATRIX.md`

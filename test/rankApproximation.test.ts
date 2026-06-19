@@ -88,9 +88,10 @@ test('professor ranks are capped to one rank increase from KRA scoring', () => {
     [],
   );
 
-  assert.equal(draftPoints.promotionDraft.status, 'preliminary');
+  assert.equal(draftPoints.promotionDraft.status, 'pending');
   assert.equal(draftPoints.promotionDraft.suggestedRank, 'Professor II');
   assert.equal(draftPoints.promotionDraft.subrankIncrements, 1);
+  assert.match(draftPoints.promotionDraft.note, /Incomplete promotion packet/i);
 });
 
 test('doctoral graduate bonus does not push professor projections beyond one rank', () => {
@@ -105,10 +106,11 @@ test('doctoral graduate bonus does not push professor projections beyond one ran
     [],
   );
 
-  assert.equal(draftPoints.promotionDraft.status, 'preliminary');
+  assert.equal(draftPoints.promotionDraft.status, 'pending');
   assert.equal(draftPoints.promotionDraft.suggestedRank, 'Professor II');
   assert.equal(draftPoints.promotionDraft.subrankIncrements, 1);
   assert.doesNotMatch(draftPoints.promotionDraft.note, /one-time \+1 rank adjustment/i);
+  assert.match(draftPoints.promotionDraft.note, /Incomplete promotion packet/i);
 });
 
 test('doctoral graduates receive the one-time +1 rank bonus when no prior promotion is recorded', () => {
