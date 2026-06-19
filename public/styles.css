@@ -597,6 +597,10 @@ select {
   gap: 12px;
 }
 
+.ledger-counts {
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+
 .compact-counts {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
@@ -2407,6 +2411,35 @@ body[data-portal="evaluator"] #scoring-panel .stack-form {
   background: rgba(255, 253, 248, 0.5);
 }
 
+.uploaded-files-ledger-summary {
+  display: grid;
+  gap: 14px;
+}
+
+.uploaded-files-ledger-note {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.55;
+}
+
+.uploaded-files-ledger-note-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.uploaded-files-ledger-chip {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgba(13, 107, 87, 0.08);
+  color: var(--accent-strong);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
 .uploaded-files-toolbar {
   display: grid;
   grid-template-columns: minmax(0, 1.6fr) minmax(220px, 0.9fr);
@@ -2437,6 +2470,19 @@ body[data-portal="evaluator"] #scoring-panel .stack-form {
   margin: 0;
   font-family: "Space Grotesk", sans-serif;
   font-size: 1rem;
+}
+
+.uploaded-files-group-header h3 .uploaded-files-group-id {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 8px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: rgba(13, 107, 87, 0.08);
+  color: var(--accent-strong);
+  font-size: 0.72rem;
+  font-weight: 700;
+  vertical-align: middle;
 }
 
 .uploaded-files-list {

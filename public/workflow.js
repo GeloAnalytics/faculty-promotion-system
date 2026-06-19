@@ -13,6 +13,8 @@ const documentPreviewFrame = byId('document-preview-frame');
 const documentPreviewTitle = byId('document-preview-title');
 const documentPreviewMeta = byId('document-preview-meta');
 const evaluatorInsights = byId('evaluator-insights');
+const evaluatorDocumentLibrary = byId('evaluator-document-library');
+const evaluatorDocumentLibraryStatus = byId('evaluator-document-library-status');
 const reviewQueue = byId('review-queue');
 const reviewQueueFilterStatus = byId('review-queue-filter-status');
 
@@ -30,6 +32,7 @@ document.querySelectorAll("[data-action='logout']").forEach((button) => {
 });
 employeeUploadList?.addEventListener('click', handleUploadListActionClick);
 reviewQueue?.addEventListener('click', handleReviewQueueActionClick);
+evaluatorDocumentLibrary?.addEventListener('click', handleReviewQueueActionClick);
 document.addEventListener('keydown', handleDocumentPreviewKeydown);
 documentPreviewModal?.addEventListener('click', (event) => {
   const target = event.target;
@@ -120,6 +123,7 @@ async function loadEvaluatorWorkspace() {
   reviewerQueueItems = Array.isArray(data.items) ? data.items : [];
 
   renderEvaluatorInsights(reviewerQueueItems);
+  renderEvaluatorDocumentLibrary(reviewerQueueItems);
   renderReviewQueue(reviewerQueueItems);
   setNotice(reviewQueueFilterStatus, `${reviewerQueueItems.length} employee submission(s) ready for read-only review.`);
 }
@@ -243,40 +247,284 @@ function renderEmployeeUploads(uploads) {
     return;
   }
 
-  const grouped = groupUploadsByKra(uploads);
+  const orderedUploads = sortUploadsForDisplay(uploads);
+  const grouped = groupEmployeeUploads(orderedUploads);
   const groupOrder = [
+    'Score Sheet',
     'KRA I - Instruction',
     'KRA II - Research, Innovation and Creative Work',
     'KRA III - Extension Services',
     'KRA IV - Professional Development',
-    'Unassigned',
+    'Unassigned / Legacy',
   ];
 
-  if (!uploads.length) {
+  if (!orderedUploads.length) {
     employeeUploadList.innerHTML = '<div class="notice">No files uploaded yet.</div>';
     return;
   }
 
-  employeeUploadList.innerHTML = groupOrder
-    .filter((type) => grouped[type] && grouped[type].length)
-    .map((type) => {
-      const groupUploads = grouped[type];
-      const label = type === 'Unassigned' ? 'Unassigned Uploads' : type;
-      return `
-        <article class="uploaded-files-group">
-          <div class="uploaded-files-group-header">
-            <h3>${escapeHtml(label)}</h3>
-            <span>${escapeHtml(String(groupUploads.length))} file(s)</span>
-          </div>
-          <div class="uploaded-files-list">
-            ${groupUploads.map(renderUploadRow).join('')}
-          </div>
-        </article>
-      `;
-    })
-    .join('');
+  const latestUpload = orderedUploads[0];
+  const scoreSheetCount = orderedUploads.filter((upload) => upload.metadata?.uploadType === 'score-sheet').length;
+  const evidenceCount = orderedUploads.filter((upload) => upload.metadata?.uploadType === 'evidence').length;
+  const legacyCount = orderedUploads.length - scoreSheetCount - evidenceCount;
+
+  employeeUploadList.innerHTML = `
+    <div class="uploaded-files-ledger-summary">
+      <div class="database-counts ledger-counts">
+        ${renderLedgerStatCard('Total uploads', String(orderedUploads.length))}
+        ${renderLedgerStatCard('Score sheets', String(scoreSheetCount))}
+        ${renderLedgerStatCard('Evidence files', String(evidenceCount))}
+        ${renderLedgerStatCard('Legacy files', String(legacyCount))}
+        ${renderLedgerStatCard('Latest upload', formatDate(latestUpload.createdAt))}
+      </div>
+      <p class="uploaded-files-ledger-note">
+        Files are sorted with the newest upload first inside each section. Score sheets appear before evidence, then any legacy or unassigned files.
+      </p>
+      ${groupOrder
+        .filter((type) => grouped[type] && grouped[type].length)
+        .map((type) => renderUploadGroup(type, grouped[type]))
+        .join('')}
+    </div>
+  `;
 }
 
+function renderUploadGroup(label, groupUploads) {
+  const title = label === 'Unassigned / Legacy' ? 'Unassigned / Legacy' : label;
+
+  return `
+    <article class="uploaded-files-group">
+      <div class="uploaded-files-group-header">
+        <div>
+          <h3>${escapeHtml(title)}</h3>
+          <span>${escapeHtml(getUploadGroupSubheading(label, groupUploads.length))}</span>
+        </div>
+        <span>${escapeHtml(String(groupUploads.length))} file(s)</span>
+      </div>
+      <div class="uploaded-files-list">
+        ${groupUploads.map(renderUploadRow).join('')}
+      </div>
+    </article>
+  `;
+}
+
+function getUploadGroupSubheading(label, count) {
+  if (label === 'Score Sheet') {
+    return count === 1 ? 'Primary score sheet' : 'Primary score sheets';
+  }
+
+  if (label === 'Unassigned / Legacy') {
+    return 'Legacy uploads or files without a detected KRA';
+  }
+
+  return 'Evidence grouped by KRA';
+}
+
+function groupEmployeeUploads(uploads) {
+  const groups = {
+    'Score Sheet': [],
+    'KRA I - Instruction': [],
+    'KRA II - Research, Innovation and Creative Work': [],
+    'KRA III - Extension Services': [],
+    'KRA IV - Professional Development': [],
+    'Unassigned / Legacy': [],
+  };
+
+  for (const upload of uploads) {
+    groups[getEmployeeUploadGroupLabel(upload)].push(upload);
+  }
+
+  return Object.fromEntries(
+    Object.entries(groups).map(([label, items]) => [label, sortUploadsForDisplay(items)]),
+  );
+}
+
+function getEmployeeUploadGroupLabel(upload) {
+  if (upload.metadata?.uploadType === 'score-sheet') {
+    return 'Score Sheet';
+  }
+
+  const kraLabel = getKraLabel(upload.metadata?.panelKey);
+  if (kraLabel) {
+    return kraLabel;
+  }
+
+  return 'Unassigned / Legacy';
+}
+
+function sortUploadsForDisplay(uploads) {
+  return [...uploads].sort((left, right) => {
+    const leftPriority = getUploadSortPriority(left);
+    const rightPriority = getUploadSortPriority(right);
+
+    if (leftPriority !== rightPriority) {
+      return leftPriority - rightPriority;
+    }
+
+    const leftTime = new Date(left.createdAt).getTime();
+    const rightTime = new Date(right.createdAt).getTime();
+
+    if (leftTime !== rightTime) {
+      return rightTime - leftTime;
+    }
+
+    return String(left.originalName || '').localeCompare(String(right.originalName || ''));
+  });
+}
+
+function getUploadSortPriority(upload) {
+  if (upload.metadata?.uploadType === 'score-sheet') {
+    return 0;
+  }
+
+  const kraLabel = getKraLabel(upload.metadata?.panelKey);
+  if (kraLabel === 'KRA I - Instruction') {
+    return 1;
+  }
+
+  if (kraLabel === 'KRA II - Research, Innovation and Creative Work') {
+    return 2;
+  }
+
+  if (kraLabel === 'KRA III - Extension Services') {
+    return 3;
+  }
+
+  if (kraLabel === 'KRA IV - Professional Development') {
+    return 4;
+  }
+
+  return 5;
+}
+
+function renderLedgerStatCard(label, value) {
+  return `
+    <article class="database-count-card">
+      <span class="database-count-label">${escapeHtml(label)}</span>
+      <strong class="database-count-value">${escapeHtml(value)}</strong>
+    </article>
+  `;
+}
+
+function renderEvaluatorDocumentLibrary(items) {
+  if (!evaluatorDocumentLibrary) {
+    return;
+  }
+
+  const documents = collectEvaluatorDocuments(items);
+  if (!documents.length) {
+    evaluatorDocumentLibrary.innerHTML = '<div class="notice">No uploaded documents are available for browsing yet.</div>';
+    if (evaluatorDocumentLibraryStatus) {
+      evaluatorDocumentLibraryStatus.textContent = 'No documents found in the current review queue.';
+    }
+    return;
+  }
+
+  const latestDocument = documents[0];
+  const employeeCount = new Set(documents.map((document) => document.profileId)).size;
+  const scoreSheetCount = documents.filter((document) => document.uploadType === 'score-sheet').length;
+  const kraCount = new Set(
+    documents
+      .map((document) => document.kraLabel)
+      .filter((value) => typeof value === 'string' && value !== 'Unassigned / Legacy'),
+  ).size;
+  const grouped = groupDocumentsByProfile(documents);
+
+  if (evaluatorDocumentLibraryStatus) {
+    evaluatorDocumentLibraryStatus.textContent =
+      'Documents are grouped by employee and sorted with the newest upload first.';
+  }
+
+  evaluatorDocumentLibrary.innerHTML = `
+    <div class="uploaded-files-ledger-summary">
+      <div class="database-counts ledger-counts">
+        ${renderLedgerStatCard('Documents', String(documents.length))}
+        ${renderLedgerStatCard('Employees', String(employeeCount))}
+        ${renderLedgerStatCard('Score sheets', String(scoreSheetCount))}
+        ${renderLedgerStatCard('Latest upload', formatDate(latestDocument.createdAt))}
+      </div>
+      <p class="uploaded-files-ledger-note">
+        Browsing is organized by employee profile first, then by upload date. KRA labels are still visible on each file so evaluators can jump straight to the evidence they need.
+      </p>
+      <div class="uploaded-files-ledger-note-chip-row">
+        ${renderLedgerNoteChip(`${kraCount} KRA group${kraCount === 1 ? '' : 's'}`)}
+        ${renderLedgerNoteChip('Newest files first')}
+        ${renderLedgerNoteChip('Read-only preview')}
+      </div>
+      ${grouped
+        .map((group) => renderEvaluatorDocumentGroup(group))
+        .join('')}
+    </div>
+  `;
+}
+
+function collectEvaluatorDocuments(items) {
+  return sortUploadsForDisplay(
+    items.flatMap((item) =>
+      (Array.isArray(item.uploadLogs) ? item.uploadLogs : []).map((upload) => ({
+        ...upload,
+        profileId: item.id,
+        profileLabel: item.name || 'Unnamed employee',
+        employeeId: item.employeeId || '',
+        submittedBy: item.createdBy?.fullName || '-',
+        cycleLabel: item.cycleData?.performanceReview?.reviewPeriod || item.semester || 'Current cycle',
+        kraLabel: getKraLabel(upload.metadata?.panelKey) || 'Unassigned / Legacy',
+      })),
+    ),
+  );
+}
+
+function groupDocumentsByProfile(documents) {
+  const grouped = documents.reduce((groups, document) => {
+    if (!groups[document.profileId]) {
+      groups[document.profileId] = {
+        profileId: document.profileId,
+        label: document.profileLabel,
+        employeeId: document.employeeId,
+        submittedBy: document.submittedBy,
+        cycleLabel: document.cycleLabel,
+        documents: [],
+        latestCreatedAt: document.createdAt,
+      };
+    }
+
+    const group = groups[document.profileId];
+    group.documents.push(document);
+
+    if (new Date(document.createdAt).getTime() > new Date(group.latestCreatedAt).getTime()) {
+      group.latestCreatedAt = document.createdAt;
+    }
+
+    return groups;
+  }, {});
+
+  return Object.values(grouped)
+    .map((group) => ({
+      ...group,
+      documents: sortUploadsForDisplay(group.documents),
+    }))
+    .sort((left, right) => new Date(right.latestCreatedAt).getTime() - new Date(left.latestCreatedAt).getTime());
+}
+
+function renderEvaluatorDocumentGroup(group) {
+  return `
+    <article class="uploaded-files-group evaluator-document-group">
+      <div class="uploaded-files-group-header">
+        <div>
+          <h3>${escapeHtml(group.label)}${group.employeeId ? ` <span class="uploaded-files-group-id">${escapeHtml(group.employeeId)}</span>` : ''}</h3>
+          <span>${escapeHtml(group.submittedBy)} - ${escapeHtml(group.cycleLabel)}</span>
+        </div>
+        <span>${escapeHtml(String(group.documents.length))} file(s)</span>
+      </div>
+      <div class="uploaded-files-list">
+        ${group.documents.map((document) => renderEvaluatorUploadRow(document)).join('')}
+      </div>
+    </article>
+  `;
+}
+
+function renderLedgerNoteChip(label) {
+  return `<span class="uploaded-files-ledger-chip">${escapeHtml(label)}</span>`;
+}
 function renderUploadRow(item) {
   const metadata = item.metadata || {};
   const summary = metadata.analysisSummary || 'OCR summary pending.';

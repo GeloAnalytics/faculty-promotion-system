@@ -1,4 +1,4 @@
-import { DocumentKind, Prisma } from '@prisma/client';
+import { DocumentKind, Prisma, UserRole } from '@prisma/client';
 import { z } from 'zod';
 import pdf from 'pdf-parse';
 import fs from 'node:fs/promises';
@@ -307,6 +307,19 @@ export function resolveStoredDocumentPath(extractionMetadata: unknown) {
   }
 
   return normalizedPath;
+}
+
+export function canViewUploadedDocument(args: {
+  requesterRole: UserRole;
+  requesterUserId: string;
+  ownerUserId: string | null;
+  profileCreatedByUserId: string | null;
+}) {
+  if (args.requesterRole !== UserRole.EMPLOYEE) {
+    return true;
+  }
+
+  return args.ownerUserId === args.requesterUserId || args.profileCreatedByUserId === args.requesterUserId;
 }
 
 export function toPrismaJson(value: unknown): Prisma.InputJsonValue {

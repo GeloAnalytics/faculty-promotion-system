@@ -34,6 +34,7 @@
 
         <nav class="section-nav" id="section-nav">
           <a class="nav-chip" href="#evaluator-insights-panel">Overview</a>
+          <a class="nav-chip" href="#evaluator-document-browser-panel">Document Browser</a>
           <a class="nav-chip" href="#evaluator-queue-panel">Review Queue</a>
         </nav>
 
@@ -46,6 +47,19 @@
           </div>
           <div id="evaluator-insights" class="evaluator-insights">
             <div class="notice">Loading evaluation insights...</div>
+          </div>
+        </section>
+
+        <section class="panel panel-wide" id="evaluator-document-browser-panel">
+          <div class="panel-heading">
+            <div>
+              <p class="section-kicker">Document Browser</p>
+              <h2>Browse every uploaded file by employee profile</h2>
+            </div>
+          </div>
+          <div id="evaluator-document-library-status" class="uploaded-files-filter-status">Loading document browser...</div>
+          <div id="evaluator-document-library" class="database-viewer">
+            <div class="notice">Loading uploaded documents...</div>
           </div>
         </section>
 
@@ -86,7 +100,7 @@
       </section>
     </div>
 
-    <script src="/config.js?v=334eac1"></script>
-    <script src="/workflow.js?v=334eac1"></script>
+    <script src="/config.js?v=334eac2"></script>
+    <script src="/workflow.js?v=334eac2"></script>
   </body>
 </html>

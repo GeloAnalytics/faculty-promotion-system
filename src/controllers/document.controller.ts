@@ -5,6 +5,7 @@ import fs from 'node:fs/promises';
 import { createReadStream } from 'node:fs';
 import { pipeline } from 'node:stream/promises';
 import {
+  canViewUploadedDocument,
   parseDocumentKind,
   parseEmployeeUploadType,
   parseUploadPanelKey,
@@ -93,6 +94,11 @@ export const viewDocument = async (req: Request, res: Response) => {
       originalName: true,
       mimeType: true,
       extractionMetadata: true,
+      profile: {
+        select: {
+          createdByUserId: true,
+        },
+      },
     },
   });
 
@@ -100,8 +106,15 @@ export const viewDocument = async (req: Request, res: Response) => {
     return res.status(404).json({ error: 'Uploaded document not found' });
   }
 
-  if (req.user!.role === UserRole.EMPLOYEE && document.ownerUserId !== req.user!.id) {
-    return res.status(403).json({ error: 'You can only view your own uploaded documents' });
+  if (
+    !canViewUploadedDocument({
+      requesterRole: req.user!.role,
+      requesterUserId: req.user!.id,
+      ownerUserId: document.ownerUserId,
+      profileCreatedByUserId: document.profile?.createdByUserId ?? null,
+    })
+  ) {
+    return res.status(403).json({ error: 'You can only view documents tied to your account' });
   }
 
   const storedPath = resolveStoredDocumentPath(document.extractionMetadata);
