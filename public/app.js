@@ -341,7 +341,7 @@ async function refreshSession() {
       workspaceGreeting.textContent =
         portal === "evaluator"
           ? `Hello ${data.user.fullName}. Here are the logs and records for evaluation.`
-          : `Hello ${data.user.fullName}. Enter your faculty record and upload your supporting documents here for faculty promotion.`;
+          : `Hello ${data.user.fullName}. Upload each KRA score sheet and its matching evidence bundle separately for faculty promotion.`;
     }
     if (portal === "employee" && !valueOf("fullName")) {
       setFieldValue("fullName", data.user.fullName);
@@ -355,7 +355,7 @@ async function refreshSession() {
       workspaceGreeting.textContent =
         portal === "evaluator"
           ? "Hello. Here are the logs and records for evaluation."
-          : "Hello. Enter your faculty record and upload your supporting documents here for faculty promotion.";
+          : "Hello. Upload each KRA score sheet and its matching evidence bundle separately for faculty promotion.";
     }
   }
 }
@@ -520,14 +520,17 @@ function renderUploadPanels(panels) {
 
   const groupedPanels = groupPanelsByKra(panels);
   const totalPanels = panels.length;
-  const uploadedPanels = panels.filter((p) => hasPanelUploads(p.key)).length;
+  const uploadedPanels = panels.filter((panel) => hasPanelUpload(panel.key, "score-sheet") && hasPanelUpload(panel.key, "evidence")).length;
+  const scoreSheetCount = employeeUploads.filter((upload) => upload.metadata?.uploadType === "score-sheet").length;
+  const evidenceCount = employeeUploads.filter((upload) => upload.metadata?.uploadType === "evidence").length;
   const progressPct = totalPanels ? Math.round((uploadedPanels / totalPanels) * 100) : 0;
+  const groupedPanelsHtml = groupedPanels.map(([kraTitle, items]) => renderUploadGroupBlock(kraTitle, items)).join("");
 
   const progressBar = `
     <div class="upload-progress-strip">
       <div class="upload-progress-info">
         <span class="upload-progress-label">Upload Progress</span>
-        <span class="upload-progress-count">${uploadedPanels} / ${totalPanels} panels completed</span>
+        <span class="upload-progress-count">${uploadedPanels} / ${totalPanels} panels ready</span>
       </div>
       <div class="upload-progress-track">
         <div class="upload-progress-fill" style="width:${progressPct}%"></div>
@@ -535,117 +538,94 @@ function renderUploadPanels(panels) {
     </div>
   `;
 
-  uploadPanelGrid.innerHTML = progressBar + groupedPanels
-    .map(
-      ([kraTitle, items]) => {
-        const kraUploaded = items.filter((p) => hasPanelUploads(p.key)).length;
-        const kraComplete = kraUploaded === items.length;
-        return `
-        <details class="upload-group-collapsible${kraComplete ? ' kra-complete' : ''}" ${kraComplete ? '' : 'open'}>
-          <summary class="upload-group-summary">
-            <div class="upload-group-heading">
-              <h3>${escapeHtml(kraTitle)}</h3>
-              <p class="card-copy">${escapeHtml(describePanelAudience(items))}</p>
-            </div>
-            <span class="kra-progress-chip${kraComplete ? ' kra-progress-done' : ''}">
-              ${kraComplete ? '✓ Complete' : `${kraUploaded}/${items.length}`}
-            </span>
-          </summary>
-          <div class="upload-panel-grid">
-            ${items
-              .map(
-                (panel) => `
-                  <article class="card upload-card" data-panel-key="${escapeHtml(panel.key)}">
-                    <div class="upload-card-header">
-                      <h4>${escapeHtml(panel.title)}</h4>
-                      <div class="upload-card-badges">
-                        <span class="upload-status-badge" data-status="${hasPanelUploads(panel.key) ? 'uploaded' : 'pending'}">
-                          ${hasPanelUploads(panel.key) ? '\u2713 Uploaded' : '\u25cb Pending'}
-                        </span>
-                        <span class="upload-score-cap">Max ${escapeHtml(String(panel.maxScore))} pts</span>
-                      </div>
-                    </div>
-                    ${panel.audienceLabel ? `<p class="upload-audience-chip">${escapeHtml(panel.audienceLabel)}</p>` : ""}
-                    <p class="card-copy">${escapeHtml(panel.description)}</p>
-                    <form class="stack-form upload-panel-form" data-panel-key="${escapeHtml(panel.key)}">
-                      <label class="field">
-                        <span>Select file(s)</span>
-                        <input type="file" name="document" multiple required accept="${escapeHtml(panel.acceptedFormats.map(f => '.' + f).join(','))}" />
-                      </label>
-                      <button class="button button-primary upload-submit-btn" type="submit">
-                        <span class="upload-btn-label">Upload Evidence</span>
-                        <span class="upload-btn-spinner" style="display:none">Uploading…</span>
-                      </button>
-                    </form>
-                    <div class="notice panel-result">${hasPanelUploads(panel.key) ? getPanelUploadCount(panel.key) + ' file(s) uploaded.' : 'No files uploaded yet.'}</div>
-                  </article>
-                `,
-              )
-              .join("")}
-          </div>
-        </details>
-      `;
-      },
-    )
-    .join("");
+  uploadPanelGrid.innerHTML = `
+    ${progressBar}
+    <p class="workflow-intro">
+      Each KRA and criterion card keeps the score sheet and evidence uploads separate.
+      Upload the score sheet first, then add the supporting evidence for the same panel.
+    </p>
+    <div class="workflow-summary-row">
+      <span class="workflow-summary-chip">Score sheets: ${scoreSheetCount}</span>
+      <span class="workflow-summary-chip">Evidence files: ${evidenceCount}</span>
+      <span class="workflow-summary-chip">Panels tracked: ${totalPanels}</span>
+    </div>
+    ${groupedPanelsHtml}
+  `;
 
-  uploadPanelGrid.querySelectorAll(".upload-card").forEach((article) => {
-    const panelKey = article.dataset.panelKey || "";
-    const panel = panels.find((item) => item.key === panelKey);
-    if (!panel) {
-      return;
-    }
-
-    const form = article.querySelector(".upload-panel-form");
-    const result = article.querySelector(".panel-result");
-    const fileInput = form?.querySelector('input[type="file"]');
-    const submitBtn = form?.querySelector(".upload-submit-btn");
-    const btnLabel = submitBtn?.querySelector(".upload-btn-label");
-    const btnSpinner = submitBtn?.querySelector(".upload-btn-spinner");
-
-    form?.addEventListener("submit", async (event) => {
-      event.preventDefault();
-      const files = Array.from(fileInput.files || []);
-      if (!files.length) {
-        setNotice(result, "Choose at least one file first.", true);
-        return;
-      }
-
-      // Proactive session check before upload
-      const sessionOk = await ensureSession();
-      if (!sessionOk) return;
-
-      const formData = new FormData();
-      files.forEach((file) => formData.append("document", file));
-      formData.append("panelKey", panel.key);
-      formData.append("kind", "REQUIREMENT");
-      if (latestRecordContext?.profileId) {
-        formData.append("profileId", latestRecordContext.profileId);
-      }
-
-      // Set button to loading state
-      setUploadButtonLoading(submitBtn, btnLabel, btnSpinner, true);
-      setNotice(result, files.length === 1 ? "Uploading 1 file…" : `Uploading ${files.length} files…`);
-      try {
-        const response = await fetch(buildApiUrl("/api/documents/extract"), {
-          method: "POST",
-          body: formData,
-          credentials: "include",
-        });
-        const data = await readJson(response);
-        setNotice(result, buildUploadNotice(panel.title, data), false, true);
-        showToast(`✓ ${panel.title} — uploaded successfully`, "success");
-        await loadEmployeeDashboard();
-        renderUploadPanels(uploadPanelCatalog);
-        renderUploadedFilesSection(uploadPanelCatalog);
-      } catch (error) {
-        setNotice(result, toErrorMessage(error), true);
-        showToast(`Upload failed: ${toErrorMessage(error)}`, "error");
-      } finally {
-        setUploadButtonLoading(submitBtn, btnLabel, btnSpinner, false);
-      }
-    });
+  uploadPanelGrid.querySelectorAll(".workflow-upload-form").forEach((form) => {
+    form.addEventListener("submit", handlePanelUploadSubmit);
   });
+}
+
+function renderUploadGroupBlock(kraTitle, items) {
+  const kraUploaded = items.filter((panel) => hasPanelUpload(panel.key, "score-sheet") && hasPanelUpload(panel.key, "evidence")).length;
+  const kraComplete = kraUploaded === items.length;
+
+  return `
+    <details class="upload-group-collapsible${kraComplete ? ' kra-complete' : ''}" ${kraComplete ? '' : 'open'}>
+      <summary class="upload-group-summary">
+        <div class="upload-group-heading">
+          <h3>${escapeHtml(kraTitle)}</h3>
+          <p class="card-copy">Score sheets and evidence bundles are uploaded separately for every criterion in this KRA.</p>
+        </div>
+        <span class="kra-progress-chip${kraComplete ? ' kra-progress-done' : ''}">
+          ${kraComplete ? 'Complete' : `${kraUploaded}/${items.length} panels ready`}
+        </span>
+      </summary>
+      <div class="upload-panel-grid">
+        ${items.map((panel) => renderUploadCardBlock(panel)).join("")}
+      </div>
+    </details>
+  `;
+}
+
+function renderUploadCardBlock(panel) {
+  const scoreSheetCount = getPanelUploadCount(panel.key, "score-sheet");
+  const evidenceCount = getPanelUploadCount(panel.key, "evidence");
+  const panelComplete = scoreSheetCount > 0 && evidenceCount > 0;
+
+  return `
+    <article class="card upload-card${panelComplete ? " upload-card-complete" : ""}" data-panel-key="${escapeHtml(panel.key)}">
+      <div class="upload-card-header">
+        <div>
+          <h4>${escapeHtml(panel.title)}</h4>
+          <p class="card-copy">${escapeHtml(panel.description)}</p>
+        </div>
+        <div class="upload-card-badges">
+          <span class="upload-status-badge" data-status="${scoreSheetCount > 0 ? 'uploaded' : 'pending'}">
+            ${scoreSheetCount > 0 ? `${scoreSheetCount} score sheet${scoreSheetCount === 1 ? "" : "s"}` : "Score sheet pending"}
+          </span>
+          <span class="upload-status-badge" data-status="${evidenceCount > 0 ? 'uploaded' : 'pending'}">
+            ${evidenceCount > 0 ? `${evidenceCount} evidence file${evidenceCount === 1 ? "" : "s"}` : "Evidence pending"}
+          </span>
+          <span class="upload-score-cap">Max ${escapeHtml(String(panel.maxScore))} pts</span>
+        </div>
+      </div>
+      ${panel.audienceLabel ? `<p class="upload-audience-chip">${escapeHtml(panel.audienceLabel)}</p>` : ""}
+      <div class="upload-variant-grid">
+        ${renderUploadVariantForm({
+          panelKey: panel.key,
+          uploadType: "score-sheet",
+          title: "Score Sheet Upload",
+          helper: "One file only. Upload the KRA or criterion score sheet.",
+          buttonLabel: "Upload Score Sheet",
+          accept: panel.acceptedFormats.map((f) => `.${f}`).join(","),
+          multiple: false,
+          count: scoreSheetCount,
+        })}
+        ${renderUploadVariantForm({
+          panelKey: panel.key,
+          uploadType: "evidence",
+          title: "Evidence Upload",
+          helper: "Multiple files allowed. Upload the supporting evidence for the same panel.",
+          buttonLabel: "Upload Evidence",
+          accept: panel.acceptedFormats.map((f) => `.${f}`).join(","),
+          multiple: true,
+          count: evidenceCount,
+        })}
+      </div>
+    </article>
+  `;
 }
 
 function renderUploadedFilesSection(panels) {
@@ -691,6 +671,7 @@ function renderUploadedFilesSection(panels) {
               <div class="uploaded-file-row">
                 <div class="uploaded-file-info">
                   <strong>${escapeHtml(item.originalName)}</strong>
+                  <span class="uploaded-file-panel">${escapeHtml(getUploadTypeLabel(item.metadata?.uploadType))}</span>
                   <span class="uploaded-file-panel">${escapeHtml(item.panelTitle)}</span>
                   <span class="uploaded-file-date">${escapeHtml(formatDatabaseValue(item.createdAt))}</span>
                 </div>
@@ -719,6 +700,7 @@ function renderUploadedFilesSection(panels) {
             <div class="uploaded-file-row">
               <div class="uploaded-file-info">
                 <strong>${escapeHtml(item.originalName)}</strong>
+                <span class="uploaded-file-panel">${escapeHtml(getUploadTypeLabel(item.metadata?.uploadType))}</span>
                 <span class="uploaded-file-panel">${escapeHtml(item.metadata?.panelTitle || "Unassigned")}</span>
                 <span class="uploaded-file-date">${escapeHtml(formatDatabaseValue(item.createdAt))}</span>
               </div>
@@ -3229,6 +3211,31 @@ function buildUploadNotice(panelTitle, data) {
   return `${panelTitle} stored ${successCount} file(s) successfully.${firstSummary}`;
 }
 
+function renderUploadVariantForm({ panelKey, uploadType, title, helper, buttonLabel, accept, multiple, count }) {
+  return `
+    <form class="stack-form workflow-upload-form upload-variant-form" data-panel-key="${escapeHtml(panelKey)}" data-upload-type="${escapeHtml(uploadType)}">
+      <div class="upload-variant-header">
+        <div>
+          <strong class="upload-variant-title">${escapeHtml(title)}</strong>
+          <p class="upload-variant-note">${escapeHtml(helper)}</p>
+        </div>
+        <span class="upload-variant-chip" data-status="${count > 0 ? "uploaded" : "pending"}">
+          ${count > 0 ? `${count} uploaded` : "Pending"}
+        </span>
+      </div>
+      <label class="field">
+        <span>${multiple ? "Select files" : "Select file"}</span>
+        <input type="file" name="document" ${multiple ? "multiple" : ""} required accept="${escapeHtml(accept)}" />
+      </label>
+      <button class="button button-primary upload-submit-btn" type="submit">
+        <span class="upload-btn-label">${escapeHtml(buttonLabel)}</span>
+        <span class="upload-btn-spinner" style="display:none">Uploading...</span>
+      </button>
+      <div class="notice panel-result">${count > 0 ? `${count} file(s) already uploaded for this upload type.` : "No files uploaded yet."}</div>
+    </form>
+  `;
+}
+
 function renderDeleteUploadButton(item, refreshTarget) {
   return `
     <button
@@ -3353,6 +3360,77 @@ async function handleDeleteUploadClick(event) {
   }
 }
 
+async function handlePanelUploadSubmit(event) {
+  event.preventDefault();
+
+  const form = event.currentTarget;
+  if (!(form instanceof HTMLFormElement)) {
+    return;
+  }
+
+  const panelKey = form.dataset.panelKey || "";
+  const uploadType = form.dataset.uploadType || "legacy";
+  const fileInput = form.querySelector('input[type="file"]');
+  const result = form.querySelector(".panel-result");
+  const submitBtn = form.querySelector(".upload-submit-btn");
+  const btnLabel = submitBtn?.querySelector(".upload-btn-label");
+  const btnSpinner = submitBtn?.querySelector(".upload-btn-spinner");
+  const files = Array.from(fileInput?.files || []);
+
+  if (!files.length) {
+    setNotice(result, "Choose at least one file first.", true);
+    return;
+  }
+
+  if (uploadType === "score-sheet" && files.length > 1) {
+    setNotice(result, "Score sheet uploads accept one file only.", true);
+    return;
+  }
+
+  const sessionOk = await ensureSession();
+  if (!sessionOk) {
+    return;
+  }
+
+  const panel = uploadPanelCatalog.find((item) => item.key === panelKey);
+  if (!panel) {
+    setNotice(result, "This upload panel is no longer available.", true);
+    return;
+  }
+
+  const formData = new FormData();
+  formData.append("uploadType", uploadType);
+  formData.append("panelKey", panel.key);
+  formData.append("kind", "REQUIREMENT");
+  if (latestRecordContext?.profileId) {
+    formData.append("profileId", latestRecordContext.profileId);
+  }
+
+  files.forEach((file) => formData.append("document", file));
+
+  setUploadButtonLoading(submitBtn, btnLabel, btnSpinner, true);
+  setNotice(result, uploadType === "score-sheet" ? "Uploading score sheet..." : "Uploading evidence bundle...");
+
+  try {
+    const response = await fetch(buildApiUrl("/api/documents/extract"), {
+      method: "POST",
+      body: formData,
+      credentials: "include",
+    });
+    const data = await readJson(response);
+    setNotice(result, buildUploadNotice(panel.title, data), false, true);
+    showToast(`✓ ${panel.title} — ${uploadType === "score-sheet" ? "score sheet" : "evidence"} uploaded successfully`, "success");
+    await loadEmployeeDashboard();
+    renderUploadPanels(uploadPanelCatalog);
+    renderUploadedFilesSection(uploadPanelCatalog);
+  } catch (error) {
+    setNotice(result, toErrorMessage(error), true);
+    showToast(`Upload failed: ${toErrorMessage(error)}`, "error");
+  } finally {
+    setUploadButtonLoading(submitBtn, btnLabel, btnSpinner, false);
+  }
+}
+
 function escapeHtml(value) {
   return String(value)
     .replaceAll("&", "&amp;")
@@ -3368,12 +3446,38 @@ function normalizeApiBaseUrl(value) {
   return String(value).replace(/\/+$/, "");
 }
 
-function hasPanelUploads(panelKey) {
-  return employeeUploads.some((item) => item.metadata?.panelKey === panelKey);
+function hasPanelUploads(panelKey, uploadType) {
+  return getPanelUploadCount(panelKey, uploadType) > 0;
 }
 
-function getPanelUploadCount(panelKey) {
-  return employeeUploads.filter((item) => item.metadata?.panelKey === panelKey).length;
+function hasPanelUpload(panelKey, uploadType) {
+  return getPanelUploadCount(panelKey, uploadType) > 0;
+}
+
+function getPanelUploadCount(panelKey, uploadType) {
+  return employeeUploads.filter((item) => {
+    if (item.metadata?.panelKey !== panelKey) {
+      return false;
+    }
+
+    if (typeof uploadType !== "string" || !uploadType) {
+      return true;
+    }
+
+    return item.metadata?.uploadType === uploadType;
+  }).length;
+}
+
+function getUploadTypeLabel(uploadType) {
+  if (uploadType === "score-sheet") {
+    return "Score Sheet";
+  }
+
+  if (uploadType === "evidence") {
+    return "Evidence";
+  }
+
+  return "Legacy";
 }
 
 function collapseFacultyFormLegacy() {

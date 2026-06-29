@@ -20,7 +20,7 @@ const reviewQueueFilterStatus = byId('review-queue-filter-status');
 
 let currentUser = null;
 let employeeDashboard = null;
-let uploadWorkflow = [];
+let uploadPanelCatalog = [];
 let reviewerQueueItems = [];
 let currentDocumentPreviewUrl = null;
 let documentPreviewRequestToken = 0;
@@ -84,7 +84,7 @@ async function refreshSession() {
       workspaceGreeting.textContent =
         portal === 'evaluator'
           ? `Hello ${data.user.fullName}. Review the uploaded PDFs, verify the OCR output, and confirm the computed score.`
-          : `Hello ${data.user.fullName}. Upload the score sheet and evidence bundle so the system can OCR the scores for you.`;
+          : `Hello ${data.user.fullName}. Upload each KRA's score sheet and its matching evidence bundle separately so the system can OCR the scores for you.`;
     }
     return data;
   } catch (error) {
@@ -95,26 +95,26 @@ async function refreshSession() {
     if (workspaceGreeting) {
       workspaceGreeting.textContent = portal === 'evaluator'
         ? 'Hello. Review the uploaded PDFs and verify the OCR output.'
-        : 'Hello. Upload the score sheet and evidence bundle.';
+        : 'Hello. Upload each KRA score sheet and matching evidence bundle separately.';
     }
     return null;
   }
 }
 
 async function loadEmployeeWorkspace() {
-  setNotice(employeeUploadStatus, 'Loading your OCR-backed summary and upload workflow...');
+  setNotice(employeeUploadStatus, 'Loading your OCR-backed summary and KRA upload panels...');
   const [dashboard, workflow] = await Promise.all([
     apiFetch('/api/employee/dashboard'),
-    apiFetch('/api/config/upload-workflow'),
+    apiFetch('/api/config/upload-panels'),
   ]);
 
   employeeDashboard = dashboard;
-  uploadWorkflow = Array.isArray(workflow.workflow) ? workflow.workflow : [];
+  uploadPanelCatalog = Array.isArray(workflow.panels) ? workflow.panels : [];
 
   renderEmployeeSummary(employeeDashboard);
-  renderEmployeeWorkflow(uploadWorkflow, employeeDashboard?.uploads || []);
+  renderEmployeeWorkflow(uploadPanelCatalog, employeeDashboard?.uploads || []);
   renderEmployeeUploads(employeeDashboard?.uploads || []);
-  setNotice(employeeUploadStatus, 'Upload the score sheet first, then add the evidence bundle. PDFs can be previewed inside the portal.');
+  setNotice(employeeUploadStatus, 'Upload each score sheet separately from its matching evidence bundle. PDFs can be previewed inside the portal.');
 }
 
 async function loadEvaluatorWorkspace() {
@@ -201,45 +201,138 @@ function renderEmployeeWorkflow(workflowItems, uploads) {
     return;
   }
 
-  const uploadedMap = buildUploadTypeCounts(uploads);
-  employeeUploadWorkflow.innerHTML = workflowItems
-    .map((item) => {
-      const isSingle = item.maxFiles === 1;
-      const count = uploadedMap[item.type] || 0;
-      const accept = Array.isArray(item.acceptedFormats) ? item.acceptedFormats.map((ext) => `.${ext}`).join(',') : '';
+  if (!workflowItems.length) {
+    employeeUploadWorkflow.innerHTML = '<div class="notice">No upload panels are configured yet.</div>';
+    return;
+  }
 
-      return `
-        <article class="card workflow-card">
-          <div class="upload-card-header">
-            <div>
-              <h4>${escapeHtml(item.title)}</h4>
-              <p class="card-copy">${escapeHtml(item.description)}</p>
-            </div>
-            <span class="upload-status-badge" data-status="${count > 0 ? 'uploaded' : 'pending'}">
-              ${count > 0 ? `${count} uploaded` : 'Pending'}
-            </span>
-          </div>
-          <p class="upload-audience-chip">${escapeHtml(item.helperText)}</p>
-          <ul class="workflow-notes">
-            ${(item.uploadNotes || []).map((note) => `<li>${escapeHtml(note)}</li>`).join('')}
-          </ul>
-          <form class="workflow-upload-form" data-upload-type="${escapeHtml(item.type)}">
-            <label class="field">
-              <span>${isSingle ? 'Select file' : 'Select files'}</span>
-              <input type="file" name="document" ${isSingle ? '' : 'multiple'} required accept="${escapeHtml(accept)}" />
-            </label>
-            <button class="button button-primary" type="submit">
-              ${escapeHtml(item.type === 'score-sheet' ? 'Upload Score Sheet' : 'Upload Evidence')}
-            </button>
-          </form>
-        </article>
-      `;
-    })
-    .join('');
+  const groupedPanels = groupPanelsByKra(workflowItems);
+  const uploadedMap = buildUploadTypeCounts(uploads);
+  const scoreSheetCount = Number(uploadedMap['score-sheet'] || 0);
+  const evidenceCount = Number(uploadedMap['evidence'] || 0);
+  const completedPanels = workflowItems.filter((panel) => hasPanelUpload(panel.key, uploads, 'score-sheet') && hasPanelUpload(panel.key, uploads, 'evidence')).length;
+  const progressPct = workflowItems.length ? Math.round((completedPanels / workflowItems.length) * 100) : 0;
+
+  employeeUploadWorkflow.innerHTML = `
+    <div class="upload-progress-strip">
+      <div class="upload-progress-info">
+        <span class="upload-progress-label">Upload Progress</span>
+        <span class="upload-progress-count">${completedPanels} / ${workflowItems.length} panel${workflowItems.length === 1 ? '' : 's'} ready</span>
+      </div>
+      <div class="upload-progress-track">
+        <div class="upload-progress-fill" style="width:${progressPct}%"></div>
+      </div>
+    </div>
+    <p class="workflow-intro">
+      Each KRA and criterion card keeps the score sheet and evidence uploads separate.
+      Upload the score sheet first when you have it, then attach the supporting evidence for the same panel.
+    </p>
+    <div class="workflow-summary-row">
+      <span class="workflow-summary-chip">Score sheets: ${scoreSheetCount}</span>
+      <span class="workflow-summary-chip">Evidence files: ${evidenceCount}</span>
+      <span class="workflow-summary-chip">Panels tracked: ${workflowItems.length}</span>
+    </div>
+    ${groupedPanels
+      .map(([kraTitle, items]) => renderEmployeeUploadGroup(kraTitle, items, uploads))
+      .join('')}
+  `;
 
   employeeUploadWorkflow.querySelectorAll('.workflow-upload-form').forEach((form) => {
     form.addEventListener('submit', handleUploadSubmit);
   });
+}
+
+function renderEmployeeUploadGroup(kraTitle, items, uploads) {
+  const completedCount = items.filter((panel) => hasPanelUpload(panel.key, uploads, 'score-sheet') && hasPanelUpload(panel.key, uploads, 'evidence')).length;
+  const groupComplete = completedCount === items.length && items.length > 0;
+
+  return `
+    <details class="upload-group-collapsible${groupComplete ? ' kra-complete' : ''}" ${groupComplete ? '' : 'open'}>
+      <summary class="upload-group-summary">
+        <div class="upload-group-heading">
+          <h3>${escapeHtml(kraTitle)}</h3>
+          <p class="card-copy">Score sheets and evidence bundles are uploaded separately for each criterion in this KRA.</p>
+        </div>
+        <span class="kra-progress-chip${groupComplete ? ' kra-progress-done' : ''}">
+          ${groupComplete ? 'Complete' : `${completedCount}/${items.length} panels ready`}
+        </span>
+      </summary>
+      <div class="upload-panel-grid">
+        ${items.map((panel) => renderEmployeeUploadCard(panel, uploads)).join('')}
+      </div>
+    </details>
+  `;
+}
+
+function renderEmployeeUploadCard(panel, uploads) {
+  const accept = Array.isArray(panel.acceptedFormats) ? panel.acceptedFormats.map((ext) => `.${ext}`).join(',') : '';
+  const scoreSheetCount = getPanelUploadCount(panel.key, uploads, 'score-sheet');
+  const evidenceCount = getPanelUploadCount(panel.key, uploads, 'evidence');
+  const panelComplete = scoreSheetCount > 0 && evidenceCount > 0;
+
+  return `
+    <article class="card workflow-card upload-card${panelComplete ? ' upload-card-complete' : ''}" data-panel-key="${escapeHtml(panel.key)}">
+      <div class="upload-card-header">
+        <div>
+          <h4>${escapeHtml(panel.title)}</h4>
+          <p class="card-copy">${escapeHtml(panel.description)}</p>
+        </div>
+        <div class="upload-card-badges">
+          <span class="upload-status-badge" data-status="${scoreSheetCount > 0 ? 'uploaded' : 'pending'}">
+            ${scoreSheetCount > 0 ? `${scoreSheetCount} score sheet${scoreSheetCount === 1 ? '' : 's'}` : 'Score sheet pending'}
+          </span>
+          <span class="upload-status-badge" data-status="${evidenceCount > 0 ? 'uploaded' : 'pending'}">
+            ${evidenceCount > 0 ? `${evidenceCount} evidence file${evidenceCount === 1 ? '' : 's'}` : 'Evidence pending'}
+          </span>
+          <span class="upload-score-cap">Max ${escapeHtml(String(panel.maxScore))} pts</span>
+        </div>
+      </div>
+      ${panel.audienceLabel ? `<p class="upload-audience-chip">${escapeHtml(panel.audienceLabel)}</p>` : ''}
+      <div class="upload-variant-grid">
+        ${renderUploadVariantForm({
+          panelKey: panel.key,
+          uploadType: 'score-sheet',
+          title: 'Score Sheet Upload',
+          helper: 'One file only. This is the KRA or criterion score sheet.',
+          buttonLabel: 'Upload Score Sheet',
+          accept,
+          multiple: false,
+          count: scoreSheetCount,
+        })}
+        ${renderUploadVariantForm({
+          panelKey: panel.key,
+          uploadType: 'evidence',
+          title: 'Evidence Upload',
+          helper: 'Multiple files allowed. Add the supporting evidence for the same KRA or criterion.',
+          buttonLabel: 'Upload Evidence',
+          accept,
+          multiple: true,
+          count: evidenceCount,
+        })}
+      </div>
+    </article>
+  `;
+}
+
+function renderUploadVariantForm({ panelKey, uploadType, title, helper, buttonLabel, accept, multiple, count }) {
+  return `
+    <form class="workflow-upload-form upload-variant-form" data-panel-key="${escapeHtml(panelKey)}" data-upload-type="${escapeHtml(uploadType)}">
+      <div class="upload-variant-header">
+        <div>
+          <strong class="upload-variant-title">${escapeHtml(title)}</strong>
+          <p class="upload-variant-note">${escapeHtml(helper)}</p>
+        </div>
+        <span class="upload-variant-chip" data-status="${count > 0 ? 'uploaded' : 'pending'}">
+          ${count > 0 ? `${count} uploaded` : 'Pending'}
+        </span>
+      </div>
+      <label class="field">
+        <span>${multiple ? 'Select files' : 'Select file'}</span>
+        <input type="file" name="document" ${multiple ? 'multiple' : ''} required accept="${escapeHtml(accept)}" />
+      </label>
+      <button class="button button-primary" type="submit">${escapeHtml(buttonLabel)}</button>
+    </form>
+  `;
 }
 
 function renderEmployeeUploads(uploads) {
@@ -309,7 +402,7 @@ function renderUploadGroup(label, groupUploads) {
 
 function getUploadGroupSubheading(label, count) {
   if (label === 'Score Sheet') {
-    return count === 1 ? 'Primary score sheet' : 'Primary score sheets';
+    return count === 1 ? 'Score sheet grouped by KRA and criterion' : 'Score sheets grouped by KRA and criterion';
   }
 
   if (label === 'Unassigned / Legacy') {
@@ -665,6 +758,7 @@ async function handleUploadSubmit(event) {
 
   const form = event.currentTarget;
   const uploadType = form.dataset.uploadType || 'legacy';
+  const panelKey = form.dataset.panelKey || '';
   const fileInput = form.querySelector('input[type="file"]');
   const files = Array.from(fileInput?.files || []);
 
@@ -675,13 +769,22 @@ async function handleUploadSubmit(event) {
 
   const formData = new FormData();
   formData.append('uploadType', uploadType);
+  if (panelKey) {
+    formData.append('panelKey', panelKey);
+  }
   formData.append('kind', 'REQUIREMENT');
   for (const file of files) {
     formData.append('document', file);
   }
 
   setSubmitButtonState(form, true);
-  setNotice(employeeUploadStatus, uploadType === 'score-sheet' ? 'Uploading score sheet...' : 'Uploading evidence bundle...');
+  const panelLabel = form.closest('.upload-card')?.querySelector('h4')?.textContent?.trim() || 'this panel';
+  setNotice(
+    employeeUploadStatus,
+    uploadType === 'score-sheet'
+      ? `Uploading ${panelLabel} score sheet...`
+      : `Uploading ${panelLabel} evidence bundle...`,
+  );
 
   try {
     await apiFetch('/api/documents/extract', {
@@ -718,6 +821,28 @@ function buildUploadTypeCounts(uploads) {
     counts[key] = (counts[key] || 0) + 1;
     return counts;
   }, {});
+}
+
+function groupPanelsByKra(panels) {
+  const grouped = new Map();
+
+  panels.forEach((panel) => {
+    const kraTitle = panel.kraTitle || 'Other';
+    if (!grouped.has(kraTitle)) {
+      grouped.set(kraTitle, []);
+    }
+    grouped.get(kraTitle).push(panel);
+  });
+
+  return Array.from(grouped.entries());
+}
+
+function getPanelUploadCount(panelKey, uploads, uploadType) {
+  return uploads.filter((upload) => upload.metadata?.panelKey === panelKey && upload.metadata?.uploadType === uploadType).length;
+}
+
+function hasPanelUpload(panelKey, uploads, uploadType) {
+  return getPanelUploadCount(panelKey, uploads, uploadType) > 0;
 }
 
 function ensureDocumentPreviewShell() {
