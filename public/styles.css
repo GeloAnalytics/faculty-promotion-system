@@ -321,11 +321,39 @@ select {
 }
 
 .workflow-upload-form .button {
-  justify-self: start;
+  justify-self: stretch;
 }
 
 .workflow-upload-form .field {
   min-width: 0;
+}
+
+.workflow-upload-form input[type="file"] {
+  min-width: 0;
+  padding: 8px;
+  font-size: 0.86rem;
+  line-height: 1.35;
+}
+
+.workflow-upload-form input[type="file"]::file-selector-button {
+  margin-right: 8px;
+  border: 1px solid rgba(13, 107, 87, 0.16);
+  border-radius: 10px;
+  padding: 7px 10px;
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+  cursor: pointer;
+  font: inherit;
+  font-weight: 700;
+}
+
+.workflow-upload-form .button-primary {
+  width: 100%;
+  min-height: 44px;
+  border-radius: 14px;
+  padding: 10px 14px;
+  box-shadow: 0 10px 20px rgba(13, 107, 87, 0.16);
+  white-space: normal;
 }
 
 .workflow-intro {
@@ -362,7 +390,7 @@ select {
 
 .upload-variant-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(220px, 1fr));
   gap: 12px;
 }
 
@@ -374,6 +402,7 @@ select {
   border-radius: 16px;
   background: rgba(255, 255, 255, 0.72);
   min-width: 0;
+  align-content: start;
 }
 
 .upload-variant-header {
@@ -383,12 +412,17 @@ select {
   align-items: flex-start;
 }
 
+.upload-variant-header > div {
+  min-width: 0;
+}
+
 .upload-variant-title {
   display: block;
   margin-bottom: 4px;
   font-size: 0.98rem;
   font-weight: 800;
   color: var(--text);
+  line-height: 1.3;
 }
 
 .upload-variant-note {
@@ -431,7 +465,7 @@ select {
 
 .upload-panel-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 440px), 1fr));
   gap: 18px;
   align-items: stretch;
 }
@@ -471,7 +505,8 @@ select {
 .upload-card h4,
 .upload-variant-title,
 .upload-variant-note {
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
+  word-break: normal;
 }
 
 .upload-panel-form {
@@ -488,6 +523,7 @@ select {
   justify-content: space-between;
   gap: 12px;
   align-items: flex-start;
+  flex-wrap: wrap;
 }
 
 .upload-card-header > div {
@@ -505,6 +541,7 @@ select {
   gap: 6px;
   align-items: center;
   justify-content: flex-end;
+  margin-left: auto;
 }
 
 .upload-status-badge {
@@ -2086,12 +2123,22 @@ body[data-portal="evaluator"] #scoring-panel {
   padding: 22px;
 }
 
-body[data-portal="employee"] #upload-panels {
-  grid-column: 1 / span 8;
-}
+@media (min-width: 1281px) {
+  body[data-portal="employee"] .dashboard-main {
+    grid-column: 1 / span 9;
+  }
 
-body[data-portal="employee"] #employee-logs-panel {
-  grid-column: 1 / span 8;
+  body[data-portal="employee"] .dashboard-side {
+    grid-column: 10 / span 3;
+  }
+
+  body[data-portal="employee"] #upload-panels {
+    grid-column: 1 / span 9;
+  }
+
+  body[data-portal="employee"] #employee-logs-panel {
+    grid-column: 1 / span 9;
+  }
 }
 
 body[data-portal="evaluator"] #database-panel {
@@ -2282,6 +2329,8 @@ body[data-portal="evaluator"] #scoring-panel .stack-form {
   display: flex;
   justify-content: space-between;
   align-items: baseline;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 .upload-progress-label {
@@ -2471,6 +2520,35 @@ body[data-portal="evaluator"] #scoring-panel .stack-form {
 }
 
 @media (max-width: 640px) {
+  .page-shell {
+    width: 100%;
+    padding-inline: 12px;
+  }
+
+  .hero.panel {
+    padding: 20px 18px;
+  }
+
+  .hero h1 {
+    font-size: 1.75rem;
+    line-height: 1.2;
+  }
+
+  .hero-meta {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .session-card {
+    width: 100%;
+    min-width: 0;
+    max-width: none;
+  }
+
+  .hero-actions {
+    justify-content: flex-start;
+  }
+
   .toast-container {
     bottom: 16px;
     right: 16px;
