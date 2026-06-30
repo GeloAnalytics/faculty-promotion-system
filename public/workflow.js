@@ -16,6 +16,8 @@ const documentPreviewMeta = byId('document-preview-meta');
 const evaluatorInsights = byId('evaluator-insights');
 const evaluatorDocumentLibrary = byId('evaluator-document-library');
 const evaluatorDocumentLibraryStatus = byId('evaluator-document-library-status');
+const evaluatorWorkbookRequestForm = byId('evaluator-workbook-request-form');
+const evaluatorWorkbookSummarySheet = byId('evaluator-workbook-summary-sheet');
 const reviewQueue = byId('review-queue');
 const reviewQueueFilterStatus = byId('review-queue-filter-status');
 
@@ -130,6 +132,7 @@ async function loadEvaluatorWorkspace() {
   renderEvaluatorInsights(reviewerQueueItems);
   renderEvaluatorDocumentLibrary(reviewerQueueItems);
   renderReviewQueue(reviewerQueueItems);
+  renderEvaluatorWorkbooks(reviewerQueueItems);
   setNotice(reviewQueueFilterStatus, `${reviewerQueueItems.length} employee submission(s) ready for read-only review.`);
 }
 
@@ -316,6 +319,7 @@ function renderEmployeeUploadCard(panel, uploads, scoreComputation) {
   const scoreSheetCount = getPanelUploadCount(panel.key, uploads, 'score-sheet');
   const evidenceCount = getPanelUploadCount(panel.key, uploads, 'evidence');
   const panelComplete = scoreSheetCount > 0 && evidenceCount > 0;
+  const computedScorePanel = scoreComputation?.kraSections?.flatMap(k => k.panels)?.find(p => p.key === panel.key) || null;
   const computedScore = getPanelComputedScore(scoreComputation, panel.key);
 
   return `
@@ -337,6 +341,8 @@ function renderEmployeeUploadCard(panel, uploads, scoreComputation) {
       </div>
       ${panel.audienceLabel ? `<p class="upload-audience-chip">${escapeHtml(panel.audienceLabel)}</p>` : ''}
       ${renderComputedPanelScore(computedScore, panel.maxScore)}
+      ${computedScore?.status === 'missing-evidence' ? '<div class="notice" style="color:var(--color-danger)">Mismatch: Score sheet uploaded but documentary evidence is missing. Score cannot be counted.</div>' : ''}
+      ${computedScore?.status === 'missing-score-sheet' ? '<div class="notice" style="color:var(--color-warning)">Missing score sheet. Please upload to compute the score.</div>' : ''}
       <div class="upload-variant-grid">
         ${renderUploadVariantForm({
           panelKey: panel.key,
@@ -793,6 +799,85 @@ function renderReviewCard(item) {
           ${uploads.map(renderEvaluatorUploadRow).join('')}
         </div>
       </div>
+    </article>
+  `;
+}
+
+function renderEvaluatorWorkbooks(items) {
+  if (!evaluatorWorkbookRequestForm || !evaluatorWorkbookSummarySheet) {
+    return;
+  }
+
+  if (!items.length) {
+    evaluatorWorkbookRequestForm.innerHTML = '<div class="notice">No employee submissions available.</div>';
+    evaluatorWorkbookSummarySheet.innerHTML = '<div class="notice">No employee submissions available.</div>';
+    return;
+  }
+
+  evaluatorWorkbookRequestForm.innerHTML = items.map(renderRequestForm).join('<hr />');
+  evaluatorWorkbookSummarySheet.innerHTML = items.map(renderSummarySheet).join('<hr />');
+}
+
+function renderRequestForm(item) {
+  const requestForm = item.draftPoints?.workbookMirror?.requestForm || {};
+  return `
+    <article class="card">
+      <div class="card-header">
+        <h3>${escapeHtml(item.name || 'Unnamed employee')} - Request Form</h3>
+      </div>
+      <table class="table">
+        <tbody>
+          <tr><th>Full Name</th><td>${escapeHtml(requestForm.fullName || 'N/A')}</td></tr>
+          <tr><th>Employee ID</th><td>${escapeHtml(requestForm.employeeId || 'N/A')}</td></tr>
+          <tr><th>Academic Rank</th><td>${escapeHtml(requestForm.academicRank || 'N/A')}</td></tr>
+          <tr><th>Highest Educational Attainment</th><td>${escapeHtml(requestForm.highestEducationalAttainment || 'N/A')}</td></tr>
+          <tr><th>Review Period</th><td>${escapeHtml(requestForm.reviewPeriod || 'N/A')}</td></tr>
+        </tbody>
+      </table>
+    </article>
+  `;
+}
+
+function renderSummarySheet(item) {
+  const summarySheet = item.draftPoints?.workbookMirror || {};
+  const kraSections = Array.isArray(summarySheet.kraSections) ? summarySheet.kraSections : [];
+  
+  return `
+    <article class="card">
+      <div class="card-header">
+        <h3>${escapeHtml(item.name || 'Unnamed employee')} - Summary Sheet</h3>
+      </div>
+      <table class="table">
+        <thead>
+          <tr>
+            <th>KRA / Criterion</th>
+            <th>Max Score</th>
+            <th>System Score</th>
+            <th>Evaluator Validated</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${kraSections.map(kra => `
+            <tr class="table-row-kra">
+              <td colspan="5"><strong>${escapeHtml(kra.title)}</strong> (Max: ${kra.maxScore}) - Faculty Total: ${kra.facultyScore}, Validated Total: ${kra.validatedScore}</td>
+            </tr>
+            ${kra.criteria.map(crit => `
+              <tr class="${crit.status === 'needs-review' ? 'table-row-warning' : ''}">
+                <td>${escapeHtml(crit.title)}</td>
+                <td>${crit.maxScore}</td>
+                <td>${crit.facultyScore ?? '0'}</td>
+                <td>${crit.validatedScore ?? 'Pending'}</td>
+                <td>
+                  <span class="badge badge-${crit.status === 'needs-review' ? 'danger' : crit.status === 'matched' ? 'success' : 'neutral'}">
+                    ${escapeHtml(crit.status)}
+                  </span>
+                </td>
+              </tr>
+            `).join('')}
+          `).join('')}
+        </tbody>
+      </table>
     </article>
   `;
 }

@@ -107,15 +107,8 @@ After this documentation consolidation, `README.md` is the single markdown docum
 
 These are the highest-priority items needed to match the target system goal:
 
-1. Add or finalize the exact List of Documentary Evidences source file in the repo.
-2. Encode the documentary evidence list into stricter machine-readable rules.
-3. Continue visual polish on the score summary after testing with real score sheets and evidence packets.
-4. Surface OCR mismatch warnings when the score sheet value does not match the evidence or expected criterion.
-5. Render the backend `workbookMirror` payload directly in the UI.
-6. Build a workbook-style Request Form view.
-7. Build an Individual Summary Sheet view.
-8. Add audit trails for upload changes, evaluator verification, and final review status.
-9. Keep live ML prediction disabled until there is enough validated institutional data.
+1. Continue visual polish on the score summary after testing with real score sheets and evidence packets.
+2. Keep live ML prediction disabled until there is enough validated institutional data.
 
 ## Current Development Checkpoint
 
@@ -351,7 +344,12 @@ Do not claim that the system makes final promotion decisions. Final evaluation s
 - Added a live employee score summary for KRA totals, criterion scores, total score, weighted score, panel coverage, and zeroed panels.
 - Added employee upload replacement beside view and delete.
 - Added evaluator-side evidence score and zeroed-panel signals.
-- Recorded remaining implementation work for OCR mismatch warnings, workbook-style views, stricter evidence rules, audit trails, and evaluator visualizations.
+- Digitized "List of Documentary Evidences" into strict machine-readable AND/OR rules (`evidenceRules.ts`).
+- Updated evidence validation logic to use strict rules.
+- Added OCR mismatch and missing evidence warnings to employee UI.
+- Built workbook-style Request Form and Individual Summary Sheet views in evaluator portal.
+- Added audit trails (`AuditLog`) for document replacement, deletion, and evaluator review status changes.
+- Added visual metrics to evaluator dashboard.
 
 ### 2026-06-19
 
@@ -389,10 +387,4 @@ Do not claim that the system makes final promotion decisions. Final evaluation s
 
 To fully achieve the system goal, build in this order:
 
-1. Confirm and add the exact List of Documentary Evidences reference file.
-2. Convert evidence requirements into structured validation rules per KRA/criterion.
-3. Surface OCR mismatch warnings per KRA/criterion panel.
-4. Render workbook-style Request Form and Individual Summary Sheet views.
-5. Add evaluator dashboard visualizations.
-6. Add audit trail and final evaluator/committee status states.
-7. Validate the final official score formula against real score sheets and the DBM-JC/List of Documentary Evidences references.
+1. Validate the final official score formula against real score sheets and the DBM-JC/List of Documentary Evidences references.

@@ -26,6 +26,22 @@ enum TrainingExampleStatus {
   VALIDATED
 }
 
+enum ReviewStatus {
+  DRAFT
+  SUBMITTED
+  IN_REVIEW
+  VERIFIED
+  REJECTED
+}
+
+enum AuditLogAction {
+  UPLOAD
+  REPLACE
+  DELETE
+  VERIFY
+  STATUS_CHANGE
+}
+
 model User {
   id            String            @id @default(cuid())
   email         String            @unique
@@ -40,6 +56,7 @@ model User {
   predictions   Prediction[]
   documents     UploadedDocument[]
   trainingItems TrainingExample[]
+  auditLogs     AuditLog[]
 
   @@map("users")
 }
@@ -54,6 +71,7 @@ model FacultyProfile {
   promotion       Boolean?
   createdByUserId String?
   createdBy       User?              @relation(fields: [createdByUserId], references: [id], onDelete: SetNull)
+  reviewStatus    ReviewStatus       @default(DRAFT)
   createdAt       DateTime           @default(now())
   updatedAt       DateTime           @updatedAt
   predictions     Prediction[]
@@ -112,3 +130,16 @@ model TrainingExample {
 
   @@map("training_examples")
 }
+
+model AuditLog {
+  id        String         @id @default(cuid())
+  action    AuditLogAction
+  userId    String?
+  user      User?          @relation(fields: [userId], references: [id], onDelete: SetNull)
+  targetId  String
+  details   Json?
+  createdAt DateTime       @default(now())
+
+  @@map("audit_logs")
+}
+

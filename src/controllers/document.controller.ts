@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import { prisma } from '../config/db';
-import { UserRole } from '@prisma/client';
+import { UserRole, AuditLogAction } from '@prisma/client';
 import fs from 'node:fs/promises';
 import { createReadStream } from 'node:fs';
 import { pipeline } from 'node:stream/promises';
@@ -62,6 +62,16 @@ export const extractDocuments = async (req: Request, res: Response) => {
         uploadType,
         ocrConfig,
       });
+
+      await prisma.auditLog.create({
+        data: {
+          action: AuditLogAction.UPLOAD,
+          userId: req.user!.id,
+          targetId: result.documentId,
+          details: { originalName: file.originalname, panelKey, uploadType },
+        },
+      });
+
       results.push(result);
     } catch (error) {
       failures.push({
@@ -202,6 +212,19 @@ export const replaceDocument = async (req: Request, res: Response) => {
     where: { id: document.id },
   });
 
+  await prisma.auditLog.create({
+    data: {
+      action: AuditLogAction.REPLACE,
+      userId: req.user!.id,
+      targetId: result.documentId,
+      details: {
+        oldDocumentId: document.id,
+        oldOriginalName: document.originalName,
+        newOriginalName: result.originalName,
+      },
+    },
+  });
+
   if (storedPath) {
     try {
       await fs.unlink(storedPath);
@@ -249,6 +272,17 @@ export const deleteDocument = async (req: Request, res: Response) => {
   const storedPath = resolveStoredDocumentPath(document.extractionMetadata);
   await prisma.uploadedDocument.delete({
     where: { id: document.id },
+  });
+
+  await prisma.auditLog.create({
+    data: {
+      action: AuditLogAction.DELETE,
+      userId: req.user!.id,
+      targetId: document.id,
+      details: {
+        originalName: document.originalName,
+      },
+    },
   });
 
   if (storedPath) {

@@ -7,6 +7,7 @@ import facultyRoutes from './faculty.route';
 import trainingRoutes from './training.route';
 import dashboardRoutes from './dashboard.route';
 import adminRoutes from './admin.route';
+import reviewRoutes from './review.route';
 import { env } from '../config/env';
 import { tqeReferenceRecords, guidelinePdfPath, isOcrReadyFlag, ocrConfig } from '../config/globals';
 import path from 'node:path';
@@ -48,6 +49,7 @@ router.use('/faculty', facultyRoutes);
 
 router.use('/training', trainingRoutes);
 router.use('/admin', adminRoutes);
+router.use('/review', reviewRoutes);
 
 // Fix for dashboard paths
 router.use('/', dashboardRoutes); // mounts /employee/dashboard, /evaluator/review-queue, /dashboard/:profileId
