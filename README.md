@@ -89,7 +89,7 @@ After this documentation consolidation, `README.md` is the single markdown docum
 - File preview for uploaded documents.
 - Employee file replacement for score sheets and evidence documents.
 - Employee file deletion.
-- Uploaded-document storage and metadata extraction.
+- Uploaded-document storage and metadata extraction (Supabase Storage).
 - Panel score preview metadata for score-sheet uploads.
 - Evidence completeness checking.
 - Missing score sheet and missing evidence detection per required panel.
@@ -215,7 +215,8 @@ The evaluator dashboard should eventually include:
 ## Architecture
 
 - Backend: Express + TypeScript
-- Database: PostgreSQL through Prisma
+- Database: PostgreSQL through Prisma (hosted on Supabase)
+- Document Storage: Supabase Storage (`documents` bucket)
 - Active frontend: static HTML/CSS/JavaScript in `public/`
 - Frontend migration workspace: Vue 3 + Vite in `frontend/`
 - Authentication: JWT through `Authorization` header or `fps_session` cookie
@@ -279,7 +280,11 @@ OCR_API_KEY=""
 OCR_API_KEY_HEADER="Authorization"
 OCR_FILE_FIELD_NAME="file"
 OCR_TIMEOUT_MS=30000
+SUPABASE_URL="https://your-project.supabase.co"
+SUPABASE_SERVICE_ROLE_KEY="your-service-role-key"
 ```
+
+> **Note:** `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are required in production for document uploads and preview. They are optional for local development and tests — the system will throw a clear error if storage operations are attempted without them.
 
 ## Local Development
 
@@ -350,6 +355,10 @@ Do not claim that the system makes final promotion decisions. Final evaluation s
 - Built workbook-style Request Form and Individual Summary Sheet views in evaluator portal.
 - Added audit trails (`AuditLog`) for document replacement, deletion, and evaluator review status changes.
 - Added visual metrics to evaluator dashboard.
+- Migrated document storage from local filesystem to **Supabase Storage** (`documents` bucket) for production compatibility with ephemeral hosts like Render.
+- Made Supabase client lazy-initialized so tests and local dev work without Supabase credentials.
+- Extracted `canViewUploadedDocument` into a pure module to eliminate async side-effect leaks in tests.
+- All 21 tests pass, build is clean.
 
 ### 2026-06-19
 

@@ -5,7 +5,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { prisma } from '../config/db';
-import { supabase } from '../config/supabase';
+import { getSupabase } from '../config/supabase';
 import { repoRoot } from '../config/globals';
 import { uploadPanels } from '../uploadPanels';
 import { analyzeDocumentContent, inferBestUploadPanelKey } from '../utils';
@@ -324,18 +324,7 @@ export function resolveStoredDocumentPath(extractionMetadata: unknown) {
   };
 }
 
-export function canViewUploadedDocument(args: {
-  requesterRole: UserRole;
-  requesterUserId: string;
-  ownerUserId: string | null;
-  profileCreatedByUserId: string | null;
-}) {
-  if (args.requesterRole !== UserRole.EMPLOYEE) {
-    return true;
-  }
-
-  return args.ownerUserId === args.requesterUserId || args.profileCreatedByUserId === args.requesterUserId;
-}
+export { canViewUploadedDocument } from './documentAccess';
 
 export function toPrismaJson(value: unknown): Prisma.InputJsonValue {
   return JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
@@ -354,7 +343,7 @@ async function persistUploadedDocumentFile(file: Express.Multer.File) {
   const extension = deriveStorageExtension(file.originalname, file.mimetype);
   const filePath = `${storageKey}${extension}`;
 
-  const { error } = await supabase.storage
+  const { error } = await getSupabase().storage
     .from('documents')
     .upload(filePath, file.buffer, {
       contentType: file.mimetype,
@@ -375,7 +364,7 @@ async function persistUploadedDocumentFile(file: Express.Multer.File) {
 export async function removePersistedDocumentFile(storageRef: any) {
   try {
     if (storageRef?.provider === 'supabase' && storageRef.path) {
-      await supabase.storage.from('documents').remove([storageRef.path]);
+      await getSupabase().storage.from('documents').remove([storageRef.path]);
     } else if (storageRef?.relativePath) {
       const absolutePath = path.resolve(repoRoot, storageRef.relativePath);
       await fs.unlink(absolutePath);

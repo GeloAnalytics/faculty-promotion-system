@@ -15,7 +15,7 @@ import {
   resolveStoredDocumentPath,
   removePersistedDocumentFile,
 } from '../utils/document.utils';
-import { supabase } from '../config/supabase';
+import { getSupabase } from '../config/supabase';
 import { ocrConfig } from '../config/globals';
 import { ProcessedUploadResult } from '../types';
 
@@ -153,7 +153,7 @@ export const viewDocument = async (req: Request, res: Response) => {
   res.setHeader('Content-Security-Policy', "frame-ancestors 'self'");
 
   if (stored.provider === 'supabase') {
-    const { data, error } = await supabase.storage.from(stored.bucket).download(stored.path);
+    const { data, error } = await getSupabase().storage.from(stored.bucket).download(stored.path);
     if (error || !data) {
       return res.status(404).json({ error: 'Stored document file is unavailable for preview' });
     }

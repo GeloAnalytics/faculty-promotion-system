@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { UserRole } from '@prisma/client';
-import { canViewUploadedDocument } from '../src/utils/document.utils';
+import { canViewUploadedDocument } from '../src/utils/documentAccess';
 
 test('employees can view documents they uploaded', () => {
   assert.equal(
