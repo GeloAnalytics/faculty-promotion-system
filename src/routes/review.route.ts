@@ -5,6 +5,6 @@ import { UserRole } from '@prisma/client';
 
 const router = Router();
 
-router.patch('/:profileId/status', requireRole([UserRole.EVALUATOR, UserRole.ADMIN]), updateReviewStatus);
+router.patch('/:profileId/status', requireRole(UserRole.EVALUATOR, UserRole.ADMIN), updateReviewStatus);
 
 export default router;
