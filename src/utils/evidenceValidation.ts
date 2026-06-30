@@ -18,6 +18,10 @@ export type EvidenceValidationSummary = {
   requiredPanelKeys: UploadPanelKey[];
   missingPanelKeys: UploadPanelKey[];
   missingPanelTitles: string[];
+  missingScoreSheetPanelKeys: UploadPanelKey[];
+  missingScoreSheetPanelTitles: string[];
+  missingEvidencePanelKeys: UploadPanelKey[];
+  missingEvidencePanelTitles: string[];
   note: string;
 };
 
@@ -25,14 +29,24 @@ export function validateEvidencePacket(args: {
   requestForm: EvidencePacketRequestForm;
   uploadedPanelKeys: Iterable<UploadPanelKey>;
   uploadTypeCounts: Record<string, number>;
+  panelUploadCounts?: Partial<Record<UploadPanelKey, { scoreSheet: number; evidence: number }>>;
 }): EvidenceValidationSummary {
   const uploadedPanelSet = new Set(args.uploadedPanelKeys);
   const requiredPanels = uploadPanels.filter((panel) => panel.appliesTo === 'ALL_FACULTY');
   const requiredPanelKeys = requiredPanels.map((panel) => panel.key);
-  const missingPanelKeys = requiredPanels.filter((panel) => !uploadedPanelSet.has(panel.key)).map((panel) => panel.key);
-  const missingPanelTitles = requiredPanels
-    .filter((panel) => !uploadedPanelSet.has(panel.key))
-    .map((panel) => panel.title);
+  const hasPerPanelUploadCounts = Boolean(args.panelUploadCounts);
+  const missingScoreSheetPanels = hasPerPanelUploadCounts
+    ? requiredPanels.filter((panel) => (args.panelUploadCounts?.[panel.key]?.scoreSheet ?? 0) < 1)
+    : [];
+  const missingEvidencePanels = hasPerPanelUploadCounts
+    ? requiredPanels.filter((panel) => (args.panelUploadCounts?.[panel.key]?.evidence ?? 0) < 1)
+    : [];
+  const missingPanelKeys = hasPerPanelUploadCounts
+    ? Array.from(new Set([...missingScoreSheetPanels, ...missingEvidencePanels].map((panel) => panel.key)))
+    : requiredPanels.filter((panel) => !uploadedPanelSet.has(panel.key)).map((panel) => panel.key);
+  const missingPanelTitles = hasPerPanelUploadCounts
+    ? Array.from(new Set([...missingScoreSheetPanels, ...missingEvidencePanels].map((panel) => panel.title)))
+    : requiredPanels.filter((panel) => !uploadedPanelSet.has(panel.key)).map((panel) => panel.title);
 
   const requestFields: Array<{ label: string; value: string | null }> = [
     { label: 'full name', value: args.requestForm.fullName },
@@ -69,7 +83,16 @@ export function validateEvidencePacket(args: {
     issues.push(`Missing request form field(s): ${missingRequestFields.join(', ')}.`);
   }
   if (missingPanelTitles.length) {
-    issues.push(`Missing required evidence panel(s): ${missingPanelTitles.join(', ')}.`);
+    if (hasPerPanelUploadCounts) {
+      if (missingScoreSheetPanels.length) {
+        issues.push(`Missing score sheet panel(s): ${missingScoreSheetPanels.map((panel) => panel.title).join(', ')}.`);
+      }
+      if (missingEvidencePanels.length) {
+        issues.push(`Missing documentary evidence panel(s): ${missingEvidencePanels.map((panel) => panel.title).join(', ')}.`);
+      }
+    } else {
+      issues.push(`Missing required evidence panel(s): ${missingPanelTitles.join(', ')}.`);
+    }
   }
 
   return {
@@ -80,6 +103,10 @@ export function validateEvidencePacket(args: {
     requiredPanelKeys,
     missingPanelKeys,
     missingPanelTitles,
+    missingScoreSheetPanelKeys: missingScoreSheetPanels.map((panel) => panel.key),
+    missingScoreSheetPanelTitles: missingScoreSheetPanels.map((panel) => panel.title),
+    missingEvidencePanelKeys: missingEvidencePanels.map((panel) => panel.key),
+    missingEvidencePanelTitles: missingEvidencePanels.map((panel) => panel.title),
     note: issues.length
       ? `Incomplete promotion packet. ${issues.join(' ')}`
       : 'Promotion packet evidence is complete for the current workbook validation pass.',

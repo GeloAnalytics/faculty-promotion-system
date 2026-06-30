@@ -136,6 +136,7 @@ export function buildDraftPointSummary(
   const uploadedPanels = new Set<string>();
   const panelScoreByKey = new Map<UploadPanelKey, number>();
   const panelEvidenceCount = new Map<UploadPanelKey, number>();
+  const panelUploadTypeCounts = new Map<UploadPanelKey, { scoreSheet: number; evidence: number }>();
   const uploadTypeCounts = new Map<string, number>();
 
   let instruction = resolvePerformanceMetricValue(performanceReview, 'teachingEffectiveness') ?? 0;
@@ -151,8 +152,17 @@ export function buildDraftPointSummary(
     if (metadata.panelKey) {
       uploadedPanels.add(metadata.panelKey);
       const panelKey = metadata.panelKey as UploadPanelKey;
-      panelEvidenceCount.set(panelKey, (panelEvidenceCount.get(panelKey) ?? 0) + 1);
-      if (metadata.panelScore !== null) {
+      const existingPanelCounts = panelUploadTypeCounts.get(panelKey) ?? { scoreSheet: 0, evidence: 0 };
+      if (metadata.uploadType === 'score-sheet') {
+        existingPanelCounts.scoreSheet += 1;
+      }
+      if (metadata.uploadType === 'evidence') {
+        existingPanelCounts.evidence += 1;
+        panelEvidenceCount.set(panelKey, (panelEvidenceCount.get(panelKey) ?? 0) + 1);
+      }
+      panelUploadTypeCounts.set(panelKey, existingPanelCounts);
+
+      if (metadata.panelScore !== null && metadata.uploadType !== 'evidence') {
         panelScoreByKey.set(panelKey, Math.max(panelScoreByKey.get(panelKey) ?? 0, metadata.panelScore));
       }
     }
@@ -224,6 +234,9 @@ export function buildDraftPointSummary(
     },
     uploadedPanelKeys: uploadedPanels as Iterable<UploadPanelKey>,
     uploadTypeCounts: Object.fromEntries(uploadTypeCounts),
+    panelUploadCounts: Object.fromEntries(panelUploadTypeCounts) as Partial<
+      Record<UploadPanelKey, { scoreSheet: number; evidence: number }>
+    >,
   });
   const hasDoctoralGraduateBonus = canUseDoctoralGraduateBonus(
     normalizeAttainment(highestEducationalAttainment),
@@ -288,6 +301,8 @@ export function buildDraftPointSummary(
       workflowCoveragePercent: roundScore(coverage * 100),
       validationStatus: evidenceValidation.status,
       missingPanels: evidenceValidation.missingPanelTitles,
+      missingScoreSheetPanels: evidenceValidation.missingScoreSheetPanelTitles,
+      missingEvidencePanels: evidenceValidation.missingEvidencePanelTitles,
       missingRequestFields: evidenceValidation.missingRequestFields,
     },
     promotionDraft: evidenceAwarePromotionDraft,

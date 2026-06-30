@@ -583,6 +583,7 @@ function renderUploadCardBlock(panel) {
   const scoreSheetCount = getPanelUploadCount(panel.key, "score-sheet");
   const evidenceCount = getPanelUploadCount(panel.key, "evidence");
   const panelComplete = scoreSheetCount > 0 && evidenceCount > 0;
+  const scorePreview = getPanelScorePreview(panel.key);
 
   return `
     <article class="card upload-card${panelComplete ? " upload-card-complete" : ""}" data-panel-key="${escapeHtml(panel.key)}">
@@ -602,6 +603,7 @@ function renderUploadCardBlock(panel) {
         </div>
       </div>
       ${panel.audienceLabel ? `<p class="upload-audience-chip">${escapeHtml(panel.audienceLabel)}</p>` : ""}
+      ${renderPanelScorePreview(panel, scorePreview, scoreSheetCount)}
       <div class="upload-variant-grid">
         ${renderUploadVariantForm({
           panelKey: panel.key,
@@ -626,6 +628,30 @@ function renderUploadCardBlock(panel) {
       </div>
     </article>
   `;
+}
+
+function renderPanelScorePreview(panel, scorePreview, scoreSheetCount) {
+  if (scorePreview) {
+    return `
+      <div class="upload-score-preview" data-status="detected">
+        <span>Detected score</span>
+        <strong>${escapeHtml(formatScorePreview(scorePreview.score, panel.maxScore))}</strong>
+        <small>${escapeHtml(scorePreview.fileName)}</small>
+      </div>
+    `;
+  }
+
+  if (scoreSheetCount > 0) {
+    return `
+      <div class="upload-score-preview" data-status="pending">
+        <span>Detected score</span>
+        <strong>Not detected yet</strong>
+        <small>Review the uploaded score sheet or re-upload a clearer file.</small>
+      </div>
+    `;
+  }
+
+  return "";
 }
 
 function renderUploadedFilesSection(panels) {
@@ -673,6 +699,7 @@ function renderUploadedFilesSection(panels) {
                   <strong>${escapeHtml(item.originalName)}</strong>
                   <span class="uploaded-file-panel">${escapeHtml(getUploadTypeLabel(item.metadata?.uploadType))}</span>
                   <span class="uploaded-file-panel">${escapeHtml(item.panelTitle)}</span>
+                  ${item.metadata?.uploadType === "score-sheet" && typeof item.metadata?.panelScore === "number" ? `<span class="uploaded-file-panel">Score ${escapeHtml(formatScorePreview(item.metadata.panelScore, item.metadata.panelMaxScore))}</span>` : ""}
                   <span class="uploaded-file-date">${escapeHtml(formatDatabaseValue(item.createdAt))}</span>
                 </div>
                 <button
@@ -1042,6 +1069,7 @@ function renderEmployeeUploads(uploads, errorMessage) {
           <tr>
             <th>File</th>
             <th>Panel</th>
+            <th>Score</th>
             <th>Summary</th>
             <th>Linked</th>
             <th>Created</th>
@@ -1054,6 +1082,7 @@ function renderEmployeeUploads(uploads, errorMessage) {
                 <tr>
                   <td>${escapeHtml(item.originalName)}</td>
                   <td>${escapeHtml(item.metadata?.panelTitle || item.metadata?.panelKey || "-")}</td>
+                  <td>${escapeHtml(item.metadata?.uploadType === "score-sheet" ? formatScorePreview(item.metadata?.panelScore, item.metadata?.panelMaxScore, "-") : "-")}</td>
                   <td>${escapeHtml(item.metadata?.analysisSummary || "Stored with no extracted summary yet.")}</td>
                   <td>${escapeHtml(item.metadata?.linkage || (item.profileId ? "profile-linked" : "pending"))}</td>
                   <td>${escapeHtml(formatDatabaseValue(item.createdAt))}</td>
@@ -3452,6 +3481,39 @@ function hasPanelUploads(panelKey, uploadType) {
 
 function hasPanelUpload(panelKey, uploadType) {
   return getPanelUploadCount(panelKey, uploadType) > 0;
+}
+
+function getPanelScorePreview(panelKey) {
+  const scoredUpload = employeeUploads.find((item) => {
+    const metadata = item.metadata || {};
+    return (
+      metadata.panelKey === panelKey &&
+      metadata.uploadType === "score-sheet" &&
+      typeof metadata.panelScore === "number" &&
+      Number.isFinite(metadata.panelScore)
+    );
+  });
+
+  if (!scoredUpload) {
+    return null;
+  }
+
+  return {
+    score: scoredUpload.metadata.panelScore,
+    maxScore: scoredUpload.metadata.panelMaxScore,
+    fileName: scoredUpload.originalName || "Score sheet",
+  };
+}
+
+function formatScorePreview(score, maxScore, fallback = "Pending") {
+  if (typeof score !== "number" || !Number.isFinite(score)) {
+    return fallback;
+  }
+
+  const formattedScore = String(score);
+  return typeof maxScore === "number" && Number.isFinite(maxScore)
+    ? `${formattedScore} / ${maxScore}`
+    : formattedScore;
 }
 
 function getPanelUploadCount(panelKey, uploadType) {
