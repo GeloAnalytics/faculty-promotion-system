@@ -13,7 +13,9 @@ import {
   processUploadedDocument,
   describeUploadProcessingError,
   resolveStoredDocumentPath,
+  removePersistedDocumentFile,
 } from '../utils/document.utils';
+import { supabase } from '../config/supabase';
 import { ocrConfig } from '../config/globals';
 import { ProcessedUploadResult } from '../types';
 
@@ -139,14 +141,8 @@ export const viewDocument = async (req: Request, res: Response) => {
     return res.status(403).json({ error: 'You can only view documents tied to your account' });
   }
 
-  const storedPath = resolveStoredDocumentPath(document.extractionMetadata);
-  if (!storedPath) {
-    return res.status(404).json({ error: 'Stored document file is unavailable for preview' });
-  }
-
-  try {
-    await fs.access(storedPath);
-  } catch {
+  const stored = resolveStoredDocumentPath(document.extractionMetadata);
+  if (!stored) {
     return res.status(404).json({ error: 'Stored document file is unavailable for preview' });
   }
 
@@ -155,7 +151,23 @@ export const viewDocument = async (req: Request, res: Response) => {
   res.setHeader('Content-Disposition', `inline; filename="${document.originalName.replace(/"/g, '\\"')}"`);
   res.setHeader('X-Frame-Options', 'SAMEORIGIN');
   res.setHeader('Content-Security-Policy', "frame-ancestors 'self'");
-  await pipeline(createReadStream(storedPath), res);
+
+  if (stored.provider === 'supabase') {
+    const { data, error } = await supabase.storage.from(stored.bucket).download(stored.path);
+    if (error || !data) {
+      return res.status(404).json({ error: 'Stored document file is unavailable for preview' });
+    }
+    const arrayBuffer = await data.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+    return res.end(buffer);
+  } else {
+    try {
+      await fs.access(stored.path);
+    } catch {
+      return res.status(404).json({ error: 'Stored document file is unavailable for preview' });
+    }
+    await pipeline(createReadStream(stored.path), res);
+  }
 };
 
 export const replaceDocument = async (req: Request, res: Response) => {
@@ -225,13 +237,8 @@ export const replaceDocument = async (req: Request, res: Response) => {
     },
   });
 
-  if (storedPath) {
-    try {
-      await fs.unlink(storedPath);
-    } catch {
-      // Ignore old file cleanup failures so the successful replacement remains usable.
-    }
-  }
+  const storage = readJsonObject(metadata.storage);
+  await removePersistedDocumentFile(storage);
 
   return res.json({
     replaced: true,
@@ -285,13 +292,9 @@ export const deleteDocument = async (req: Request, res: Response) => {
     },
   });
 
-  if (storedPath) {
-    try {
-      await fs.unlink(storedPath);
-    } catch {
-      // Ignore file cleanup failures so deletion still succeeds.
-    }
-  }
+  const metadata = readJsonObject(document.extractionMetadata);
+  const storage = readJsonObject(metadata.storage);
+  await removePersistedDocumentFile(storage);
 
   return res.json({
     deleted: true,

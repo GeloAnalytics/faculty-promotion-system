@@ -13,6 +13,8 @@ const envSchema = z.object({
   OCR_API_KEY_HEADER: z.string().trim().default('Authorization'),
   OCR_FILE_FIELD_NAME: z.string().trim().default('file'),
   OCR_TIMEOUT_MS: z.coerce.number().int().positive().default(30000),
+  SUPABASE_URL: z.string().url().min(1),
+  SUPABASE_SERVICE_ROLE_KEY: z.string().min(1),
 });
 
 export const env = envSchema.parse(process.env);

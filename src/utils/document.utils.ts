@@ -5,6 +5,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { prisma } from '../config/db';
+import { supabase } from '../config/supabase';
 import { repoRoot } from '../config/globals';
 import { uploadPanels } from '../uploadPanels';
 import { analyzeDocumentContent, inferBestUploadPanelKey } from '../utils';
@@ -110,7 +111,7 @@ export async function processUploadedDocument(args: {
         analysis,
       };
     } catch (error) {
-      await removePersistedDocumentFile(storage.relativePath);
+      await removePersistedDocumentFile(storage);
       throw error;
     }
   }
@@ -159,12 +160,12 @@ export async function processUploadedDocument(args: {
         analysis,
       };
     } catch (error) {
-      await removePersistedDocumentFile(storage.relativePath);
+      await removePersistedDocumentFile(storage);
       throw error;
     }
   }
 
-  await removePersistedDocumentFile(storage.relativePath);
+  await removePersistedDocumentFile(storage);
   throw new Error('Unsupported document type');
 }
 
@@ -294,6 +295,16 @@ export async function attachExistingDocumentsToProfile(
 export function resolveStoredDocumentPath(extractionMetadata: unknown) {
   const metadata = readJsonObject(extractionMetadata);
   const storage = readJsonObject(metadata.storage);
+  
+  if (storage.provider === 'supabase') {
+    if (typeof storage.path !== 'string') return null;
+    return {
+      provider: 'supabase' as const,
+      bucket: typeof storage.bucket === 'string' ? (storage.bucket as string) : 'documents',
+      path: storage.path as string,
+    };
+  }
+
   const relativePath = typeof storage.relativePath === 'string' ? storage.relativePath : null;
 
   if (!relativePath) {
@@ -306,7 +317,11 @@ export function resolveStoredDocumentPath(extractionMetadata: unknown) {
     return null;
   }
 
-  return normalizedPath;
+  return {
+    provider: 'local' as const,
+    path: normalizedPath,
+    relativePath,
+  };
 }
 
 export function canViewUploadedDocument(args: {
@@ -335,26 +350,38 @@ function readJsonObject(value: unknown): Record<string, unknown> {
 }
 
 async function persistUploadedDocumentFile(file: Express.Multer.File) {
-  await fs.mkdir(documentStorageRoot, { recursive: true });
   const storageKey = crypto.randomUUID();
   const extension = deriveStorageExtension(file.originalname, file.mimetype);
-  const relativePath = path.join('uploads', 'documents', `${storageKey}${extension}`);
-  const absolutePath = path.join(repoRoot, relativePath);
+  const filePath = `${storageKey}${extension}`;
 
-  await fs.writeFile(absolutePath, file.buffer);
+  const { error } = await supabase.storage
+    .from('documents')
+    .upload(filePath, file.buffer, {
+      contentType: file.mimetype,
+      upsert: true,
+    });
+
+  if (error) {
+    throw new Error(`Supabase upload failed: ${error.message}`);
+  }
 
   return {
-    storageKey,
-    relativePath,
+    provider: 'supabase',
+    bucket: 'documents',
+    path: filePath,
   };
 }
 
-async function removePersistedDocumentFile(relativePath: string) {
+export async function removePersistedDocumentFile(storageRef: any) {
   try {
-    const absolutePath = path.resolve(repoRoot, relativePath);
-    await fs.unlink(absolutePath);
+    if (storageRef?.provider === 'supabase' && storageRef.path) {
+      await supabase.storage.from('documents').remove([storageRef.path]);
+    } else if (storageRef?.relativePath) {
+      const absolutePath = path.resolve(repoRoot, storageRef.relativePath);
+      await fs.unlink(absolutePath);
+    }
   } catch {
-    // Ignore cleanup failures; the document record may still be removed later.
+    // Ignore cleanup failures
   }
 }
 
