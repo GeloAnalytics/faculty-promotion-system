@@ -1,141 +1,251 @@
 # Faculty Promotion System
 
-Faculty Promotion System is a full-stack TypeScript application for collecting faculty promotion records, uploading documentary evidence, extracting text from PDFs and images, supporting evaluator review, and preparing machine-learning-ready promotion data aligned with NBC 461-style workflows.
+Faculty Promotion System is a document-first web system for reducing the manual work of faculty promotion evaluation. Its main purpose is to replace the thick, repetitive paper-based review process with an upload, OCR, evidence-checking, score-computation, and evaluator-review workflow.
 
-## What This Repository Is
+The system should let faculty members submit score sheets and documentary evidence, let the application read and validate those files against the required evidence list and DBM/NBC 461 rules, and let evaluators review scores and documents without manually sorting through every paper packet.
 
-This repository currently has two active layers:
+## Main Goal
 
-1. An operational application layer for faculty record intake, document upload, OCR/PDF extraction, evaluator review, and dashboard summaries.
-2. An analytical layer for offline dataset export, boosting-model training, and explainability reporting.
+The system has two user-facing sides.
 
-The active user-facing interface is the static portal in `public/`. The Vue app in `frontend/` is still a migration workspace and is not the main runtime UI.
+### Employee Side
 
-## Current Status
+The employee side should make the faculty member's task as simple as possible:
 
-- The backend and active `public/` interface are the main working system.
-- The employee and evaluator portals now use a wider desktop-first dashboard layout so full-screen views make better use of available horizontal space.
-- The employee upload panels and evaluator database viewer stay anchored in the left dashboard column so they no longer overlap the sticky right-side scoring utilities.
-- The evaluator portal now includes a printable summary-sheet editor so the subject name block and signature lines can be adjusted before exporting to PDF.
-- The printable summary sheet now uses an A4 portrait layout with a table-based middle section for criterion scores.
-- Employee profile maintenance now separates baseline profile data from current promotion-cycle inputs.
-- Employees can receive a preliminary rank estimate even before evaluator scoring is completed.
-- The employee-side approximate score summary now stays sticky during scroll without being covered by the upload panels.
-- Evaluator scoring still takes priority and produces the stronger draft-rank recommendation once available.
-- The backend dashboard summary now mirrors the reference workbook structure with parsed request-form name parts, KRA totals, score-bracket labels, and faculty-versus-validated score comparison.
-- KRA II terminology now matches the workbook wording: `Research, Innovation and Creative Work`.
-- The repository now includes a documentary evidence validation matrix that treats missing required evidence as an incomplete promotion packet.
-- The active runtime UI still needs a direct workbook-mirror presentation layer for the new summary payload.
-- Live machine-learning prediction inside the deployed API is intentionally disabled.
-- Offline ML training, comparison, and explainability reporting are implemented in `ml/`.
+1. Upload score sheets.
+2. Upload documentary evidence.
+3. Let the system read the uploaded documents.
+4. Show detected scores in the UI.
+5. Check whether all required evidence has been uploaded.
+6. Show missing score sheets, missing evidence, and incomplete KRA panels.
+7. Compute overall scores from what is actually presented.
+8. Mark missing scores or missing evidence as `0` where no valid score/evidence is presented.
+9. Let the employee view uploaded files.
+10. Let the employee modify uploads by replacing or re-uploading files.
+11. Let the employee delete uploaded files.
+
+The employee should not need to manually retype KRA scores if the score sheet already contains them.
+
+### Evaluator Side
+
+The evaluator side should focus on review, verification, and monitoring:
+
+1. View computed scores.
+2. View all uploaded documents.
+3. Preview score sheets and evidence files.
+4. Check OCR/extracted values against the actual uploaded documents.
+5. See incomplete evidence packets and score/evidence mismatches.
+6. See visual metrics such as:
+   - number of faculty who filed for promotion
+   - number of complete and incomplete submissions
+   - number of uploaded score sheets
+   - number of uploaded evidence files
+   - evidence completion rate per KRA
+   - average system score
+   - count of submissions needing evaluator attention
+
+The evaluator workflow should reduce manual review effort. It should not blindly approve promotions.
+
+## Reference Documents
+
+The scoring and evidence workflow should be aligned with:
+
+- `DBM-JC-No-3-s-2022-9th-cycle-NBC-461-with-Annexes.pdf`
+- `Reference.xlsx`
+- the List of Documentary Evidences reference, if maintained as a separate PDF or workbook
+
+Current repository note: only the DBM-JC PDF and `Reference.xlsx` are present in the root folder. If the List of Documentary Evidences is a separate PDF, add it to the repository so the validation rules can be checked against the exact source file.
+
+## Current Verified Status
+
+Verified on 2026-06-30:
+
+- The live Render deployment responds at `https://faculty-promotion-system-0l51.onrender.com/`.
+- `GET /api/health` reports production mode.
+- TQE reference data is loaded with `1000` rows.
+- The DBM-JC/NBC 461 guideline PDF is loaded.
+- OCR is ready through OCR.space in the deployed environment.
+- Live ML prediction is inactive by design.
+- `npm test` passed all 21 tests.
+- `npm run build` passed.
+- `node --check public/workflow.js` passed.
+- `git diff --check` passed with line-ending warnings only.
+
+After this documentation consolidation, `README.md` is the single markdown document for the repository.
+
+## What Already Works
+
+- Account registration and login.
+- Role-based access for employee, evaluator, and admin users.
+- Active static UI in `public/`.
+- Express + TypeScript backend.
+- Prisma + PostgreSQL persistence.
+- PDF parsing with `pdf-parse`.
+- Image OCR through the configured OCR provider.
+- KRA/criterion upload panels.
+- Separate upload paths for score sheets and evidence.
+- One-file limit for each score-sheet upload request.
+- Multiple-file evidence upload support.
+- File preview for uploaded documents.
+- Employee file replacement for score sheets and evidence documents.
+- Employee file deletion.
+- Uploaded-document storage and metadata extraction.
+- Panel score preview metadata for score-sheet uploads.
+- Evidence completeness checking.
+- Missing score sheet and missing evidence detection per required panel.
+- Evidence-based score computation that counts missing score sheets or missing evidence as `0` for the panel.
+- Panel score cards that show computed score previews and zero fallback when evidence is incomplete.
+- Live score summary UI with KRA totals, criterion scores, total score, weighted score, panel coverage, and zeroed-panel count.
+- Employee-side OCR-backed summary.
+- Evaluator review queue.
+- Evaluator document browser grouped by employee.
+- Evaluator-side summary cards for zeroed panels, average coverage, and evidence score signals.
+- Backend `workbookMirror` summary data with request-form, KRA, comparison, and summary-sheet fields.
+- Offline ML dataset export, boosting-model comparison, and explainability reporting.
+
+## What Still Needs To Be Achieved
+
+These are the highest-priority items needed to match the target system goal:
+
+1. Add or finalize the exact List of Documentary Evidences source file in the repo.
+2. Encode the documentary evidence list into stricter machine-readable rules.
+3. Continue visual polish on the score summary after testing with real score sheets and evidence packets.
+4. Surface OCR mismatch warnings when the score sheet value does not match the evidence or expected criterion.
+5. Render the backend `workbookMirror` payload directly in the UI.
+6. Build a workbook-style Request Form view.
+7. Build an Individual Summary Sheet view.
+8. Add audit trails for upload changes, evaluator verification, and final review status.
+9. Keep live ML prediction disabled until there is enough validated institutional data.
+
+## Current Development Checkpoint
+
+This checkpoint is the active development baseline before the next feature pass:
+
+- Documentation has been compressed into this single `README.md`.
+- The employee portal now shows a live score summary with per-KRA totals, per-criterion values, total score, weighted score, panel coverage, and zeroed-panel count.
+- The backend computes evidence-based scores with the policy `zero-if-missing-score-or-evidence`.
+- Required panels without score sheets, detected scores, or supporting evidence are counted as `0`.
+- Employee uploads now support view, replace, and delete actions.
+- Replacement uploads keep the old document intact if the new file fails OCR or processing.
+- Evaluator cards now surface evidence score and zeroed-panel signals.
+- The next implementation pass should focus on OCR mismatch warnings and workbook-style views.
+
+## Core Workflow
+
+1. A faculty member signs in.
+2. The faculty member creates or updates the basic faculty profile.
+3. The faculty member uploads score sheets and evidence files per KRA/criterion.
+4. The backend stores the uploaded files.
+5. The backend extracts text from PDFs or images.
+6. OCR/PDF parsing attempts to detect KRA/criterion scores.
+7. The system links uploaded files to KRA/criterion panels.
+8. The system checks whether required evidence is present.
+9. Missing required evidence keeps the packet incomplete.
+10. Missing scores or missing required evidence should count as `0` in the computed total.
+11. The employee sees detected scores, uploaded files, missing requirements, and computed summaries.
+12. The evaluator views all submitted records, documents, scores, and validation flags.
+13. The evaluator verifies the output and uses the system to reduce manual review work.
+
+## Evidence Validation Rules
+
+The validation logic should follow these rules:
+
+- `AND` means every listed document is required.
+- `OR` means at least one valid alternative is required.
+- Optional or bonus evidence does not replace required evidence.
+- A score sheet alone is not enough if supporting evidence is missing.
+- Supporting evidence alone is not enough if the score sheet is required for OCR score comparison.
+- Missing required documents should produce an incomplete state.
+- Incomplete evidence should block final promotable status.
+- If no valid score or evidence is presented for a criterion, that criterion should be computed as `0`.
+
+## KRA Evidence Areas
+
+### KRA I - Instruction
+
+- Teaching Effectiveness
+- Curriculum and Instructional Materials Development
+- Thesis, Dissertation, and Mentorship Services
+
+### KRA II - Research, Innovation and Creative Work
+
+- Research Outputs
+- Inventions
+- Creative Works
+
+### KRA III - Extension Services
+
+- Service to Institution
+- Service to the Community
+- Extension Involvement or Quality of Extension Service
+- Bonus criteria, where applicable
+
+### KRA IV - Professional Development
+
+- Involvement in Professional Organizations
+- Continuing Development
+- Awards and Recognitions
+- Academic Experience for new entrants only
+- Industry Experience for new entrants only
+
+## Score Computation Direction
+
+The system should compute from evidence actually submitted and recognized:
+
+1. Read score-sheet values through OCR/PDF parsing.
+2. Match detected scores to the correct KRA/criterion panel.
+3. Check that supporting evidence exists for the panel.
+4. Use the detected score only when the score and evidence pass validation.
+5. Use `0` when no score is detected.
+6. Use `0` when required evidence is missing.
+7. Sum criterion scores into KRA totals.
+8. Compute the overall score from KRA totals using the official DBM/NBC 461 rules.
+9. Show score brackets and draft rank as advisory only.
+
+The current backend now returns a zero-if-missing score-computation payload, and the employee UI shows live KRA, criterion, total, weighted-score, coverage, and zeroed-panel summaries. The remaining scoring work is to validate the exact official formula against the final documentary-evidence source files and real packets.
+
+## Evaluator Metrics To Add
+
+The evaluator dashboard should eventually include:
+
+- total faculty submissions
+- submissions by status: complete, incomplete, needs review, verified
+- total uploaded score sheets
+- total uploaded evidence files
+- average evidence completion rate
+- KRA panels most often missing evidence
+- OCR confidence or extraction quality indicators
+- average computed score
+- distribution of projected/draft ranks
+- number of records requiring evaluator attention
 
 ## Architecture
 
-- Backend: Express + TypeScript + Prisma + PostgreSQL
+- Backend: Express + TypeScript
+- Database: PostgreSQL through Prisma
 - Active frontend: static HTML/CSS/JavaScript in `public/`
-- Frontend migration target: Vue 3 + Vite in `frontend/`
-- Authentication: JWT with `Authorization` header or `fps_session` cookie
-- Document processing: `pdf-parse` for PDFs and OCR for supported images
-- ML workflow: Python scripts for offline export, training, evaluation, and explainability
+- Frontend migration workspace: Vue 3 + Vite in `frontend/`
+- Authentication: JWT through `Authorization` header or `fps_session` cookie
+- Document processing: PDF parsing and OCR
+- ML workflow: offline Python scripts in `ml/`
 
-## Core Features
-
-- Employee account registration and login
-- Role-based employee, evaluator, and admin access
-- Full-width employee and evaluator dashboard layouts with responsive collapse back to a single-column flow on narrower screens
-- Sticky employee-side approximate scoring summary that remains readable while the upload section scrolls beneath it
-- Left-column employee upload panels and evaluator database viewer that avoid colliding with the sticky scoring rail
-- Faculty profile capture with baseline identity, rank, attainment, and promotion history
-- Current-cycle submission fields for review-period performance metrics and cycle notes
-- Criterion-based uploads grouped by KRA with strict completeness validation
-- PDF parsing and image OCR
-- Upload-to-profile linkage using explicit profile selection or filename matching fallback
-- Evaluator scoring workflow and review queue
-- Printable evaluator summary-sheet export through the browser print flow
-- A4 portrait summary-sheet PDF with middle criteria tables
-- Employee-side evidence coverage summary
-- Preliminary employee-side rank estimation from inputs and uploaded evidence
-- Evaluator-backed draft-rank computation from criterion scores
-- Workbook-mirror summary payload that aligns the backend with the reference spreadsheet structure
-- Standardized faculty rank and educational-attainment option catalogs from the backend
-- Dataset export for offline machine learning
-- Admin database overview
-
-## Faculty Record Model
-
-Faculty records now distinguish between two data layers:
-
-- `baselineData` stores longer-lived profile fields such as identity, academic rank, highest educational attainment, and promotion history.
-- `cycleData` stores the active review period inputs such as IPCR averages, teaching effectiveness, research and extension values, professional development hours, and cycle-specific notes.
-
-This split keeps promotion-history and eligibility data stable across updates while letting employees revise only the current cycle inputs when a new review period starts.
-
-## Promotion Draft and Rank Estimation
-
-The dashboard computes a `promotionDraft` summary on the server.
-
-Depending on available data, it can include:
-
-- current academic rank
-- suggested draft rank
-- projected rank
-- evaluator total score
-- weighted score
-- sub-rank increments
-- applied weight profile
-- confidence label
-- pending requirements for eligibility constraints
-
-### Preliminary estimate mode
-
-When evaluator scoring is not yet available, the system can still generate a preliminary estimate using:
-
-- baseline profile data such as current rank, attainment, and promotion history
-- current-cycle performance values
-- extracted document scores from OCR/PDF analysis
-- upload coverage across KRA panels
-- average document completeness
-- current academic-rank group
-- highest educational attainment for eligibility checks
-
-This estimate is advisory and is labeled as preliminary.
-
-The workbook-derived evidence matrix treats `AND` clauses as mandatory bundles and `OR` clauses as alternative evidence paths. If a required bundle is incomplete, the record should stay in an incomplete state and should not be treated as promotable.
-
-### Evaluator-backed mode
-
-When the latest training item is `LABELED` or `VALIDATED` and contains criterion scores, the system computes the rank result from evaluator-backed KRA totals.
-
-This result takes priority over the preliminary estimate.
-
-### Important note
-
-The draft-rank feature is a decision-support aid. It is not a final committee decision and should not be treated as an automated promotion outcome.
-
-## Request Flow
-
-1. Users register or log in.
-2. Employees create or update a baseline faculty profile.
-3. Employees maintain the current promotion-cycle fields for the active review period.
-4. Employees upload PDF or image evidence to criterion-specific KRA panels.
-5. The backend parses PDFs or runs OCR on images and stores extracted text and metadata.
-6. The system summarizes evidence coverage, checks validation completeness, and can compute a preliminary rank estimate.
-7. Evaluators review submissions and assign criterion scores.
-8. The dashboard upgrades the rank result to an evaluator-backed draft recommendation when scoring exists.
-9. Labeled and validated examples can be exported for offline ML training and comparison.
-
-## Project Structure
+## Important Source Areas
 
 ```text
-.
-|-- src/                 # Express app, routes, controllers, Prisma-backed logic
-|-- public/              # Active employee/evaluator portal UI
-|-- frontend/            # Vue migration work-in-progress
-|-- prisma/              # Prisma schema and migrations
-|-- scripts/             # Dataset export and utility scripts
-|-- ml/                  # Offline ML workflow, artifacts, and reports
-|-- uploads/             # Local upload/output workspace if used in development
-|-- dist/                # Compiled backend output
+src/server.ts                         Express app setup
+src/routes/                           API routes
+src/controllers/document.controller.ts Upload, preview, and delete behavior
+src/controllers/dashboard.controller.ts Employee and evaluator dashboard payloads
+src/utils/document.utils.ts            PDF/OCR processing and file linkage
+src/utils/evidenceValidation.ts        Evidence completeness rules
+src/utils/dashboard.utils.ts           Score summaries and workbookMirror payload
+src/uploadPanels.ts                    KRA/criterion upload panel catalog
+src/uploadWorkflow.ts                  Score-sheet/evidence workflow metadata
+public/employee.html                   Active employee portal
+public/evaluator.html                  Active evaluator portal
+public/workflow.js                     Current active portal behavior
+prisma/schema.prisma                   Database schema
+ml/                                    Offline ML workflow
 ```
 
 ## Main API Areas
@@ -145,9 +255,13 @@ The draft-rank feature is a decision-support aid. It is not a final committee de
 - `POST /api/auth/logout`
 - `GET /api/auth/me`
 - `GET /api/config/upload-panels`
+- `GET /api/config/upload-workflow`
 - `GET /api/config/faculty-options`
 - `POST /api/faculty/ingest`
+- `PATCH /api/faculty/:profileId`
 - `POST /api/documents/extract`
+- `GET /api/documents/:documentId/view`
+- `POST /api/documents/:documentId/replace`
 - `DELETE /api/documents/:documentId`
 - `GET /api/employee/dashboard`
 - `GET /api/evaluator/review-queue`
@@ -176,31 +290,24 @@ OCR_TIMEOUT_MS=30000
 
 ## Local Development
 
-### Backend
-
-- `npm install`
-- `npm run db:generate`
-- `npm run db:migrate`
-- `npm run dev`
+```bash
+npm install
+npm run db:generate
+npm run db:migrate
+npm run dev
+```
 
 The backend serves the active portals at:
 
+- `http://localhost:3000/`
 - `http://localhost:3000/employee`
 - `http://localhost:3000/evaluator`
-
-### Frontend migration app
-
-- `cd frontend`
-- `npm install`
-- `npm run dev`
-
-Use this only for migration or exploratory UI work unless the team explicitly switches runtime ownership to Vue.
 
 ## Common Commands
 
 - `npm run dev` - start the backend in watch mode
 - `npm run build` - compile TypeScript to `dist/`
-- `npm test` - run the lightweight utility and workflow regression tests
+- `npm test` - run utility and workflow regression tests
 - `npm run start` - run the compiled backend
 - `npm run db:migrate` - apply development migrations
 - `npm run db:deploy` - apply deploy-safe migrations
@@ -209,83 +316,83 @@ Use this only for migration or exploratory UI work unless the team explicitly sw
 
 ## Offline ML Workflow
 
-### 1. Install Python dependencies
-
-```bash
-pip install -r ml/requirements.txt
-```
-
-### 2. Export labeled and validated training data
+Live ML prediction is intentionally disabled. The ML workflow should be described as offline experimentation and dataset preparation.
 
 ```bash
 npm run ml:export-dataset
-```
-
-Default export:
-
-`data/exports/objective-305-training-dataset.csv`
-
-### 3. Train and compare models
-
-```bash
 npm run ml:train-boosting
 ```
 
-Optional example:
+Implemented offline model comparison includes:
 
-```bash
-python ml/train_boosting_models.py --cv-folds 5 --small-dataset-threshold 60
-```
+- AdaBoost
+- Gradient Boosting
+- XGBoost
 
-### Outputs
+The current dissertation-safe claim is that the system prepares and validates machine-learning-ready promotion data, then supports offline model comparison and explainability. It should not be described as a live automated promotion decision engine.
 
-- `ml/reports/<timestamp>/validation_metrics.csv`
-- `ml/reports/<timestamp>/cross_validation_metrics.csv`
-- `ml/reports/<timestamp>/experiment_summary.json`
-- `ml/reports/<timestamp>/test_confusion_matrix.csv`
-- `ml/reports/<timestamp>/feature_importance.csv`
-- `ml/reports/<timestamp>/permutation_importance.csv`
-- `ml/reports/<timestamp>/global_shap_importance.csv`
-- `ml/reports/<timestamp>/local_shap_explanations_test.csv`
-- `ml/artifacts/<timestamp>/best_model.joblib`
-- `ml/artifacts/<timestamp>/feature_columns.json`
-- `ml/artifacts/<timestamp>/training_metadata.json`
+## Thesis Framing
 
-## Upload Behavior
+A safe project framing is:
 
-- Supported evidence types are PDFs and common image formats.
-- Spreadsheet and CSV uploads are rejected in criterion-based upload panels.
-- The old PDF naming-convention requirement is no longer enforced as an upload restriction.
-- Filename matching may still be used as a fallback for linking uploads to a faculty profile when explicit profile linkage is unavailable.
-- Documentary evidence validation follows the workbook structure: all mandatory `AND` items must be present, while `OR` groups accept one valid alternative but still require at least one qualifying document.
-- A missing required evidence item should be treated as a blocker for promotion review, not as a minor warning.
+> The Faculty Promotion System is a hybrid decision-support platform that digitizes faculty promotion submissions, extracts scores from uploaded score sheets, validates documentary evidence against KRA requirements, computes advisory promotion summaries, and gives evaluators a centralized review dashboard for reducing manual paper-based evaluation work.
 
-## Deployment Notes
+Do not claim that the system makes final promotion decisions. Final evaluation should remain with authorized evaluators and institutional committees.
 
-- Host the backend on a Node-capable platform such as Render, Railway, or Fly.io.
-- Provision PostgreSQL and run `npm run db:deploy` during deployment.
-- Configure CORS and `TRUST_PROXY` according to your hosting setup.
-- For production OCR, set `OCR_PROVIDER=http` and provide the corresponding API credentials.
-- If you deploy the active UI from this repository today, serve the backend and `public/` assets together.
+## Consolidated Release Notes
 
-## Known Gaps
+### 2026-06-30
 
-- The Vue frontend is not yet the main app experience.
-- Promotion draft rules are advisory and still need continued validation against official institutional policy.
-- Live inference endpoints remain intentionally disabled.
-- Audit-ready explanations and fuller committee approval workflows are still future work.
-- Automated tests are still limited and should be expanded around rank normalization and promotion-draft rules.
+- Consolidated repository documentation into this single `README.md`.
+- Verified the live Render deployment.
+- Verified production health response, OCR readiness, loaded TQE data, and inactive live ML status.
+- Clarified the true target goal: employee upload automation and evaluator review/analytics.
+- Added evidence-based zero-if-missing score computation for required KRA/criterion panels.
+- Added a live employee score summary for KRA totals, criterion scores, total score, weighted score, panel coverage, and zeroed panels.
+- Added employee upload replacement beside view and delete.
+- Added evaluator-side evidence score and zeroed-panel signals.
+- Recorded remaining implementation work for OCR mismatch warnings, workbook-style views, stricter evidence rules, audit trails, and evaluator visualizations.
 
-## Recommended Documentation
+### 2026-06-19
 
-For day-to-day system usage and implementation details, use this file:
+- Added strict evidence validation guidance.
+- Clarified that missing required evidence keeps a promotion packet incomplete.
+- Documented `AND` and `OR` evidence behavior.
 
-- `README.md`
+### 2026-06-17
 
-For dissertation and paper revision work, use:
+- Added workbook-mirror dashboard data.
+- Aligned KRA II wording with `Research, Innovation and Creative Work`.
+- Added score comparison and summary-sheet context in backend utilities.
 
-- `DISSERTATION_REVISION_GUIDE.md`
+### 2026-06-03
 
-For the evidence-completeness rules extracted from the workbook, use:
+- Improved dashboard layout behavior.
+- Revised printable summary-sheet layout in the older UI path.
 
-- `EVIDENCE_VALIDATION_MATRIX.md`
+### 2026-05-27
+
+- Expanded employee and evaluator dashboard layouts.
+- Added wider desktop-first organization for review work.
+
+### 2026-05-22
+
+- Documented baseline profile data and current-cycle data split.
+
+### 2026-05-21
+
+- Improved session consistency.
+- Added backend utility tests.
+- Improved uploaded-file handling and filtering in the earlier active portal path.
+
+## Immediate Implementation Plan
+
+To fully achieve the system goal, build in this order:
+
+1. Confirm and add the exact List of Documentary Evidences reference file.
+2. Convert evidence requirements into structured validation rules per KRA/criterion.
+3. Surface OCR mismatch warnings per KRA/criterion panel.
+4. Render workbook-style Request Form and Individual Summary Sheet views.
+5. Add evaluator dashboard visualizations.
+6. Add audit trail and final evaluator/committee status states.
+7. Validate the final official score formula against real score sheets and the DBM-JC/List of Documentary Evidences references.

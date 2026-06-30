@@ -17,6 +17,18 @@ import {
 import { ocrConfig } from '../config/globals';
 import { ProcessedUploadResult } from '../types';
 
+function readJsonObject(value: unknown): Record<string, unknown> {
+  if (value && typeof value === 'object' && !Array.isArray(value)) {
+    return value as Record<string, unknown>;
+  }
+
+  return {};
+}
+
+function readOptionalString(value: unknown) {
+  return typeof value === 'string' && value.trim() ? value : null;
+}
+
 export const extractDocuments = async (req: Request, res: Response) => {
   const uploadedFiles = Array.isArray(req.files) ? req.files : [];
   if (!uploadedFiles.length) {
@@ -134,6 +146,85 @@ export const viewDocument = async (req: Request, res: Response) => {
   res.setHeader('X-Frame-Options', 'SAMEORIGIN');
   res.setHeader('Content-Security-Policy', "frame-ancestors 'self'");
   await pipeline(createReadStream(storedPath), res);
+};
+
+export const replaceDocument = async (req: Request, res: Response) => {
+  const file = req.file;
+  if (!file) {
+    return res.status(400).json({ error: 'No replacement document uploaded' });
+  }
+
+  const document = await prisma.uploadedDocument.findUnique({
+    where: { id: req.params.documentId },
+    select: {
+      id: true,
+      ownerUserId: true,
+      profileId: true,
+      kind: true,
+      originalName: true,
+      extractionMetadata: true,
+      profile: {
+        select: {
+          createdByUserId: true,
+        },
+      },
+    },
+  });
+
+  if (!document) {
+    return res.status(404).json({ error: 'Uploaded document not found' });
+  }
+
+  if (req.user!.role === UserRole.EMPLOYEE && document.ownerUserId !== req.user!.id) {
+    return res.status(403).json({ error: 'You can only replace your own uploaded documents' });
+  }
+
+  const metadata = readJsonObject(document.extractionMetadata);
+  const kind = parseDocumentKind(readOptionalString(req.body.kind) ?? document.kind);
+  const uploadType = parseEmployeeUploadType(readOptionalString(req.body.uploadType) ?? metadata.uploadType);
+  const panelKey = parseUploadPanelKey(readOptionalString(req.body.panelKey) ?? metadata.panelKey);
+  const panelDefinition = findUploadPanelDefinition(panelKey);
+  const ownerUserId = document.ownerUserId ?? document.profile?.createdByUserId ?? req.user!.id;
+
+  const result = await processUploadedDocument({
+    file,
+    ownerUserId,
+    requestedProfileId: document.profileId,
+    kind,
+    panelKey,
+    panelTitle: panelDefinition.title,
+    uploadType,
+    ocrConfig,
+  });
+
+  const storedPath = resolveStoredDocumentPath(document.extractionMetadata);
+  await prisma.uploadedDocument.delete({
+    where: { id: document.id },
+  });
+
+  if (storedPath) {
+    try {
+      await fs.unlink(storedPath);
+    } catch {
+      // Ignore old file cleanup failures so the successful replacement remains usable.
+    }
+  }
+
+  return res.json({
+    replaced: true,
+    oldDocumentId: document.id,
+    oldOriginalName: document.originalName,
+    documentId: result.documentId,
+    originalName: result.originalName,
+    fileType: result.fileType,
+    panelKey: result.panelKey,
+    uploadType: result.uploadType,
+    profileId: result.profileId,
+    linkage: result.linkage,
+    textPreview: result.textPreview,
+    analysis: result.analysis,
+    message: `${document.originalName} was replaced with ${result.originalName}`,
+  });
 };
 
 export const deleteDocument = async (req: Request, res: Response) => {

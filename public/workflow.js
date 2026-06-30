@@ -1,5 +1,6 @@
 const portal = document.body.dataset.portal || 'auth';
 const apiBaseUrl = normalizeApiBaseUrl(window.APP_CONFIG?.apiBaseUrl);
+const REPLACEMENT_UPLOAD_ACCEPT = '.pdf,.png,.jpg,.jpeg,.bmp,.tif,.tiff';
 
 const sessionUser = byId('session-user');
 const workspaceGreeting = byId('workspace-greeting');
@@ -112,7 +113,11 @@ async function loadEmployeeWorkspace() {
   uploadPanelCatalog = Array.isArray(workflow.panels) ? workflow.panels : [];
 
   renderEmployeeSummary(employeeDashboard);
-  renderEmployeeWorkflow(uploadPanelCatalog, employeeDashboard?.uploads || []);
+  renderEmployeeWorkflow(
+    uploadPanelCatalog,
+    employeeDashboard?.uploads || [],
+    employeeDashboard?.latestProfile?.draftPoints?.scoreComputation,
+  );
   renderEmployeeUploads(employeeDashboard?.uploads || []);
   setNotice(employeeUploadStatus, 'Upload each score sheet separately from its matching evidence bundle. PDFs can be previewed inside the portal.');
 }
@@ -141,62 +146,103 @@ function renderEmployeeSummary(dashboard) {
     return;
   }
 
-  const cards = [
-    { label: 'Instruction', value: formatNumber(draftPoints.categories?.instruction) },
-    { label: 'Research', value: formatNumber(draftPoints.categories?.research) },
-    { label: 'Extension', value: formatNumber(draftPoints.categories?.extension) },
-    { label: 'Prof. Dev.', value: formatNumber(draftPoints.categories?.professionalDevelopment) },
-    { label: 'IPCR Avg.', value: formatNumber(draftPoints.categories?.ipcrAverage) },
-    { label: 'Approx. Total', value: formatNumber(draftPoints.overallEstimate) },
-  ];
-
   const evidenceCoverage = draftPoints.evidenceCoverage || {};
   const promotionDraft = draftPoints.promotionDraft || {};
+  const scoreComputation = draftPoints.scoreComputation || {};
+  const zeroedPanelCount = Number(scoreComputation.zeroedPanelCount || 0);
+  const evidenceScore = formatOptionalNumber(scoreComputation.weightedScore, formatNumber(scoreComputation.rawTotal));
+  const panelCoverage = `${evidenceCoverage.uploadedPanelCount ?? 0}/${evidenceCoverage.expectedPanelCount ?? 0}`;
 
   employeePoints.innerHTML = `
-    <div class="database-counts compact-counts">
-      ${cards
-        .map(
-          (item) => `
-            <article class="database-count-card">
-              <span class="database-count-label">${escapeHtml(item.label)}</span>
-              <strong class="database-count-value">${escapeHtml(item.value)}</strong>
-            </article>
-          `,
-        )
-        .join('')}
-    </div>
-    <div class="rank-panel rank-panel-mini">
-      <div class="rank-panel-hero">
-        <div class="rank-panel-copy">
-          <p class="section-kicker">OCR check</p>
-          <h3>${escapeHtml(promotionDraft.suggestedRank || 'Pending review')}</h3>
-          <p class="card-copy">${escapeHtml(draftPoints.note || 'Evaluator review is still required for the official score.')}</p>
+    <section class="scoreboard">
+      <div class="scoreboard-hero">
+        <p class="section-kicker">Live Score Summary</p>
+        <div class="scoreboard-total-row">
+          <div>
+            <span class="scoreboard-label">Total</span>
+            <strong>${escapeHtml(formatNumber(scoreComputation.rawTotal))}</strong>
+          </div>
+          <div>
+            <span class="scoreboard-label">Weighted</span>
+            <strong>${escapeHtml(evidenceScore)}</strong>
+          </div>
+        </div>
+        <div class="scoreboard-chip-row">
+          <span class="scoreboard-chip" data-tone="${scoreComputation.status === 'complete' ? 'ready' : 'pending'}">${escapeHtml(scoreComputation.status || 'pending')}</span>
+          <span class="scoreboard-chip">${escapeHtml(panelCoverage)} panels</span>
+          <span class="scoreboard-chip">${escapeHtml(String(zeroedPanelCount))} zeroed</span>
         </div>
       </div>
-      <div class="rank-panel-grid">
-        <article class="rank-metric-card">
-          <span class="rank-metric-label">Current rank</span>
-          <strong class="rank-metric-value">${escapeHtml(promotionDraft.currentRank || 'Not set')}</strong>
-        </article>
-        <article class="rank-metric-card">
-          <span class="rank-metric-label">System score</span>
-          <strong class="rank-metric-value">${escapeHtml(formatOptionalNumber(promotionDraft.weightedScore, 'Pending'))}</strong>
-        </article>
-        <article class="rank-metric-card">
-          <span class="rank-metric-label">Uploaded files</span>
-          <strong class="rank-metric-value">${escapeHtml(String(employeeDashboard?.summary?.uploadCount ?? 0))}</strong>
-        </article>
-        <article class="rank-metric-card">
-          <span class="rank-metric-label">Panel coverage</span>
-          <strong class="rank-metric-value">${escapeHtml(`${evidenceCoverage.uploadedPanelCount ?? 0} / ${evidenceCoverage.expectedPanelCount ?? 0}`)}</strong>
-        </article>
+
+      <div class="scoreboard-kra-list">
+        ${renderScoreboardKraSections(scoreComputation)}
       </div>
+
+      <div class="scoreboard-footer">
+        <div>
+          <span class="scoreboard-label">Draft rank</span>
+          <strong>${escapeHtml(promotionDraft.suggestedRank || 'Pending review')}</strong>
+        </div>
+        <div>
+          <span class="scoreboard-label">Current rank</span>
+          <strong>${escapeHtml(promotionDraft.currentRank || 'Not set')}</strong>
+        </div>
+      </div>
+    </section>
+  `;
+}
+
+function renderScoreboardKraSections(scoreComputation) {
+  const sections = Array.isArray(scoreComputation?.kraSections) ? scoreComputation.kraSections : [];
+
+  if (!sections.length) {
+    return '<div class="notice">Scores will update after the first score sheet and evidence upload.</div>';
+  }
+
+  return sections.map(renderScoreboardKraSection).join('');
+}
+
+function renderScoreboardKraSection(section, index) {
+  const kraLabel = formatKraShortLabel(section.title, index);
+  const panels = Array.isArray(section.panels) ? section.panels : [];
+
+  return `
+    <article class="scoreboard-kra">
+      <div class="scoreboard-kra-header">
+        <div>
+          <span class="scoreboard-label">${escapeHtml(kraLabel)}</span>
+          <strong>${escapeHtml(formatNumber(section.cappedScore))}</strong>
+        </div>
+        <span class="scoreboard-kra-max">/ ${escapeHtml(formatNumber(section.maxScore))}</span>
+      </div>
+      <div class="scoreboard-criteria">
+        ${panels.map((panel, panelIndex) => renderScoreboardCriterion(panel, panelIndex)).join('')}
+      </div>
+    </article>
+  `;
+}
+
+function renderScoreboardCriterion(panel, index) {
+  return `
+    <div class="scoreboard-criterion" data-status="${escapeHtml(panel.status || 'missing-score')}">
+      <span>${escapeHtml(formatCriterionLabel(panel.title, index))}</span>
+      <strong>${escapeHtml(formatNumber(panel.usedScore))}</strong>
     </div>
   `;
 }
 
-function renderEmployeeWorkflow(workflowItems, uploads) {
+function formatKraShortLabel(title, index) {
+  const matched = String(title || '').match(/KRA\s*(\d+)/i);
+  return matched ? `KRA ${matched[1]}` : `KRA ${index + 1}`;
+}
+
+function formatCriterionLabel(title, index) {
+  const letter = String.fromCharCode(65 + index);
+  const compactTitle = String(title || '').replace(/\s+/g, ' ').trim();
+  return compactTitle ? `Criterion ${letter}: ${compactTitle}` : `Criterion ${letter}`;
+}
+
+function renderEmployeeWorkflow(workflowItems, uploads, scoreComputation = null) {
   if (!employeeUploadWorkflow) {
     return;
   }
@@ -231,9 +277,10 @@ function renderEmployeeWorkflow(workflowItems, uploads) {
       <span class="workflow-summary-chip">Score sheets: ${scoreSheetCount}</span>
       <span class="workflow-summary-chip">Evidence files: ${evidenceCount}</span>
       <span class="workflow-summary-chip">Panels tracked: ${workflowItems.length}</span>
+      <span class="workflow-summary-chip">Zeroed panels: ${Number(scoreComputation?.zeroedPanelCount || 0)}</span>
     </div>
     ${groupedPanels
-      .map(([kraTitle, items]) => renderEmployeeUploadGroup(kraTitle, items, uploads))
+      .map(([kraTitle, items]) => renderEmployeeUploadGroup(kraTitle, items, uploads, scoreComputation))
       .join('')}
   `;
 
@@ -242,7 +289,7 @@ function renderEmployeeWorkflow(workflowItems, uploads) {
   });
 }
 
-function renderEmployeeUploadGroup(kraTitle, items, uploads) {
+function renderEmployeeUploadGroup(kraTitle, items, uploads, scoreComputation) {
   const completedCount = items.filter((panel) => hasPanelUpload(panel.key, uploads, 'score-sheet') && hasPanelUpload(panel.key, uploads, 'evidence')).length;
   const groupComplete = completedCount === items.length && items.length > 0;
 
@@ -258,17 +305,18 @@ function renderEmployeeUploadGroup(kraTitle, items, uploads) {
         </span>
       </summary>
       <div class="upload-panel-grid">
-        ${items.map((panel) => renderEmployeeUploadCard(panel, uploads)).join('')}
+        ${items.map((panel) => renderEmployeeUploadCard(panel, uploads, scoreComputation)).join('')}
       </div>
     </details>
   `;
 }
 
-function renderEmployeeUploadCard(panel, uploads) {
+function renderEmployeeUploadCard(panel, uploads, scoreComputation) {
   const accept = Array.isArray(panel.acceptedFormats) ? panel.acceptedFormats.map((ext) => `.${ext}`).join(',') : '';
   const scoreSheetCount = getPanelUploadCount(panel.key, uploads, 'score-sheet');
   const evidenceCount = getPanelUploadCount(panel.key, uploads, 'evidence');
   const panelComplete = scoreSheetCount > 0 && evidenceCount > 0;
+  const computedScore = getPanelComputedScore(scoreComputation, panel.key);
 
   return `
     <article class="card workflow-card upload-card${panelComplete ? ' upload-card-complete' : ''}" data-panel-key="${escapeHtml(panel.key)}">
@@ -288,6 +336,7 @@ function renderEmployeeUploadCard(panel, uploads) {
         </div>
       </div>
       ${panel.audienceLabel ? `<p class="upload-audience-chip">${escapeHtml(panel.audienceLabel)}</p>` : ''}
+      ${renderComputedPanelScore(computedScore, panel.maxScore)}
       <div class="upload-variant-grid">
         ${renderUploadVariantForm({
           panelKey: panel.key,
@@ -638,6 +687,7 @@ function renderUploadRow(item) {
         <p class="card-copy">${escapeHtml(summary)}</p>
         <div class="uploaded-file-actions">
           <button class="button button-secondary preview-upload-button" data-document-id="${escapeHtml(item.id)}" data-file-name="${escapeHtml(item.originalName)}" data-mime-type="${escapeHtml(item.mimeType || '')}" data-upload-action="preview" type="button">${escapeHtml(previewLabel)}</button>
+          <button class="button button-secondary replace-upload-button" data-document-id="${escapeHtml(item.id)}" data-file-name="${escapeHtml(item.originalName)}" data-upload-type="${escapeHtml(metadata.uploadType || 'legacy')}" data-panel-key="${escapeHtml(metadata.panelKey || '')}" data-upload-action="replace" type="button">Replace</button>
           <button class="button button-secondary delete-upload-button" data-document-id="${escapeHtml(item.id)}" data-file-name="${escapeHtml(item.originalName)}" data-upload-action="delete" type="button">Delete</button>
         </div>
       </div>
@@ -653,6 +703,17 @@ function renderEvaluatorInsights(items) {
   const totalRecords = items.length;
   const evaluatorBackedCount = items.filter((item) => item.latestTrainingItem).length;
   const totalUploads = items.reduce((sum, item) => sum + (Array.isArray(item.uploadLogs) ? item.uploadLogs.length : 0), 0);
+  const zeroedPanels = items.reduce((sum, item) => sum + Number(item.draftPoints?.scoreComputation?.zeroedPanelCount ?? 0), 0);
+  const averageEvidenceScore = totalRecords
+    ? Math.round(
+        (items.reduce(
+          (sum, item) => sum + Number(item.draftPoints?.scoreComputation?.weightedScore ?? item.draftPoints?.scoreComputation?.rawTotal ?? 0),
+          0,
+        ) /
+          totalRecords) *
+          100,
+      ) / 100
+    : 0;
   const averageCoverage = totalRecords
     ? Math.round(
         (items.reduce((sum, item) => sum + Number(item.draftPoints?.evidenceCoverage?.workflowCoveragePercent ?? 0), 0) /
@@ -666,6 +727,8 @@ function renderEvaluatorInsights(items) {
       ${renderInsightStatCard('Queue records', String(totalRecords))}
       ${renderInsightStatCard('Evaluator-backed', String(evaluatorBackedCount))}
       ${renderInsightStatCard('Uploads', String(totalUploads))}
+      ${renderInsightStatCard('Zeroed panels', String(zeroedPanels))}
+      ${renderInsightStatCard('Avg evidence score', `${averageEvidenceScore}`)}
       ${renderInsightStatCard('Avg coverage', `${averageCoverage}%`)}
     </div>
   `;
@@ -692,7 +755,9 @@ function renderReviewCard(item) {
   const uploads = Array.isArray(item.uploadLogs) ? item.uploadLogs : [];
   const draftPoints = item.draftPoints || {};
   const promotionDraft = draftPoints.promotionDraft || {};
+  const scoreComputation = draftPoints.scoreComputation || {};
   const latestTraining = item.latestTrainingItem?.evaluatorAssessment || null;
+  const evidenceScore = formatOptionalNumber(scoreComputation.weightedScore ?? scoreComputation.rawTotal, '0.00');
   const systemScore = formatOptionalNumber(promotionDraft.weightedScore, 'Pending');
 
   return `
@@ -707,7 +772,8 @@ function renderReviewCard(item) {
       <div class="review-card-meta">
         <span class="review-meta-chip">Submitted by ${escapeHtml(item.createdBy?.fullName || '-')}</span>
         <span class="review-meta-chip">Cycle ${escapeHtml(item.cycleData?.performanceReview?.reviewPeriod || item.semester || 'Current cycle')}</span>
-        <span class="review-meta-chip">System score ${escapeHtml(systemScore)}</span>
+        <span class="review-meta-chip">Evidence score ${escapeHtml(evidenceScore)}</span>
+        <span class="review-meta-chip">Zeroed panels ${escapeHtml(String(scoreComputation.zeroedPanelCount ?? 0))}</span>
         <span class="review-meta-chip">${escapeHtml(String(uploads.length))} file(s)</span>
       </div>
       <div class="review-card-metrics">
@@ -717,6 +783,7 @@ function renderReviewCard(item) {
         ${renderReviewMetric('Evaluator total', formatOptionalNumber(latestTraining?.totalScore, 'Pending'))}
       </div>
       ${draftPoints.note ? `<p class="card-copy review-card-note">${escapeHtml(draftPoints.note)}</p>` : ''}
+      <p class="card-copy">${escapeHtml(scoreComputation.note || 'Missing scores or evidence are counted as 0 for the computed score.')}</p>
       <div class="uploaded-files-group">
         <div class="uploaded-files-group-header">
           <h3>Uploaded documents</h3>
@@ -751,6 +818,55 @@ function renderEvaluatorUploadRow(upload) {
       </div>
     </article>
   `;
+}
+
+function getPanelComputedScore(scoreComputation, panelKey) {
+  if (!scoreComputation || !Array.isArray(scoreComputation.panelScores)) {
+    return null;
+  }
+
+  return scoreComputation.panelScores.find((panel) => panel.key === panelKey) || null;
+}
+
+function renderComputedPanelScore(computedScore, fallbackMaxScore) {
+  if (!computedScore) {
+    return `
+      <div class="upload-score-preview" data-status="pending">
+        <span>Computed score</span>
+        <strong>0 / ${escapeHtml(String(fallbackMaxScore))}</strong>
+        <small>Upload a readable score sheet and evidence to count this panel.</small>
+      </div>
+    `;
+  }
+
+  return `
+    <div class="upload-score-preview" data-status="${computedScore.status === 'counted' ? 'detected' : 'pending'}">
+      <span>Computed score</span>
+      <strong>${escapeHtml(formatScoreWithMax(computedScore.usedScore, computedScore.maxScore))}</strong>
+      <small>${escapeHtml(computedScore.note || getComputedStatusLabel(computedScore.status))}</small>
+    </div>
+  `;
+}
+
+function formatScoreWithMax(score, maxScore) {
+  const boundedMax = Number.isFinite(Number(maxScore)) ? Number(maxScore) : 0;
+  return `${formatNumber(score)} / ${boundedMax.toFixed(0)}`;
+}
+
+function getComputedStatusLabel(status) {
+  if (status === 'counted') {
+    return 'Counted toward the official evidence-based score.';
+  }
+  if (status === 'missing-score-sheet') {
+    return 'Score sheet missing. This panel is counted as 0.';
+  }
+  if (status === 'missing-evidence') {
+    return 'Supporting evidence missing. This panel is counted as 0.';
+  }
+  if (status === 'missing-score') {
+    return 'No score detected. This panel is counted as 0.';
+  }
+  return 'Not required for the base packet.';
 }
 
 async function handleUploadSubmit(event) {
@@ -916,6 +1032,8 @@ function handleUploadListActionClick(event) {
   const documentId = button.dataset.documentId || '';
   const fileName = button.dataset.fileName || 'this file';
   const mimeType = button.dataset.mimeType || '';
+  const panelKey = button.dataset.panelKey || '';
+  const uploadType = button.dataset.uploadType || 'legacy';
 
   if (!documentId) {
     return;
@@ -932,6 +1050,16 @@ function handleUploadListActionClick(event) {
 
   if (action === 'delete') {
     void deleteUploadDocument(documentId, fileName);
+    return;
+  }
+
+  if (action === 'replace') {
+    void replaceUploadDocument({
+      documentId,
+      fileName,
+      panelKey,
+      uploadType,
+    });
   }
 }
 
@@ -974,6 +1102,45 @@ async function deleteUploadDocument(documentId, fileName) {
   } catch (error) {
     setNotice(employeeUploadStatus || reviewQueueFilterStatus, toErrorMessage(error), true);
   }
+}
+
+async function replaceUploadDocument({ documentId, fileName, panelKey, uploadType }) {
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = REPLACEMENT_UPLOAD_ACCEPT;
+
+  input.addEventListener(
+    'change',
+    async () => {
+      const file = input.files?.[0];
+      if (!file) {
+        return;
+      }
+
+      const formData = new FormData();
+      formData.append('document', file);
+      formData.append('kind', 'REQUIREMENT');
+      formData.append('uploadType', uploadType || 'legacy');
+      if (panelKey) {
+        formData.append('panelKey', panelKey);
+      }
+
+      try {
+        setNotice(employeeUploadStatus || reviewQueueFilterStatus, `Replacing ${fileName}...`);
+        await apiFetch(`/api/documents/${encodeURIComponent(documentId)}/replace`, {
+          method: 'POST',
+          body: formData,
+        });
+        setNotice(employeeUploadStatus || reviewQueueFilterStatus, `${fileName} was replaced.`);
+        await loadEmployeeWorkspace();
+      } catch (error) {
+        setNotice(employeeUploadStatus || reviewQueueFilterStatus, toErrorMessage(error), true);
+      }
+    },
+    { once: true },
+  );
+
+  input.click();
 }
 
 async function openDocumentPreview({ documentId, fileName, mimeType }) {

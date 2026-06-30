@@ -275,3 +275,57 @@ test('workbook mirror follows the reference workbook naming and parses request f
   assert.equal(draftPoints.workbookMirror.kraSections[1].title, 'KRA 2: Research, Innovation and Creative Work');
   assert.equal(draftPoints.workbookMirror.summarySheet.scoreBracket, draftPoints.promotionDraft.scoreBracket);
 });
+
+test('evidence-based score computation falls back to 0 when score sheets or evidence are missing', () => {
+  const draftPoints = buildDraftPointSummary(
+    {
+      features: {
+        rawInput: {
+          personalData: {
+            fullName: 'Mia V. Villarica',
+            academicRank: 'Assistant Professor IV',
+            highestEducationalAttainment: 'Masteral Graduate',
+          },
+          performanceReview: {
+            teachingEffectiveness: 90,
+            researchOutputs: 3,
+            extensionServices: 2,
+            professionalDevelopmentHours: 12,
+            ipcrAverage: 4.4,
+          },
+          promotionHistory: [],
+        },
+      },
+      semester: '2026-1',
+    },
+    [
+      {
+        extractionMetadata: {
+          uploadType: 'score-sheet',
+          panelKey: 'kra1_teaching_effectiveness',
+          panelTitle: 'Teaching Effectiveness',
+          analysis: {
+            extractedScores: {
+              kra1_teaching_effectiveness: 59,
+            },
+          },
+        },
+      },
+      {
+        extractionMetadata: {
+          uploadType: 'evidence',
+          panelKey: 'kra2_research_outputs',
+          panelTitle: 'Research Outputs',
+          analysis: {
+            extractedScores: {},
+          },
+        },
+      },
+    ],
+  );
+
+  assert.equal(draftPoints.scoreComputation?.panelScores.find((panel) => panel.key === 'kra1_teaching_effectiveness')?.usedScore, 0);
+  assert.equal(draftPoints.scoreComputation?.panelScores.find((panel) => panel.key === 'kra2_research_outputs')?.usedScore, 0);
+  assert.equal(draftPoints.scoreComputation?.rawTotal, 0);
+  assert.equal(draftPoints.scoreComputation?.zeroedPanelCount > 0, true);
+});

@@ -34,6 +34,51 @@ type WorkbookKraSummary = {
   criteria: WorkbookCriterionSummary[];
 };
 
+type ComputedPanelScore = {
+  key: UploadPanelKey;
+  kraTitle: string;
+  title: string;
+  maxScore: number;
+  detectedScore: number | null;
+  usedScore: number;
+  scoreSheetCount: number;
+  evidenceCount: number;
+  required: boolean;
+  status: 'counted' | 'missing-score-sheet' | 'missing-evidence' | 'missing-score' | 'optional';
+  note: string;
+};
+
+type ComputedKraScore = {
+  title: string;
+  maxScore: number;
+  rawScore: number;
+  cappedScore: number;
+  panels: ComputedPanelScore[];
+};
+
+type EvidenceBasedScoreComputation = {
+  policy: 'zero-if-missing-score-or-evidence';
+  status: 'complete' | 'incomplete';
+  currentRank: string | null;
+  rawTotal: number;
+  weightedScore: number | null;
+  scoreBracket: string | null;
+  kraTotals: {
+    instruction: number;
+    research: number;
+    extension: number;
+    professionalDevelopment: number;
+  };
+  kraSections: ComputedKraScore[];
+  panelScores: ComputedPanelScore[];
+  countedPanelCount: number;
+  zeroedPanelCount: number;
+  missingScoreSheetPanels: string[];
+  missingEvidencePanels: string[];
+  missingScorePanels: string[];
+  note: string;
+};
+
 type WorkbookSummaryMirror = {
   requestForm: {
     fullName: string | null;
@@ -238,6 +283,12 @@ export function buildDraftPointSummary(
       Record<UploadPanelKey, { scoreSheet: number; evidence: number }>
     >,
   });
+  const scoreComputation = buildEvidenceBasedScoreComputation({
+    currentRank,
+    panelScoreByKey,
+    panelUploadTypeCounts,
+    evidenceValidation,
+  });
   const hasDoctoralGraduateBonus = canUseDoctoralGraduateBonus(
     normalizeAttainment(highestEducationalAttainment),
     promotionHistory,
@@ -293,6 +344,7 @@ export function buildDraftPointSummary(
       ipcrAverage: roundScore(ipcrAverage),
     },
     overallEstimate: roundScore(overallEstimate),
+    scoreComputation,
     evidenceCoverage: {
       uploadedPanels: Array.from(uploadedPanels),
       uploadedPanelCount: uploadedPanels.size,
@@ -1228,6 +1280,143 @@ function deriveScoreValidationStatus(
     return 'validated-only';
   }
   return 'missing';
+}
+
+function buildEvidenceBasedScoreComputation(args: {
+  currentRank: string | null;
+  panelScoreByKey: Map<UploadPanelKey, number>;
+  panelUploadTypeCounts: Map<UploadPanelKey, { scoreSheet: number; evidence: number }>;
+  evidenceValidation: EvidenceValidationSummary;
+}): EvidenceBasedScoreComputation {
+  const panelScores = uploadPanels.map((panel) => {
+    const counts = args.panelUploadTypeCounts.get(panel.key) ?? { scoreSheet: 0, evidence: 0 };
+    const detectedScore = readOptionalNumber(args.panelScoreByKey.get(panel.key));
+    const required = panel.appliesTo === 'ALL_FACULTY';
+    const hasScoreSheet = counts.scoreSheet > 0;
+    const hasEvidence = counts.evidence > 0;
+    const hasDetectedScore = detectedScore !== null;
+    const canCount = hasScoreSheet && hasEvidence && hasDetectedScore;
+    const usedScore = canCount ? Math.min(panel.maxScore, Math.max(0, detectedScore)) : 0;
+    const status: ComputedPanelScore['status'] = canCount
+      ? 'counted'
+      : !required && !hasScoreSheet && !hasEvidence
+        ? 'optional'
+        : !hasScoreSheet
+          ? 'missing-score-sheet'
+          : !hasEvidence
+            ? 'missing-evidence'
+            : 'missing-score';
+
+    return {
+      key: panel.key,
+      kraTitle: panel.kraTitle,
+      title: panel.title,
+      maxScore: panel.maxScore,
+      detectedScore,
+      usedScore: roundScore(usedScore),
+      scoreSheetCount: counts.scoreSheet,
+      evidenceCount: counts.evidence,
+      required,
+      status,
+      note: getComputedPanelScoreNote(status),
+    } satisfies ComputedPanelScore;
+  });
+
+  const kraSections = groupComputedPanelsByKra(panelScores);
+  const kraTotals = {
+    instruction: getComputedKraTotal(kraSections, 'Instruction'),
+    research: getComputedKraTotal(kraSections, 'Research'),
+    extension: getComputedKraTotal(kraSections, 'Extension'),
+    professionalDevelopment: getComputedKraTotal(kraSections, 'Professional Development'),
+  };
+  const rawTotal = roundScore(
+    kraTotals.instruction + kraTotals.research + kraTotals.extension + kraTotals.professionalDevelopment,
+  );
+  const weightProfile = getWeightProfileForRank(args.currentRank);
+  const weightedScore = weightProfile ? computeWeightedScore(kraTotals, weightProfile.weights) : null;
+  const countedPanelCount = panelScores.filter((panel) => panel.status === 'counted').length;
+  const zeroedPanelCount = panelScores.filter((panel) => panel.required && panel.usedScore === 0).length;
+  const missingScoreSheetPanels = panelScores
+    .filter((panel) => panel.required && panel.status === 'missing-score-sheet')
+    .map((panel) => panel.title);
+  const missingEvidencePanels = panelScores
+    .filter((panel) => panel.required && panel.status === 'missing-evidence')
+    .map((panel) => panel.title);
+  const missingScorePanels = panelScores
+    .filter((panel) => panel.required && panel.status === 'missing-score')
+    .map((panel) => panel.title);
+
+  return {
+    policy: 'zero-if-missing-score-or-evidence',
+    status: args.evidenceValidation.status,
+    currentRank: args.currentRank,
+    rawTotal,
+    weightedScore,
+    scoreBracket: getScoreBracketLabel(weightedScore),
+    kraTotals,
+    kraSections,
+    panelScores,
+    countedPanelCount,
+    zeroedPanelCount,
+    missingScoreSheetPanels,
+    missingEvidencePanels,
+    missingScorePanels,
+    note:
+      args.evidenceValidation.status === 'complete'
+        ? 'Evidence-based score counts only panels with a detected score sheet value and supporting evidence.'
+        : 'Missing required score sheets, detected scores, or evidence are counted as 0 until completed.',
+  };
+}
+
+function groupComputedPanelsByKra(panelScores: ComputedPanelScore[]): ComputedKraScore[] {
+  const sections = new Map<string, ComputedPanelScore[]>();
+
+  for (const panelScore of panelScores) {
+    const panels = sections.get(panelScore.kraTitle) ?? [];
+    panels.push(panelScore);
+    sections.set(panelScore.kraTitle, panels);
+  }
+
+  return Array.from(sections.entries()).map(([title, panels]) => {
+    const rawScore = roundScore(panels.reduce((sum, panel) => sum + panel.usedScore, 0));
+
+    return {
+      title,
+      maxScore: panels.reduce((sum, panel) => sum + panel.maxScore, 0),
+      rawScore,
+      cappedScore: Math.min(100, rawScore),
+      panels,
+    };
+  });
+}
+
+function getComputedKraTotal(kraSections: ComputedKraScore[], titleMatch: string) {
+  return kraSections.find((section) => section.title.includes(titleMatch))?.cappedScore ?? 0;
+}
+
+function getWeightProfileForRank(rank: string | null) {
+  const normalizedRank = normalizeAcademicRank(rank);
+  if (!normalizedRank) {
+    return null;
+  }
+  const groupKey = rankGroupByRank[normalizedRank];
+  return rankGroups.find((group) => group.key === groupKey) ?? null;
+}
+
+function getComputedPanelScoreNote(status: ComputedPanelScore['status']) {
+  if (status === 'counted') {
+    return 'Detected score and supporting evidence are present; this panel is counted.';
+  }
+  if (status === 'missing-score-sheet') {
+    return 'No score sheet is uploaded for this panel, so the computed score is 0.';
+  }
+  if (status === 'missing-evidence') {
+    return 'Supporting evidence is missing for this panel, so the computed score is 0.';
+  }
+  if (status === 'missing-score') {
+    return 'A score sheet is uploaded, but no panel score was detected, so the computed score is 0.';
+  }
+  return 'Optional panel has no submitted score/evidence and is not required for the base packet.';
 }
 
 function applyEvidenceValidationToPromotionDraft(
