@@ -10,6 +10,22 @@ const uploadPanels_1 = require("./uploadPanels");
 const uploadPanels_2 = require("./uploadPanels");
 const node_fs_1 = __importDefault(require("node:fs"));
 const node_path_1 = __importDefault(require("node:path"));
+const evidenceRules_1 = require("./utils/evidenceRules");
+function extractAllEvidenceKeywords(rules) {
+    const keywords = new Set();
+    function traverse(rule) {
+        if (typeof rule === 'string') {
+            keywords.add(rule.toLowerCase());
+        }
+        else {
+            rule.conditions.forEach(traverse);
+        }
+    }
+    for (const rule of Object.values(rules)) {
+        traverse(rule);
+    }
+    return Array.from(keywords);
+}
 const featureLabels = {
     age: 'Age and career maturity',
     yearsInService: 'Years in service',
@@ -77,7 +93,8 @@ const analyzeDocumentContent = (text, panelKey, source) => {
     const extraction = (0, exports.extractDocumentInsights)(text);
     const normalizedText = text.toLowerCase();
     const detectedCategories = uploadPanels_1.uploadPanelKeywordMap[panelKey].filter((term) => normalizedText.includes(term));
-    const keywordHits = [
+    const evidenceKeywords = extractAllEvidenceKeywords(evidenceRules_1.evidenceRules);
+    const baseKeywords = [
         'teaching effectiveness',
         'curriculum',
         'research outputs',
@@ -88,7 +105,9 @@ const analyzeDocumentContent = (text, panelKey, source) => {
         'extension',
         'professional development',
         'ipcr',
-    ].filter((term) => normalizedText.includes(term));
+    ];
+    const allKeywords = Array.from(new Set([...baseKeywords, ...evidenceKeywords]));
+    const keywordHits = allKeywords.filter((term) => normalizedText.includes(term));
     const summary = buildDocumentSummary(panelKey, extraction.detectedFields, detectedCategories, extraction.textLength);
     return {
         source,

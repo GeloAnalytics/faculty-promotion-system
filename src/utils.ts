@@ -22,7 +22,7 @@ import { uploadPanelKeywordMap, uploadPanelLabelMap } from './uploadPanels';
 import { uploadPanels } from './uploadPanels';
 import fs from 'node:fs';
 import path from 'node:path';
-import { evidenceRules, RequirementRule } from './evidenceRules';
+import { evidenceRules, RequirementRule } from './utils/evidenceRules';
 
 function extractAllEvidenceKeywords(rules: Record<string, RequirementRule>): string[] {
   const keywords = new Set<string>();
