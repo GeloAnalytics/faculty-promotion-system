@@ -2,7 +2,7 @@ import { uploadPanels } from '../uploadPanels';
 import { academicRankOptions, normalizeAcademicRankOption } from '../constants/faculty';
 import { fixedReviewPeriodLabel, reviewCycleMetricKeys, reviewCycleYearLabels } from '../constants/reviewCycle';
 import type { UploadPanelKey } from '../types';
-import { validateEvidencePacket, type EvidenceValidationSummary } from './evidenceValidation';
+import { validateEvidencePacket, type EvidenceValidationSummary, validatePanelEvidence } from './evidenceValidation';
 
 type EvaluatorAssessmentSnapshot = {
   totalScore: number;
@@ -141,6 +141,7 @@ type ParsedDocumentMetadata = {
   completenessScore: number | null;
   qualityScore: number | null;
   linkage: string | null;
+  keywordHits: string[];
 };
 
 export function summarizeDocumentMetadata(value: unknown): ParsedDocumentMetadata {
@@ -150,6 +151,7 @@ export function summarizeDocumentMetadata(value: unknown): ParsedDocumentMetadat
   const linkage = readJsonObject(metadata.linkage);
   const panelKey = typeof metadata.panelKey === 'string' ? metadata.panelKey : null;
   const panelDefinition = panelKey ? uploadPanels.find((panel) => panel.key === panelKey) ?? null : null;
+  const keywordHits = Array.isArray(analysis.keywordHits) ? analysis.keywordHits.map(String) : [];
 
   return {
     uploadType: typeof metadata.uploadType === 'string' ? metadata.uploadType : null,
@@ -165,6 +167,7 @@ export function summarizeDocumentMetadata(value: unknown): ParsedDocumentMetadat
       typeof linkage.matchedBy === 'string'
         ? `${linkage.matchedBy}${typeof linkage.matchedName === 'string' ? `: ${linkage.matchedName}` : ''}`
         : null,
+    keywordHits,
   };
 }
 
@@ -183,6 +186,7 @@ export function buildDraftPointSummary(
   const panelEvidenceCount = new Map<UploadPanelKey, number>();
   const panelUploadTypeCounts = new Map<UploadPanelKey, { scoreSheet: number; evidence: number }>();
   const uploadTypeCounts = new Map<string, number>();
+  const panelKeywords = new Map<UploadPanelKey, Set<string>>();
 
   let instruction = resolvePerformanceMetricValue(performanceReview, 'teachingEffectiveness') ?? 0;
   let research = resolvePerformanceMetricValue(performanceReview, 'researchOutputs') ?? 0;
@@ -204,6 +208,12 @@ export function buildDraftPointSummary(
       if (metadata.uploadType === 'evidence') {
         existingPanelCounts.evidence += 1;
         panelEvidenceCount.set(panelKey, (panelEvidenceCount.get(panelKey) ?? 0) + 1);
+        
+        const existingKeywords = panelKeywords.get(panelKey) ?? new Set<string>();
+        for (const kw of metadata.keywordHits) {
+          existingKeywords.add(kw);
+        }
+        panelKeywords.set(panelKey, existingKeywords);
       }
       panelUploadTypeCounts.set(panelKey, existingPanelCounts);
 
@@ -282,12 +292,14 @@ export function buildDraftPointSummary(
     panelUploadCounts: Object.fromEntries(panelUploadTypeCounts) as Partial<
       Record<UploadPanelKey, { scoreSheet: number; evidence: number }>
     >,
+    panelKeywords,
   });
   const scoreComputation = buildEvidenceBasedScoreComputation({
     currentRank,
     panelScoreByKey,
     panelUploadTypeCounts,
     evidenceValidation,
+    panelKeywords,
   });
   const hasDoctoralGraduateBonus = canUseDoctoralGraduateBonus(
     normalizeAttainment(highestEducationalAttainment),
@@ -1287,13 +1299,15 @@ function buildEvidenceBasedScoreComputation(args: {
   panelScoreByKey: Map<UploadPanelKey, number>;
   panelUploadTypeCounts: Map<UploadPanelKey, { scoreSheet: number; evidence: number }>;
   evidenceValidation: EvidenceValidationSummary;
+  panelKeywords: Map<UploadPanelKey, Set<string>>;
 }): EvidenceBasedScoreComputation {
   const panelScores = uploadPanels.map((panel) => {
     const counts = args.panelUploadTypeCounts.get(panel.key) ?? { scoreSheet: 0, evidence: 0 };
     const detectedScore = readOptionalNumber(args.panelScoreByKey.get(panel.key));
     const required = panel.appliesTo === 'ALL_FACULTY';
     const hasScoreSheet = counts.scoreSheet > 0;
-    const hasEvidence = counts.evidence > 0;
+    const panelKeywordsSet = args.panelKeywords.get(panel.key as UploadPanelKey) ?? new Set<string>();
+    const hasEvidence = counts.evidence > 0 && validatePanelEvidence(panel.key, Array.from(panelKeywordsSet));
     const hasDetectedScore = detectedScore !== null;
     const canCount = hasScoreSheet && hasEvidence && hasDetectedScore;
     const usedScore = canCount ? Math.min(panel.maxScore, Math.max(0, detectedScore)) : 0;

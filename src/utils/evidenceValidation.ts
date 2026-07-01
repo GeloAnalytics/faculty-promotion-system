@@ -31,6 +31,7 @@ export function validateEvidencePacket(args: {
   uploadedPanelKeys: Iterable<UploadPanelKey>;
   uploadTypeCounts: Record<string, number>;
   panelUploadCounts?: Partial<Record<UploadPanelKey, { scoreSheet: number; evidence: number }>>;
+  panelKeywords?: Map<UploadPanelKey, Set<string>>;
 }): EvidenceValidationSummary {
   const uploadedPanelSet = new Set(args.uploadedPanelKeys);
   const requiredPanels = uploadPanels.filter((panel) => panel.appliesTo === 'ALL_FACULTY');
@@ -40,7 +41,16 @@ export function validateEvidencePacket(args: {
     ? requiredPanels.filter((panel) => (args.panelUploadCounts?.[panel.key]?.scoreSheet ?? 0) < 1)
     : [];
   const missingEvidencePanels = hasPerPanelUploadCounts
-    ? requiredPanels.filter((panel) => (args.panelUploadCounts?.[panel.key]?.evidence ?? 0) < 1)
+    ? requiredPanels.filter((panel) => {
+        const hasUpload = (args.panelUploadCounts?.[panel.key]?.evidence ?? 0) >= 1;
+        if (!hasUpload) return true;
+        if (args.panelKeywords) {
+          const kwSet = args.panelKeywords.get(panel.key);
+          const keywordsArray = kwSet ? Array.from(kwSet) : [];
+          return !validatePanelEvidence(panel.key, keywordsArray);
+        }
+        return false;
+      })
     : [];
   const missingPanelKeys = hasPerPanelUploadCounts
     ? Array.from(new Set([...missingScoreSheetPanels, ...missingEvidencePanels].map((panel) => panel.key)))

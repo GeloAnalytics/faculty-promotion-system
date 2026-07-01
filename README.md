@@ -339,6 +339,13 @@ Do not claim that the system makes final promotion decisions. Final evaluation s
 
 ## Consolidated Release Notes
 
+### 2026-07-01
+
+- Enforced strict documentary evidence validation logic based on the `AND`/`OR` rules defined in `evidenceRules.ts`.
+- Integrated OCR-driven keyword extraction (`keywordHits`) into the document metadata processing pipeline.
+- Modified score computation to strictly fall back to `0` if specific required keywords (e.g., "student evaluation", "certification") are lacking in a KRA panel's uploaded evidence files, replacing the naive file-existence check.
+- Updated `validateEvidencePacket` to surface missing evidence warnings to both the employee and evaluator UI when the specific evidence requirements are unmet.
+
 ### 2026-06-30
 
 - Consolidated repository documentation into this single `README.md`.
