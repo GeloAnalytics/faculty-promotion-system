@@ -3216,6 +3216,20 @@ body[data-portal="evaluator"] #scoring-panel .stack-form {
     text-align: left;
   }
 
+  .cycle-period-banner,
+  .cycle-metric-header,
+  .review-cycle-heading,
+  .review-cycle-card-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .cycle-metric-average {
+    min-width: 0;
+    width: 100%;
+    text-align: left;
+  }
+
   .review-cycle-grid {
     grid-template-columns: 1fr;
   }
@@ -3223,4 +3237,73 @@ body[data-portal="evaluator"] #scoring-panel .stack-form {
   .review-cycle-year-row {
     grid-template-columns: 1fr;
   }
+}
+
+/* Employee Notifications */
+.employee-notification-panel {
+  margin-top: 16px;
+  padding: 16px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: white;
+}
+
+.employee-notification-panel.success {
+  background: #f0fdf4;
+  border-color: #bbf7d0;
+  color: #166534;
+}
+
+.employee-notification-panel.success h3 {
+  color: #166534;
+}
+
+.employee-notification-panel.warning {
+  background: #fffbeb;
+  border-color: #fde68a;
+  color: #92400e;
+}
+
+.employee-notification-panel.warning h3 {
+  color: #92400e;
+}
+
+.notification-header h3 {
+  margin: 0 0 4px;
+  font-family: "Space Grotesk", sans-serif;
+  font-size: 1.1rem;
+}
+
+.notification-header p {
+  margin: 0;
+  font-size: 0.9rem;
+  opacity: 0.9;
+}
+
+.notification-list {
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 8px;
+}
+
+.notification-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 0.9rem;
+  padding: 8px 12px;
+  background: rgba(255, 255, 255, 0.6);
+  border-radius: 8px;
+}
+
+.notification-tag {
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #fef3c7;
+  color: #92400e;
+  text-transform: uppercase;
 }

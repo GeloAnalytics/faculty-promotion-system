@@ -192,6 +192,43 @@ function renderEmployeeSummary(dashboard) {
         </div>
       </div>
     </section>
+    ${renderEmployeeNotifications(draftPoints)}
+  `;
+}
+
+function renderEmployeeNotifications(draftPoints) {
+  const coverage = draftPoints.evidenceCoverage;
+  if (!coverage) return '';
+
+  if (coverage.validationStatus === 'complete') {
+    return `
+      <section class="employee-notification-panel success">
+        <div class="notification-header">
+          <h3>✅ All Required Evidence Uploaded</h3>
+          <p>Your KRA submission appears complete based on OCR extraction and is ready for evaluator verification.</p>
+        </div>
+      </section>
+    `;
+  }
+
+  const missingEvidencePanels = coverage.missingEvidencePanels || [];
+  const missingScoreSheetPanels = coverage.missingScoreSheetPanels || [];
+  
+  if (missingEvidencePanels.length === 0 && missingScoreSheetPanels.length === 0) {
+    return '';
+  }
+
+  return `
+    <section class="employee-notification-panel warning">
+      <div class="notification-header">
+        <h3>⚠️ Action Required: Missing Requirements</h3>
+        <p>The system zeroed some KRA panels because the required OCR-verified evidence or score sheet is missing.</p>
+      </div>
+      <ul class="notification-list">
+        ${missingScoreSheetPanels.map(p => `<li class="notification-item"><span class="notification-tag">Needs Score Sheet</span> ${escapeHtml(p)}</li>`).join('')}
+        ${missingEvidencePanels.map(p => `<li class="notification-item"><span class="notification-tag">Needs Evidence</span> ${escapeHtml(p)}</li>`).join('')}
+      </ul>
+    </section>
   `;
 }
 
@@ -728,14 +765,91 @@ function renderEvaluatorInsights(items) {
       ) / 100
     : 0;
 
+  const completeCount = items.filter((item) => item.draftPoints?.evidenceCoverage?.validationStatus === 'complete').length;
+  const needsReviewCount = items.filter((item) => Number(item.draftPoints?.scoreComputation?.zeroedPanelCount ?? 0) > 0).length;
+  const incompleteCount = items.filter((item) => item.draftPoints?.evidenceCoverage?.validationStatus === 'incomplete' && Number(item.draftPoints?.scoreComputation?.zeroedPanelCount ?? 0) === 0).length;
+
+  const totalScoreSheets = items.reduce((sum, item) => sum + (Array.isArray(item.uploadLogs) ? item.uploadLogs.filter(u => u.metadata?.uploadType === 'score-sheet').length : 0), 0);
+  const totalEvidenceFiles = items.reduce((sum, item) => sum + (Array.isArray(item.uploadLogs) ? item.uploadLogs.filter(u => u.metadata?.uploadType === 'evidence').length : 0), 0);
+
+  const missingPanelCounts = {};
+  items.forEach((item) => {
+    const missingPanels = item.draftPoints?.evidenceCoverage?.missingEvidencePanels || [];
+    missingPanels.forEach(panel => {
+      missingPanelCounts[panel] = (missingPanelCounts[panel] || 0) + 1;
+    });
+  });
+  const topMissingPanels = Object.entries(missingPanelCounts).sort((a, b) => b[1] - a[1]).slice(0, 3);
+
+  const scoreBrackets = { '0-20': 0, '21-40': 0, '41-60': 0, '61-80': 0, '81-100': 0 };
+  items.forEach(item => {
+    const score = Number(item.draftPoints?.scoreComputation?.weightedScore ?? item.draftPoints?.scoreComputation?.rawTotal ?? 0);
+    if (score <= 20) scoreBrackets['0-20']++;
+    else if (score <= 40) scoreBrackets['21-40']++;
+    else if (score <= 60) scoreBrackets['41-60']++;
+    else if (score <= 80) scoreBrackets['61-80']++;
+    else scoreBrackets['81-100']++;
+  });
+
   evaluatorInsights.innerHTML = `
-    <div class="insight-stat-grid">
+    <div class="insight-stat-grid" style="grid-template-columns: repeat(5, minmax(0, 1fr)); margin-bottom: 24px;">
       ${renderInsightStatCard('Queue records', String(totalRecords))}
-      ${renderInsightStatCard('Evaluator-backed', String(evaluatorBackedCount))}
-      ${renderInsightStatCard('Uploads', String(totalUploads))}
+      ${renderInsightStatCard('Complete packets', String(completeCount))}
+      ${renderInsightStatCard('Needs attention', String(needsReviewCount))}
+      ${renderInsightStatCard('Score sheets', String(totalScoreSheets))}
+      ${renderInsightStatCard('Evidence files', String(totalEvidenceFiles))}
       ${renderInsightStatCard('Zeroed panels', String(zeroedPanels))}
       ${renderInsightStatCard('Avg evidence score', `${averageEvidenceScore}`)}
       ${renderInsightStatCard('Avg coverage', `${averageCoverage}%`)}
+      ${renderInsightStatCard('Total uploads', String(totalUploads))}
+      ${renderInsightStatCard('Evaluator-backed', String(evaluatorBackedCount))}
+    </div>
+    
+    <div class="insight-chart-grid">
+      <div class="insight-chart-card">
+        <div class="insight-chart-heading">
+          <h3>Submission Status</h3>
+          <span class="insight-chart-total">${totalRecords} total</span>
+        </div>
+        <div class="insight-bar-chart">
+          ${renderInsightBarRow('Complete', completeCount, totalRecords, 'coverage-complete')}
+          ${renderInsightBarRow('Needs Review', needsReviewCount, totalRecords, 'status-pending-doctoral-attainment')}
+          ${renderInsightBarRow('Incomplete', incompleteCount, totalRecords, 'coverage-missing')}
+        </div>
+      </div>
+      
+      <div class="insight-chart-card">
+        <div class="insight-chart-heading">
+          <h3>Score Distribution</h3>
+          <span class="insight-chart-total">Weighted score</span>
+        </div>
+        <div class="insight-bar-chart">
+          ${Object.entries(scoreBrackets).reverse().map(([label, count]) => renderInsightBarRow(label, count, totalRecords, 'coverage-strong')).join('')}
+        </div>
+      </div>
+      
+      <div class="insight-chart-card">
+        <div class="insight-chart-heading">
+          <h3>Evidence Bottlenecks</h3>
+          <span class="insight-chart-total">Missing panels</span>
+        </div>
+        <div class="insight-bar-chart">
+          ${topMissingPanels.length ? topMissingPanels.map(([label, count]) => renderInsightBarRow(label, count, totalRecords, 'status-pending-doctoral-attainment')).join('') : '<div class="insight-bar-label">No missing evidence found</div>'}
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function renderInsightBarRow(label, value, total, toneClass) {
+  const percent = total > 0 ? (value / total) * 100 : 0;
+  return `
+    <div class="insight-bar-row">
+      <span class="insight-bar-label">${escapeHtml(label)}</span>
+      <div class="insight-bar-track">
+        <span class="insight-bar-fill" data-tone="${toneClass}" style="width: ${percent}%"></span>
+      </div>
+      <strong class="insight-bar-value">${value}</strong>
     </div>
   `;
 }
