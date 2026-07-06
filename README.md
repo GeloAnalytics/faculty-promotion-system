@@ -54,7 +54,7 @@ The scoring and evidence workflow should be aligned with:
 - `Reference.xlsx`
 - the List of Documentary Evidences reference, if maintained as a separate PDF or workbook
 
-Current repository note: only the DBM-JC PDF and `Reference.xlsx` are present in the root folder. If the List of Documentary Evidences is a separate PDF, add it to the repository so the validation rules can be checked against the exact source file.
+Current repository note: only the DBM-JC PDF, `Reference.xlsx`, and `TQE.csv` are present in the root folder. If the List of Documentary Evidences is a separate PDF, add it to the repository so the validation rules can be checked against the exact source file.
 
 ## Current Verified Status
 
@@ -65,7 +65,6 @@ Verified on 2026-06-30:
 - TQE reference data is loaded with `1000` rows.
 - The DBM-JC/NBC 461 guideline PDF is loaded.
 - OCR is ready through OCR.space in the deployed environment.
-- Live ML prediction is inactive by design.
 - `npm test` passed all 21 tests.
 - `npm run build` passed.
 - `node --check public/workflow.js` passed.
@@ -101,14 +100,12 @@ After this documentation consolidation, `README.md` is the single markdown docum
 - Evaluator document browser grouped by employee.
 - Evaluator-side summary cards for zeroed panels, average coverage, and evidence score signals.
 - Backend `workbookMirror` summary data with request-form, KRA, comparison, and summary-sheet fields.
-- Offline ML dataset export, boosting-model comparison, and explainability reporting.
 
 ## What Still Needs To Be Achieved
 
 These are the highest-priority items needed to match the target system goal:
 
 1. Continue visual polish on the score summary after testing with real score sheets and evidence packets.
-2. Keep live ML prediction disabled until there is enough validated institutional data.
 
 ## Current Development Checkpoint
 
@@ -221,7 +218,6 @@ The evaluator dashboard should eventually include:
 - Frontend migration workspace: Vue 3 + Vite in `frontend/`
 - Authentication: JWT through `Authorization` header or `fps_session` cookie
 - Document processing: PDF parsing and OCR
-- ML workflow: offline Python scripts in `ml/`
 
 ## Important Source Areas
 
@@ -239,7 +235,6 @@ public/employee.html                   Active employee portal
 public/evaluator.html                  Active evaluator portal
 public/workflow.js                     Current active portal behavior
 prisma/schema.prisma                   Database schema
-ml/                                    Offline ML workflow
 ```
 
 ## Main API Areas
@@ -312,22 +307,11 @@ The backend serves the active portals at:
 - `npm run db:push` - push Prisma schema changes directly
 - `npm run db:studio` - open Prisma Studio
 
-## Offline ML Workflow
+## Machine Learning Workflow
 
-Live ML prediction is intentionally disabled. The ML workflow should be described as offline experimentation and dataset preparation.
+The offline machine learning components (dataset preparation, boosting-model comparison, and explainability reporting) have been migrated to a separate repository named `bfar-ml`.
 
-```bash
-npm run ml:export-dataset
-npm run ml:train-boosting
-```
-
-Implemented offline model comparison includes:
-
-- AdaBoost
-- Gradient Boosting
-- XGBoost
-
-The current dissertation-safe claim is that the system prepares and validates machine-learning-ready promotion data, then supports offline model comparison and explainability. It should not be described as a live automated promotion decision engine.
+The Faculty Promotion System's role in the machine learning pipeline is strictly to prepare, structure, and validate the promotion data. The `bfar-ml` repository consumes this data for offline experimentation.
 
 ## Thesis Framing
 
@@ -350,7 +334,7 @@ Do not claim that the system makes final promotion decisions. Final evaluation s
 
 - Consolidated repository documentation into this single `README.md`.
 - Verified the live Render deployment.
-- Verified production health response, OCR readiness, loaded TQE data, and inactive live ML status.
+- Verified production health response, OCR readiness, and loaded TQE data.
 - Clarified the true target goal: employee upload automation and evaluator review/analytics.
 - Added evidence-based zero-if-missing score computation for required KRA/criterion panels.
 - Added a live employee score summary for KRA totals, criterion scores, total score, weighted score, panel coverage, and zeroed panels.
