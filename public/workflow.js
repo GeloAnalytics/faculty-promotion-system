@@ -20,11 +20,14 @@ const evaluatorWorkbookRequestForm = byId('evaluator-workbook-request-form');
 const evaluatorWorkbookSummarySheet = byId('evaluator-workbook-summary-sheet');
 const reviewQueue = byId('review-queue');
 const reviewQueueFilterStatus = byId('review-queue-filter-status');
+const evaluatorAccounts = byId('evaluator-accounts');
+const evaluatorAccountsStatus = byId('evaluator-accounts-status');
 
 let currentUser = null;
 let employeeDashboard = null;
 let uploadPanelCatalog = [];
 let reviewerQueueItems = [];
+let evaluatorAccountItems = [];
 let currentDocumentPreviewUrl = null;
 let documentPreviewRequestToken = 0;
 let documentPreviewLoadTimer = null;
@@ -36,6 +39,7 @@ document.querySelectorAll("[data-action='logout']").forEach((button) => {
 employeeUploadList?.addEventListener('click', handleUploadListActionClick);
 reviewQueue?.addEventListener('click', handleReviewQueueActionClick);
 evaluatorDocumentLibrary?.addEventListener('click', handleReviewQueueActionClick);
+evaluatorAccounts?.addEventListener('click', handleAccountsActionClick);
 document.addEventListener('keydown', handleDocumentPreviewKeydown);
 documentPreviewModal?.addEventListener('click', (event) => {
   const target = event.target;
@@ -126,14 +130,27 @@ async function loadEmployeeWorkspace() {
 
 async function loadEvaluatorWorkspace() {
   setNotice(reviewQueueFilterStatus, 'Loading review queue...');
-  const data = await apiFetch('/api/evaluator/review-queue');
+  setNotice(evaluatorAccountsStatus, 'Loading accounts...');
+
+  const [data, accountsData] = await Promise.all([
+    apiFetch('/api/evaluator/review-queue'),
+    apiFetch('/api/accounts').catch((error) => {
+      setNotice(evaluatorAccountsStatus, toErrorMessage(error), true);
+      return { accounts: [] };
+    }),
+  ]);
   reviewerQueueItems = Array.isArray(data.items) ? data.items : [];
+  evaluatorAccountItems = Array.isArray(accountsData.accounts) ? accountsData.accounts : [];
 
   renderEvaluatorInsights(reviewerQueueItems);
   renderEvaluatorDocumentLibrary(reviewerQueueItems);
   renderReviewQueue(reviewerQueueItems);
   renderEvaluatorWorkbooks(reviewerQueueItems);
+  renderAccountsPanel(evaluatorAccountItems);
   setNotice(reviewQueueFilterStatus, `${reviewerQueueItems.length} employee submission(s) ready for read-only review.`);
+  if (evaluatorAccountItems.length) {
+    setNotice(evaluatorAccountsStatus, `${evaluatorAccountItems.length} account(s) on file.`);
+  }
 }
 
 function renderEmployeeSummary(dashboard) {
@@ -915,6 +932,127 @@ function renderReviewCard(item) {
       </div>
     </article>
   `;
+}
+
+function renderAccountsPanel(accounts) {
+  if (!evaluatorAccounts) {
+    return;
+  }
+
+  if (!accounts.length) {
+    evaluatorAccounts.innerHTML = '<div class="notice">No accounts found.</div>';
+    return;
+  }
+
+  evaluatorAccounts.innerHTML = `
+    <div class="uploaded-files-list">
+      ${accounts.map(renderAccountRow).join('')}
+    </div>
+  `;
+}
+
+function renderAccountRow(account) {
+  const isSelf = currentUser?.id === account.id;
+  const statusState = account.accountActive ? 'active' : 'inactive';
+  const statusLabel = account.accountActive ? 'Active' : 'Deactivated';
+  const counts = account.counts || {};
+
+  return `
+    <article class="account-row">
+      <div class="account-info">
+        <strong>${escapeHtml(account.fullName)}${isSelf ? ' (You)' : ''}</strong>
+        <span>${escapeHtml(account.email)}</span>
+        <span class="account-role-chip">${escapeHtml(prettyRole(account.role))}</span>
+        <span class="account-status-pill" data-state="${statusState}">${escapeHtml(statusLabel)}</span>
+        <span class="account-meta">Joined ${escapeHtml(formatDate(account.createdAt))}</span>
+        <span class="account-meta">${escapeHtml(String(counts.profiles ?? 0))} profile(s) &middot; ${escapeHtml(String(counts.documents ?? 0))} document(s)</span>
+      </div>
+      <div class="account-actions">
+        ${
+          isSelf
+            ? '<span class="account-meta">No self-actions</span>'
+            : `${
+                account.accountActive
+                  ? `<button class="button button-secondary" type="button" data-account-action="deactivate" data-account-id="${escapeHtml(account.id)}" data-account-name="${escapeHtml(account.fullName)}">Deactivate</button>`
+                  : `<button class="button button-secondary" type="button" data-account-action="reactivate" data-account-id="${escapeHtml(account.id)}" data-account-name="${escapeHtml(account.fullName)}">Reactivate</button>`
+              }<button class="button button-danger" type="button" data-account-action="delete" data-account-id="${escapeHtml(account.id)}" data-account-name="${escapeHtml(account.fullName)}">Delete</button>`
+        }
+      </div>
+    </article>
+  `;
+}
+
+function handleAccountsActionClick(event) {
+  const button = event.target.closest('button[data-account-action]');
+  if (!button) {
+    return;
+  }
+
+  const action = button.dataset.accountAction;
+  const accountId = button.dataset.accountId || '';
+  const accountName = button.dataset.accountName || 'this account';
+  if (!accountId) {
+    return;
+  }
+
+  if (action === 'deactivate') {
+    void deactivateAccountAction(accountId, accountName);
+    return;
+  }
+
+  if (action === 'reactivate') {
+    void reactivateAccountAction(accountId, accountName);
+    return;
+  }
+
+  if (action === 'delete') {
+    void deleteAccountAction(accountId, accountName);
+  }
+}
+
+async function deactivateAccountAction(accountId, accountName) {
+  const confirmed = window.confirm(`Deactivate ${accountName}? They will be signed out and unable to log in until reactivated.`);
+  if (!confirmed) {
+    return;
+  }
+
+  try {
+    setNotice(evaluatorAccountsStatus, `Deactivating ${accountName}...`);
+    await apiFetch(`/api/accounts/${encodeURIComponent(accountId)}/deactivate`, { method: 'PATCH' });
+    setNotice(evaluatorAccountsStatus, `${accountName} was deactivated.`);
+    await loadEvaluatorWorkspace();
+  } catch (error) {
+    setNotice(evaluatorAccountsStatus, toErrorMessage(error), true);
+  }
+}
+
+async function reactivateAccountAction(accountId, accountName) {
+  try {
+    setNotice(evaluatorAccountsStatus, `Reactivating ${accountName}...`);
+    await apiFetch(`/api/accounts/${encodeURIComponent(accountId)}/reactivate`, { method: 'PATCH' });
+    setNotice(evaluatorAccountsStatus, `${accountName} was reactivated.`);
+    await loadEvaluatorWorkspace();
+  } catch (error) {
+    setNotice(evaluatorAccountsStatus, toErrorMessage(error), true);
+  }
+}
+
+async function deleteAccountAction(accountId, accountName) {
+  const confirmed = window.confirm(
+    `Permanently delete ${accountName}'s account? This cannot be undone. Their uploaded documents and profiles will remain but no longer be linked to an account.`,
+  );
+  if (!confirmed) {
+    return;
+  }
+
+  try {
+    setNotice(evaluatorAccountsStatus, `Deleting ${accountName}...`);
+    await apiFetch(`/api/accounts/${encodeURIComponent(accountId)}`, { method: 'DELETE' });
+    setNotice(evaluatorAccountsStatus, `${accountName} was deleted.`);
+    await loadEvaluatorWorkspace();
+  } catch (error) {
+    setNotice(evaluatorAccountsStatus, toErrorMessage(error), true);
+  }
 }
 
 function renderEvaluatorWorkbooks(items) {

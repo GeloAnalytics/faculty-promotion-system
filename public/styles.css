@@ -2910,6 +2910,81 @@ body[data-portal="evaluator"] #scoring-panel .stack-form {
   min-width: 70px;
 }
 
+.account-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(260px, auto);
+  gap: 16px;
+  align-items: start;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: var(--surface-strong);
+  border: 1px solid var(--border);
+}
+
+.account-info {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 14px;
+  min-width: 0;
+}
+
+.account-info strong {
+  display: block;
+  flex: 0 1 100%;
+  font-size: 0.88rem;
+  overflow-wrap: anywhere;
+}
+
+.account-role-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+  font-size: 0.72rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.account-status-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  white-space: nowrap;
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+}
+
+.account-status-pill[data-state="inactive"] {
+  background: #fff0ec;
+  color: #8a341f;
+}
+
+.account-meta {
+  color: var(--muted);
+  font-size: 0.78rem;
+  white-space: nowrap;
+}
+
+.account-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-content: flex-start;
+}
+
+.button-danger {
+  background: #fff0ec;
+  color: #8a341f;
+  border: 1px solid rgba(169, 68, 36, 0.25);
+}
+
 .cycle-period-banner {
   display: flex;
   justify-content: space-between;
