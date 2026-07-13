@@ -6,6 +6,6 @@ import { catchAsync } from '../utils/catchAsync';
 
 const router = Router();
 
-router.get('/database-overview', requireAuth, requireRole(UserRole.EVALUATOR, UserRole.ADMIN), catchAsync(getDatabaseOverview));
+router.get('/database-overview', requireAuth, requireRole(UserRole.ADMIN), catchAsync(getDatabaseOverview));
 
 export default router;

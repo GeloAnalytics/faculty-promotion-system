@@ -5,7 +5,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { prisma } from '../config/db';
-import { getSupabase } from '../config/supabase';
+import { getSupabase, DOCUMENTS_BUCKET } from '../config/supabase';
 import { repoRoot } from '../config/globals';
 import { uploadPanels } from '../uploadPanels';
 import { analyzeDocumentContent, inferBestUploadPanelKey } from '../utils';
@@ -300,7 +300,7 @@ export function resolveStoredDocumentPath(extractionMetadata: unknown) {
     if (typeof storage.path !== 'string') return null;
     return {
       provider: 'supabase' as const,
-      bucket: typeof storage.bucket === 'string' ? (storage.bucket as string) : 'documents',
+      bucket: typeof storage.bucket === 'string' ? (storage.bucket as string) : DOCUMENTS_BUCKET,
       path: storage.path as string,
     };
   }
@@ -344,7 +344,7 @@ async function persistUploadedDocumentFile(file: Express.Multer.File) {
   const filePath = `${storageKey}${extension}`;
 
   const { error } = await getSupabase().storage
-    .from('documents')
+    .from(DOCUMENTS_BUCKET)
     .upload(filePath, file.buffer, {
       contentType: file.mimetype,
       upsert: true,
@@ -356,7 +356,7 @@ async function persistUploadedDocumentFile(file: Express.Multer.File) {
 
   return {
     provider: 'supabase',
-    bucket: 'documents',
+    bucket: DOCUMENTS_BUCKET,
     path: filePath,
   };
 }
@@ -364,7 +364,7 @@ async function persistUploadedDocumentFile(file: Express.Multer.File) {
 export async function removePersistedDocumentFile(storageRef: any) {
   try {
     if (storageRef?.provider === 'supabase' && storageRef.path) {
-      await getSupabase().storage.from('documents').remove([storageRef.path]);
+      await getSupabase().storage.from(DOCUMENTS_BUCKET).remove([storageRef.path]);
     } else if (storageRef?.relativePath) {
       const absolutePath = path.resolve(repoRoot, storageRef.relativePath);
       await fs.unlink(absolutePath);

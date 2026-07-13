@@ -5,6 +5,13 @@ import { SessionUser } from '../types';
 import { UserRole } from '@prisma/client';
 import { parseCookieHeader } from '../utils/cookie.utils';
 
+interface SessionTokenPayload {
+  sub: string;
+  email: string;
+  fullName: string;
+  role: SessionUser['role'];
+}
+
 export const attachSessionUser = (req: Request, res: Response, next: NextFunction) => {
   let token = req.headers.authorization?.split(' ')[1];
 
@@ -16,8 +23,13 @@ export const attachSessionUser = (req: Request, res: Response, next: NextFunctio
   if (!token) return next();
 
   try {
-    const decoded = jwt.verify(token, env.AUTH_SECRET) as SessionUser;
-    req.user = decoded;
+    const decoded = jwt.verify(token, env.AUTH_SECRET) as SessionTokenPayload;
+    req.user = {
+      id: decoded.sub,
+      email: decoded.email,
+      fullName: decoded.fullName,
+      role: decoded.role,
+    };
   } catch (error) {
     // Ignore invalid token, user remains unauthenticated
   }

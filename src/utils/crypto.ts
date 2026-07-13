@@ -6,5 +6,12 @@ export function hashPassword(password: string, salt: string): string {
 
 export function verifyPassword(password: string, salt: string, expectedHash: string): boolean {
   const actualHash = hashPassword(password, salt);
-  return crypto.timingSafeEqual(Buffer.from(actualHash, 'hex'), Buffer.from(expectedHash, 'hex'));
+  const actualBuffer = Buffer.from(actualHash, 'hex');
+  const expectedBuffer = Buffer.from(expectedHash, 'hex');
+
+  if (actualBuffer.length !== expectedBuffer.length) {
+    return false;
+  }
+
+  return crypto.timingSafeEqual(actualBuffer, expectedBuffer);
 }
