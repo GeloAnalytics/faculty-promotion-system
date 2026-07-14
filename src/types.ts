@@ -30,13 +30,14 @@ export type UploadPanelKey =
   | 'kra3_service_to_institution'
   | 'kra3_service_to_community'
   | 'kra3_extension_involvement'
+  | 'kra3_administrative_designation'
   | 'kra4_professional_organizations'
   | 'kra4_continuing_development'
   | 'kra4_awards_recognition'
   | 'kra4_academic_experience'
   | 'kra4_industry_experience';
 
-export type UploadPanelAudience = 'ALL_FACULTY' | 'NEW_ENTRANTS_ONLY';
+export type UploadPanelAudience = 'ALL_FACULTY' | 'NEW_ENTRANTS_ONLY' | 'ADMIN_DESIGNATION_ONLY';
 
 export interface PersonalData {
   employeeId?: string;
@@ -121,9 +122,7 @@ export interface EmployeeUploadWorkflowItem {
 
 export interface FacultyIngestionPayload {
   personalData: PersonalData;
-  performanceReview: PerformanceReview;
   promotionHistory: PromotionHistoryEntry[];
-  documentExtraction?: DocumentExtractionResult;
   notes?: string;
 }
 
@@ -215,6 +214,7 @@ export interface SessionUser {
   id: string;
   email: string;
   fullName: string;
+  employeeId: string | null;
   role: AppUserRole;
 }
 
@@ -255,7 +255,7 @@ export type ProfileLinkCandidate = {
 
 export type ProfileLinkResult = {
   profileId: string | null;
-  matchedBy: 'explicit' | 'filename' | 'unmatched';
+  matchedBy: 'explicit' | 'filename' | 'auto-created' | 'unmatched';
   matchedName: string | null;
   matchedEmployeeId: string | null;
 };

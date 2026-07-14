@@ -38,6 +38,10 @@
                 <option value="EVALUATOR">Evaluator</option>
               </select>
             </label>
+            <label class="field" id="employee-id-field">
+              <span>Employee ID</span>
+              <input type="text" id="auth-employee-id" placeholder="10-digit Employee ID" inputmode="numeric" pattern="\d{10}" maxlength="10" />
+            </label>
             <label class="field">
               <span>Email</span>
               <input type="email" id="auth-email" placeholder="name@example.com" required />
@@ -54,6 +58,6 @@
     </div>
 
     <script src="/config.js?v=334eaba"></script>
-    <script type="module" src="/app.js?v=334eaba"></script>
+    <script type="module" src="/auth.js?v=334eaba"></script>
   </body>
 </html>

@@ -48,6 +48,7 @@ enum AuditLogAction {
 model User {
   id            String            @id @default(cuid())
   email         String            @unique
+  employeeId    String?           @unique
   passwordHash  String
   passwordSalt  String
   fullName      String

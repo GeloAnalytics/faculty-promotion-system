@@ -4,6 +4,10 @@ const REPLACEMENT_UPLOAD_ACCEPT = '.pdf,.png,.jpg,.jpeg,.bmp,.tif,.tiff';
 
 const sessionUser = byId('session-user');
 const workspaceGreeting = byId('workspace-greeting');
+const employeeProfileForm = byId('employee-profile-form');
+const employeeProfileStatus = byId('employee-profile-status');
+const profileAcademicRank = byId('profile-academic-rank');
+const profileAttainment = byId('profile-attainment');
 const employeePoints = byId('employee-points');
 const employeeUploadWorkflow = byId('employee-upload-workflow');
 const employeeUploadStatus = byId('employee-upload-status');
@@ -20,14 +24,16 @@ const evaluatorWorkbookRequestForm = byId('evaluator-workbook-request-form');
 const evaluatorWorkbookSummarySheet = byId('evaluator-workbook-summary-sheet');
 const reviewQueue = byId('review-queue');
 const reviewQueueFilterStatus = byId('review-queue-filter-status');
-const evaluatorAccounts = byId('evaluator-accounts');
-const evaluatorAccountsStatus = byId('evaluator-accounts-status');
+const adminAccounts = byId('admin-accounts');
+const adminAccountsStatus = byId('admin-accounts-status');
+const adminOverview = byId('admin-overview');
+const adminOverviewStatus = byId('admin-overview-status');
 
 let currentUser = null;
 let employeeDashboard = null;
 let uploadPanelCatalog = [];
 let reviewerQueueItems = [];
-let evaluatorAccountItems = [];
+let adminAccountItems = [];
 let currentDocumentPreviewUrl = null;
 let documentPreviewRequestToken = 0;
 let documentPreviewLoadTimer = null;
@@ -39,7 +45,8 @@ document.querySelectorAll("[data-action='logout']").forEach((button) => {
 employeeUploadList?.addEventListener('click', handleUploadListActionClick);
 reviewQueue?.addEventListener('click', handleReviewQueueActionClick);
 evaluatorDocumentLibrary?.addEventListener('click', handleReviewQueueActionClick);
-evaluatorAccounts?.addEventListener('click', handleAccountsActionClick);
+adminAccounts?.addEventListener('click', handleAccountsActionClick);
+employeeProfileForm?.addEventListener('submit', handleEmployeeProfileSubmit);
 document.addEventListener('keydown', handleDocumentPreviewKeydown);
 documentPreviewModal?.addEventListener('click', (event) => {
   const target = event.target;
@@ -63,7 +70,9 @@ bootstrap().catch((error) => {
 });
 
 async function bootstrap() {
-  ensureDocumentPreviewShell();
+  if (portal !== 'admin') {
+    ensureDocumentPreviewShell();
+  }
   const session = await refreshSession();
   if (!session) {
     window.location.assign('/');
@@ -77,6 +86,11 @@ async function bootstrap() {
 
   if (portal === 'evaluator') {
     await loadEvaluatorWorkspace();
+    return;
+  }
+
+  if (portal === 'admin') {
+    await loadAdminWorkspace();
   }
 }
 
@@ -91,7 +105,9 @@ async function refreshSession() {
       workspaceGreeting.textContent =
         portal === 'evaluator'
           ? `Hello ${data.user.fullName}. Review the uploaded PDFs, verify the OCR output, and confirm the computed score.`
-          : `Hello ${data.user.fullName}. Upload each KRA's score sheet and its matching evidence bundle separately so the system can OCR the scores for you.`;
+          : portal === 'admin'
+            ? `Hello ${data.user.fullName}. Manage accounts and monitor the system.`
+            : `Hello ${data.user.fullName}. Upload each KRA's score sheet and its matching evidence bundle separately so the system can OCR the scores for you.`;
     }
     return data;
   } catch (error) {
@@ -100,9 +116,12 @@ async function refreshSession() {
       sessionUser.textContent = 'Guest';
     }
     if (workspaceGreeting) {
-      workspaceGreeting.textContent = portal === 'evaluator'
-        ? 'Hello. Review the uploaded PDFs and verify the OCR output.'
-        : 'Hello. Upload each KRA score sheet and matching evidence bundle separately.';
+      workspaceGreeting.textContent =
+        portal === 'evaluator'
+          ? 'Hello. Review the uploaded PDFs and verify the OCR output.'
+          : portal === 'admin'
+            ? 'Hello. Manage accounts and monitor the system.'
+            : 'Hello. Upload each KRA score sheet and matching evidence bundle separately.';
     }
     return null;
   }
@@ -110,9 +129,11 @@ async function refreshSession() {
 
 async function loadEmployeeWorkspace() {
   setNotice(employeeUploadStatus, 'Loading your OCR-backed summary and KRA upload panels...');
-  const [dashboard, workflow] = await Promise.all([
+  setNotice(employeeProfileStatus, 'Loading your profile details...');
+  const [dashboard, workflow, facultyOptions] = await Promise.all([
     apiFetch('/api/employee/dashboard'),
     apiFetch('/api/config/upload-panels'),
+    apiFetch('/api/config/faculty-options').catch(() => ({ academicRanks: [], educationalAttainments: [] })),
   ]);
 
   employeeDashboard = dashboard;
@@ -125,32 +146,142 @@ async function loadEmployeeWorkspace() {
     employeeDashboard?.latestProfile?.draftPoints?.scoreComputation,
   );
   renderEmployeeUploads(employeeDashboard?.uploads || []);
+  renderEmployeeProfileForm(facultyOptions, employeeDashboard?.latestProfile?.baselineData?.personalData);
   setNotice(employeeUploadStatus, 'Upload each score sheet separately from its matching evidence bundle. PDFs can be previewed inside the portal.');
 }
 
 async function loadEvaluatorWorkspace() {
   setNotice(reviewQueueFilterStatus, 'Loading review queue...');
-  setNotice(evaluatorAccountsStatus, 'Loading accounts...');
 
-  const [data, accountsData] = await Promise.all([
-    apiFetch('/api/evaluator/review-queue'),
-    apiFetch('/api/accounts').catch((error) => {
-      setNotice(evaluatorAccountsStatus, toErrorMessage(error), true);
-      return { accounts: [] };
-    }),
-  ]);
+  const data = await apiFetch('/api/evaluator/review-queue');
   reviewerQueueItems = Array.isArray(data.items) ? data.items : [];
-  evaluatorAccountItems = Array.isArray(accountsData.accounts) ? accountsData.accounts : [];
 
   renderEvaluatorInsights(reviewerQueueItems);
   renderEvaluatorDocumentLibrary(reviewerQueueItems);
   renderReviewQueue(reviewerQueueItems);
   renderEvaluatorWorkbooks(reviewerQueueItems);
-  renderAccountsPanel(evaluatorAccountItems);
   setNotice(reviewQueueFilterStatus, `${reviewerQueueItems.length} employee submission(s) ready for read-only review.`);
-  if (evaluatorAccountItems.length) {
-    setNotice(evaluatorAccountsStatus, `${evaluatorAccountItems.length} account(s) on file.`);
+}
+
+async function loadAdminWorkspace() {
+  setNotice(adminAccountsStatus, 'Loading accounts...');
+  setNotice(adminOverviewStatus, 'Loading system overview...');
+
+  const [accountsData, overviewData] = await Promise.all([
+    apiFetch('/api/accounts').catch((error) => {
+      setNotice(adminAccountsStatus, toErrorMessage(error), true);
+      return { accounts: [] };
+    }),
+    apiFetch('/api/admin/database-overview').catch((error) => {
+      setNotice(adminOverviewStatus, toErrorMessage(error), true);
+      return null;
+    }),
+  ]);
+
+  adminAccountItems = Array.isArray(accountsData.accounts) ? accountsData.accounts : [];
+  renderAccountsPanel(adminAccountItems);
+  if (adminAccountItems.length) {
+    setNotice(adminAccountsStatus, `${adminAccountItems.length} account(s) on file.`);
   }
+
+  if (overviewData) {
+    renderAdminOverview(overviewData);
+    setNotice(adminOverviewStatus, 'System overview loaded.');
+  }
+}
+
+function renderAdminOverview(overview) {
+  if (!adminOverview) {
+    return;
+  }
+
+  const counts = overview.counts || {};
+  adminOverview.innerHTML = `
+    <div class="uploaded-files-filter-status">
+      ${Object.entries(counts)
+        .map(([label, value]) => `<span class="account-role-chip">${escapeHtml(label)}: ${escapeHtml(String(value))}</span>`)
+        .join(' ')}
+    </div>
+  `;
+}
+
+function renderEmployeeProfileForm(facultyOptions, personalData) {
+  if (!employeeProfileForm) {
+    return;
+  }
+
+  populateSelectOptions(profileAcademicRank, facultyOptions?.academicRanks || []);
+  populateSelectOptions(profileAttainment, facultyOptions?.educationalAttainments || []);
+
+  if (personalData) {
+    setSelectValue(profileAcademicRank, personalData.academicRank);
+    setSelectValue(profileAttainment, personalData.highestEducationalAttainment);
+    setInputValue('profile-department', personalData.department);
+    setInputValue('profile-years-in-service', personalData.yearsInService);
+    setInputValue('profile-age', personalData.age);
+    setInputValue('profile-sex', personalData.sex);
+    setInputValue('profile-civil-status', personalData.civilStatus);
+    setNotice(employeeProfileStatus, 'Update your details any time - only OCR-scanned uploads determine your KRA scores.');
+  } else {
+    setNotice(employeeProfileStatus, 'Set your academic rank and attainment once - your KRA scores will still come entirely from OCR-scanned uploads.');
+  }
+}
+
+function populateSelectOptions(select, options) {
+  if (!select) {
+    return;
+  }
+  const previousValue = select.value;
+  select.innerHTML = options.map((option) => `<option value="${escapeHtml(option)}">${escapeHtml(option)}</option>`).join('');
+  if (previousValue) {
+    select.value = previousValue;
+  }
+}
+
+function setSelectValue(select, value) {
+  if (select && typeof value === 'string' && value) {
+    select.value = value;
+  }
+}
+
+function setInputValue(id, value) {
+  const element = byId(id);
+  if (element && value !== null && value !== undefined && value !== '') {
+    element.value = value;
+  }
+}
+
+async function handleEmployeeProfileSubmit(event) {
+  event.preventDefault();
+  setNotice(employeeProfileStatus, 'Saving your profile details...');
+
+  const personalData = {
+    employeeId: currentUser?.employeeId || '',
+    fullName: currentUser?.fullName || '',
+    academicRank: profileAcademicRank?.value || '',
+    highestEducationalAttainment: profileAttainment?.value || '',
+    department: byId('profile-department')?.value || undefined,
+    yearsInService: numberOrUndefined(byId('profile-years-in-service')?.value),
+    age: numberOrUndefined(byId('profile-age')?.value),
+    sex: byId('profile-sex')?.value || undefined,
+    civilStatus: byId('profile-civil-status')?.value || undefined,
+  };
+
+  try {
+    await apiFetch('/api/faculty/ingest', {
+      method: 'POST',
+      body: JSON.stringify({ personalData, promotionHistory: [] }),
+    });
+    setNotice(employeeProfileStatus, 'Profile details saved.');
+    await loadEmployeeWorkspace();
+  } catch (error) {
+    setNotice(employeeProfileStatus, toErrorMessage(error), true);
+  }
+}
+
+function numberOrUndefined(value) {
+  const parsed = Number.parseFloat(value);
+  return Number.isFinite(parsed) ? parsed : undefined;
 }
 
 function renderEmployeeSummary(dashboard) {
@@ -935,16 +1066,16 @@ function renderReviewCard(item) {
 }
 
 function renderAccountsPanel(accounts) {
-  if (!evaluatorAccounts) {
+  if (!adminAccounts) {
     return;
   }
 
   if (!accounts.length) {
-    evaluatorAccounts.innerHTML = '<div class="notice">No accounts found.</div>';
+    adminAccounts.innerHTML = '<div class="notice">No accounts found.</div>';
     return;
   }
 
-  evaluatorAccounts.innerHTML = `
+  adminAccounts.innerHTML = `
     <div class="uploaded-files-list">
       ${accounts.map(renderAccountRow).join('')}
     </div>
@@ -1017,23 +1148,23 @@ async function deactivateAccountAction(accountId, accountName) {
   }
 
   try {
-    setNotice(evaluatorAccountsStatus, `Deactivating ${accountName}...`);
+    setNotice(adminAccountsStatus, `Deactivating ${accountName}...`);
     await apiFetch(`/api/accounts/${encodeURIComponent(accountId)}/deactivate`, { method: 'PATCH' });
-    setNotice(evaluatorAccountsStatus, `${accountName} was deactivated.`);
+    setNotice(adminAccountsStatus, `${accountName} was deactivated.`);
     await loadEvaluatorWorkspace();
   } catch (error) {
-    setNotice(evaluatorAccountsStatus, toErrorMessage(error), true);
+    setNotice(adminAccountsStatus, toErrorMessage(error), true);
   }
 }
 
 async function reactivateAccountAction(accountId, accountName) {
   try {
-    setNotice(evaluatorAccountsStatus, `Reactivating ${accountName}...`);
+    setNotice(adminAccountsStatus, `Reactivating ${accountName}...`);
     await apiFetch(`/api/accounts/${encodeURIComponent(accountId)}/reactivate`, { method: 'PATCH' });
-    setNotice(evaluatorAccountsStatus, `${accountName} was reactivated.`);
+    setNotice(adminAccountsStatus, `${accountName} was reactivated.`);
     await loadEvaluatorWorkspace();
   } catch (error) {
-    setNotice(evaluatorAccountsStatus, toErrorMessage(error), true);
+    setNotice(adminAccountsStatus, toErrorMessage(error), true);
   }
 }
 
@@ -1046,12 +1177,12 @@ async function deleteAccountAction(accountId, accountName) {
   }
 
   try {
-    setNotice(evaluatorAccountsStatus, `Deleting ${accountName}...`);
+    setNotice(adminAccountsStatus, `Deleting ${accountName}...`);
     await apiFetch(`/api/accounts/${encodeURIComponent(accountId)}`, { method: 'DELETE' });
-    setNotice(evaluatorAccountsStatus, `${accountName} was deleted.`);
+    setNotice(adminAccountsStatus, `${accountName} was deleted.`);
     await loadEvaluatorWorkspace();
   } catch (error) {
-    setNotice(evaluatorAccountsStatus, toErrorMessage(error), true);
+    setNotice(adminAccountsStatus, toErrorMessage(error), true);
   }
 }
 
@@ -1654,9 +1785,14 @@ async function logoutAndReturnHome() {
 }
 
 async function apiFetch(path, init = {}) {
+  const isFormData = init.body instanceof FormData;
   const response = await fetch(buildApiUrl(path), {
     credentials: 'include',
     ...init,
+    headers: {
+      ...(init.body && !isFormData ? { 'Content-Type': 'application/json' } : {}),
+      ...(init.headers || {}),
+    },
   });
 
   const data = await response.json().catch(() => ({}));

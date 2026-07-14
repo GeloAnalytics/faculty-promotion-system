@@ -7,6 +7,7 @@ import crypto from 'node:crypto';
 import { prisma } from '../config/db';
 import { getSupabase, DOCUMENTS_BUCKET } from '../config/supabase';
 import { repoRoot } from '../config/globals';
+import { fixedReviewPeriodLabel } from '../constants/reviewCycle';
 import { uploadPanels } from '../uploadPanels';
 import { analyzeDocumentContent, inferBestUploadPanelKey } from '../utils';
 import { extractImageTextWithOcr, type OcrConfig } from '../ocr';
@@ -57,8 +58,9 @@ export async function processUploadedDocument(args: {
   panelTitle: string;
   uploadType: EmployeeUploadType;
   ocrConfig: OcrConfig;
+  ownerIdentity?: { fullName: string; employeeId: string | null };
 }): Promise<ProcessedUploadResult> {
-  const { file, ownerUserId, requestedProfileId, kind, panelKey, panelTitle, uploadType, ocrConfig } = args;
+  const { file, ownerUserId, requestedProfileId, kind, panelKey, panelTitle, uploadType, ocrConfig, ownerIdentity } = args;
   const mimeType = file.mimetype.toLowerCase();
   const fileName = file.originalname;
   const isCsv = /\.csv$/i.test(fileName);
@@ -68,7 +70,7 @@ export async function processUploadedDocument(args: {
     throw new Error('Spreadsheet and CSV uploads are no longer supported in the criterion-based upload panels');
   }
 
-  const linkage = await resolveUploadProfileLink(ownerUserId, fileName, requestedProfileId);
+  const linkage = await resolveUploadProfileLink(ownerUserId, fileName, requestedProfileId, ownerIdentity);
   const profileId = linkage.profileId;
   const storage = await persistUploadedDocumentFile(file);
 
@@ -192,6 +194,7 @@ export async function resolveUploadProfileLink(
   ownerUserId: string,
   originalName: string,
   requestedProfileId: string | null,
+  ownerIdentity?: { fullName: string; employeeId: string | null },
 ): Promise<ProfileLinkResult> {
   if (requestedProfileId) {
     const explicitProfile = await prisma.facultyProfile.findFirst({
@@ -229,20 +232,44 @@ export async function resolveUploadProfileLink(
   });
 
   const matchedProfile = findBestMatchingProfile(profiles, originalName);
-  if (!matchedProfile) {
+  if (matchedProfile) {
     return {
-      profileId: null,
-      matchedBy: 'unmatched',
-      matchedName: null,
-      matchedEmployeeId: null,
+      profileId: matchedProfile.id,
+      matchedBy: 'filename',
+      matchedName: matchedProfile.name,
+      matchedEmployeeId: matchedProfile.employeeId ?? null,
+    };
+  }
+
+  // A brand-new employee has no profile at all yet - the current upload-driven
+  // workflow never runs a separate "create my profile" step, so the first
+  // upload is what brings the profile into existence (OCR-only design: no
+  // manually-typed intake form gates getting started).
+  if (!profiles.length && ownerIdentity) {
+    const autoCreatedProfile = await prisma.facultyProfile.create({
+      data: {
+        employeeId: ownerIdentity.employeeId,
+        name: ownerIdentity.fullName,
+        semester: fixedReviewPeriodLabel,
+        features: {},
+        createdByUserId: ownerUserId,
+      },
+      select: { id: true, name: true, employeeId: true },
+    });
+
+    return {
+      profileId: autoCreatedProfile.id,
+      matchedBy: 'auto-created',
+      matchedName: autoCreatedProfile.name,
+      matchedEmployeeId: autoCreatedProfile.employeeId ?? null,
     };
   }
 
   return {
-    profileId: matchedProfile.id,
-    matchedBy: 'filename',
-    matchedName: matchedProfile.name,
-    matchedEmployeeId: matchedProfile.employeeId ?? null,
+    profileId: null,
+    matchedBy: 'unmatched',
+    matchedName: null,
+    matchedEmployeeId: null,
   };
 }
 

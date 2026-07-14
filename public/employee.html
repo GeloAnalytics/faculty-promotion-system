@@ -33,10 +33,55 @@
         </header>
 
         <nav class="section-nav" id="section-nav">
+          <a class="nav-chip" href="#employee-profile-panel">Profile Details</a>
           <a class="nav-chip" href="#employee-summary-panel">Score Summary</a>
           <a class="nav-chip" href="#employee-workflow-panel">Uploads</a>
           <a class="nav-chip" href="#employee-files-panel">Uploaded Files</a>
         </nav>
+
+        <section class="panel panel-wide" id="employee-profile-panel">
+          <div class="panel-heading">
+            <div>
+              <p class="section-kicker">Profile Details</p>
+              <h2>Identity details used for rank-based scoring</h2>
+            </div>
+          </div>
+          <p class="card-copy">
+            These are the only fields you type in - every KRA score comes from OCR of your uploaded score sheets and evidence instead. Academic rank determines the scoring weights used for your promotion draft.
+          </p>
+          <form id="employee-profile-form" class="stack-form">
+            <label class="field">
+              <span>Academic Rank</span>
+              <select id="profile-academic-rank" required></select>
+            </label>
+            <label class="field">
+              <span>Highest Educational Attainment</span>
+              <select id="profile-attainment" required></select>
+            </label>
+            <label class="field">
+              <span>Department</span>
+              <input type="text" id="profile-department" placeholder="e.g. College of Engineering" />
+            </label>
+            <label class="field">
+              <span>Years in Service</span>
+              <input type="number" id="profile-years-in-service" min="0" />
+            </label>
+            <label class="field">
+              <span>Age</span>
+              <input type="number" id="profile-age" min="0" />
+            </label>
+            <label class="field">
+              <span>Sex</span>
+              <input type="text" id="profile-sex" placeholder="e.g. Female" />
+            </label>
+            <label class="field">
+              <span>Civil Status</span>
+              <input type="text" id="profile-civil-status" placeholder="e.g. Single" />
+            </label>
+            <button class="button button-primary" id="employee-profile-submit" type="submit">Save Profile Details</button>
+          </form>
+          <div id="employee-profile-status" class="notice">Loading your profile details...</div>
+        </section>
 
         <section class="panel dashboard-side panel-sticky" id="employee-summary-panel">
           <div class="panel-heading">

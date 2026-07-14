@@ -63,6 +63,7 @@ export const extractDocuments = async (req: Request, res: Response) => {
         panelTitle: panelDefinition.title,
         uploadType,
         ocrConfig,
+        ownerIdentity: { fullName: req.user!.fullName, employeeId: req.user!.employeeId },
       });
 
       await prisma.auditLog.create({

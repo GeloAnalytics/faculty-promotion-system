@@ -44,6 +44,9 @@ app.get('/employee', (_req: Request, res: Response) => {
 app.get('/evaluator', (_req: Request, res: Response) => {
   res.sendFile(path.join(publicDir, 'evaluator.html'));
 });
+app.get('/admin', (_req: Request, res: Response) => {
+  res.sendFile(path.join(publicDir, 'admin.html'));
+});
 app.use(express.static(publicDir, { extensions: ['html'], maxAge: 0 }));
 
 // Mount API routes

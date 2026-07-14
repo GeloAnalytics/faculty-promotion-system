@@ -8,16 +8,26 @@ import { hashPassword, verifyPassword } from '../utils/crypto';
 import { UserRole } from '@prisma/client';
 import { SessionUser } from '../types';
 
-function toSessionUser(user: { id: string; email: string; fullName: string; role: UserRole }): SessionUser {
+function toSessionUser(user: {
+  id: string;
+  email: string;
+  fullName: string;
+  employeeId: string | null;
+  role: UserRole;
+}): SessionUser {
   return {
     id: user.id,
     email: user.email,
     fullName: user.fullName,
+    employeeId: user.employeeId,
     role: user.role,
   };
 }
 
 function getHomePathForRole(role: UserRole | SessionUser['role']) {
+  if (role === UserRole.ADMIN) {
+    return '/admin';
+  }
   return role === UserRole.EVALUATOR ? '/evaluator' : '/employee';
 }
 
@@ -27,6 +37,7 @@ function generateToken(user: SessionUser): string {
       sub: user.id,
       email: user.email,
       fullName: user.fullName,
+      employeeId: user.employeeId,
       role: user.role,
     },
     env.AUTH_SECRET,
@@ -66,6 +77,13 @@ export const register = async (req: Request, res: Response) => {
     return res.status(409).json({ error: 'An account with that email already exists' });
   }
 
+  if (payload.employeeId) {
+    const existingEmployeeId = await prisma.user.findUnique({ where: { employeeId: payload.employeeId } });
+    if (existingEmployeeId) {
+      return res.status(409).json({ error: 'An account with that Employee ID already exists' });
+    }
+  }
+
   const passwordSalt = crypto.randomBytes(16).toString('hex');
   const passwordHash = hashPassword(payload.password, passwordSalt);
 
@@ -73,6 +91,7 @@ export const register = async (req: Request, res: Response) => {
     data: {
       fullName: payload.fullName,
       email: payload.email.toLowerCase(),
+      employeeId: payload.employeeId ?? null,
       passwordHash,
       passwordSalt,
       role: payload.role,

@@ -6,7 +6,7 @@ import { catchAsync } from '../utils/catchAsync';
 
 const router = Router();
 
-router.use(requireAuth, requireRole(UserRole.EVALUATOR, UserRole.ADMIN));
+router.use(requireAuth, requireRole(UserRole.ADMIN));
 
 router.get('/', catchAsync(listAccounts));
 router.patch('/:userId/deactivate', catchAsync(deactivateAccount));

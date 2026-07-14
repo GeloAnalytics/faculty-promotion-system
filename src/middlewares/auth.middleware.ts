@@ -9,6 +9,7 @@ interface SessionTokenPayload {
   sub: string;
   email: string;
   fullName: string;
+  employeeId: string | null;
   role: SessionUser['role'];
 }
 
@@ -28,6 +29,7 @@ export const attachSessionUser = (req: Request, res: Response, next: NextFunctio
       id: decoded.sub,
       email: decoded.email,
       fullName: decoded.fullName,
+      employeeId: decoded.employeeId ?? null,
       role: decoded.role,
     };
   } catch (error) {

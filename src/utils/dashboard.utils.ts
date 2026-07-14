@@ -179,6 +179,11 @@ export function buildDraftPointSummary(
 ) {
   const rawInput = mergeFacultyRecordInput(profile?.features, submissionRawInput);
   const personalData = readJsonObject(rawInput.personalData);
+  // performanceReview is read only for reviewPeriod/display purposes below (see
+  // evidenceValidation.requestForm) - it must never seed instruction/research/
+  // extension/professionalDevelopment/ipcrAverage. Those come exclusively from
+  // OCR-extracted scores on actual uploaded documents (the loop below), so a
+  // manually-typed number can never substitute for real evidence.
   const performanceReview = readJsonObject(rawInput.performanceReview);
   const promotionHistory = Array.isArray(rawInput.promotionHistory) ? rawInput.promotionHistory : [];
   const uploadedPanels = new Set<string>();
@@ -188,11 +193,11 @@ export function buildDraftPointSummary(
   const uploadTypeCounts = new Map<string, number>();
   const panelKeywords = new Map<UploadPanelKey, Set<string>>();
 
-  let instruction = resolvePerformanceMetricValue(performanceReview, 'teachingEffectiveness') ?? 0;
-  let research = resolvePerformanceMetricValue(performanceReview, 'researchOutputs') ?? 0;
-  let extension = resolvePerformanceMetricValue(performanceReview, 'extensionServices') ?? 0;
-  let professionalDevelopment = readOptionalNumber(performanceReview.professionalDevelopmentHours) ?? 0;
-  let ipcrAverage = resolvePerformanceMetricValue(performanceReview, 'ipcrAverage') ?? 0;
+  let instruction = 0;
+  let research = 0;
+  let extension = 0;
+  let professionalDevelopment = 0;
+  let ipcrAverage = 0;
   let completenessTotal = 0;
   let completenessSamples = 0;
 

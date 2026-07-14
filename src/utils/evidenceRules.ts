@@ -5,6 +5,12 @@ export interface RequirementRule {
   conditions: (RequirementRule | string)[]; // string is the document kind/keyword
 }
 
+// Rules are checked against keywords actually found in the uploaded document's
+// text (see analyzeDocumentContent in utils.ts, which searches for every leaf
+// string used here). Where the DBM-JC List of Documentary Evidences offers
+// genuinely different evidence paths for the same criterion (e.g. a patent vs.
+// a software copyright both satisfy "Inventions"), use OR so a valid
+// alternative isn't rejected just because it doesn't match the first path.
 export const evidenceRules: Record<string, RequirementRule> = {
   // KRA 1
   'kra1_teaching_effectiveness': {
@@ -16,8 +22,11 @@ export const evidenceRules: Record<string, RequirementRule> = {
     conditions: ['instructional material', 'approval']
   },
   'kra1_thesis_dissertation_mentorship': {
-    type: 'AND',
-    conditions: ['approval sheet']
+    type: 'OR',
+    conditions: [
+      'approval sheet', // adviser/panel path
+      { type: 'AND', conditions: ['appointment', 'mentor'] }, // mentor path
+    ],
   },
 
   // KRA 2
@@ -26,18 +35,33 @@ export const evidenceRules: Record<string, RequirementRule> = {
     conditions: ['research output', 'peer review']
   },
   'kra2_inventions': {
-    type: 'AND',
-    conditions: ['patent certificate']
+    type: 'OR',
+    conditions: [
+      'patent certificate',
+      'utility model certificate',
+      'industrial design certificate',
+      'copyright certificate', // software
+      'plant variety', // plant/animal breed or microbial strain
+      'licensing agreement', // commercialized patented product
+    ],
   },
   'kra2_creative_works': {
-    type: 'AND',
-    conditions: ['creative work', 'copyright']
+    type: 'OR',
+    conditions: [
+      { type: 'AND', conditions: ['creative work', 'copyright'] }, // performing art
+      'letter of invitation', // exhibition
+      'published literary work', // literary publications
+      'peer-reviewed', // juried/peer-reviewed designs
+    ],
   },
 
   // KRA 3
   'kra3_service_to_institution': {
-    type: 'AND',
-    conditions: ['certification', 'approval']
+    type: 'OR',
+    conditions: [
+      { type: 'AND', conditions: ['certification', 'approval'] }, // linkages/partnership
+      { type: 'AND', conditions: ['certification', 'financial report'] }, // income generation
+    ],
   },
   'kra3_service_to_community': {
     type: 'AND',
@@ -47,6 +71,10 @@ export const evidenceRules: Record<string, RequirementRule> = {
     type: 'AND',
     conditions: ['certification', 'satisfaction rating']
   },
+  'kra3_administrative_designation': {
+    type: 'AND',
+    conditions: ['appointment', 'accomplishment report'],
+  },
 
   // KRA 4
   'kra4_professional_organizations': {
@@ -54,12 +82,15 @@ export const evidenceRules: Record<string, RequirementRule> = {
     conditions: ['proof of membership', 'certification of engagement']
   },
   'kra4_continuing_development': {
-    type: 'AND',
-    conditions: ['certificate of participation', 'approval']
+    type: 'OR',
+    conditions: [
+      'transcript of records', // educational qualifications (diploma/CAV)
+      { type: 'AND', conditions: ['certificate of participation', 'approval'] }, // conference/paper presentation
+    ],
   },
   'kra4_awards_recognition': {
-    type: 'AND',
-    conditions: ['certificate of recognition']
+    type: 'OR',
+    conditions: ['certificate of recognition', 'plaque'],
   },
   'kra4_academic_experience': {
     type: 'AND',

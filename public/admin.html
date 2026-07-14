@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Faculty Promotion Admin Portal</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;700;800&family=Space+Grotesk:wght@500;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body data-portal="admin">
+    <div class="page-shell">
+      <main class="content-grid dashboard-grid">
+        <header class="hero panel panel-wide">
+          <p class="eyebrow">Admin Portal</p>
+          <h1 id="workspace-greeting">Manage accounts and monitor the system.</h1>
+          <p class="hero-text">
+            Administrative functions live here, separate from day-to-day evidence review: account provisioning, deactivation, and system-wide record counts.
+          </p>
+          <div class="hero-meta">
+            <div class="stat-card session-card">
+              <span class="stat-label">Signed In User</span>
+              <strong id="session-user">Guest</strong>
+            </div>
+            <div class="hero-actions">
+              <button class="button button-ghost" data-action="logout" type="button">Log Out</button>
+            </div>
+          </div>
+        </header>
+
+        <nav class="section-nav" id="section-nav">
+          <a class="nav-chip" href="#admin-overview-panel">System Overview</a>
+          <a class="nav-chip" href="#admin-accounts-panel">Accounts</a>
+        </nav>
+
+        <section class="panel panel-wide" id="admin-overview-panel">
+          <div class="panel-heading">
+            <div>
+              <p class="section-kicker">System Overview</p>
+              <h2>Record counts across the system</h2>
+            </div>
+          </div>
+          <div id="admin-overview-status" class="uploaded-files-filter-status">Loading system overview...</div>
+          <div id="admin-overview" class="database-viewer">
+            <div class="notice">Loading system overview...</div>
+          </div>
+        </section>
+
+        <section class="panel panel-wide" id="admin-accounts-panel">
+          <div class="panel-heading">
+            <div>
+              <p class="section-kicker">Accounts</p>
+              <h2>Monitor and manage employee and evaluator accounts</h2>
+            </div>
+          </div>
+          <div id="admin-accounts-status" class="uploaded-files-filter-status">Loading accounts...</div>
+          <div id="admin-accounts" class="database-viewer">
+            <div class="notice">Loading accounts...</div>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <script src="/config.js?v=334eac2"></script>
+    <script src="/workflow.js?v=334eac2"></script>
+  </body>
+</html>

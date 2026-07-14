@@ -1,59 +1,64 @@
 import { Request, Response } from 'express';
 import { prisma } from '../config/db';
 import { facultyIngestionSchema } from '../validations/faculty.validation';
-import { buildFeatureVector, findClosestTqeBenchmarks } from '../utils';
-import { tqeReferenceRecords } from '../config/globals';
 import { attachExistingDocumentsToProfile, toPrismaJson } from '../utils/document.utils';
-import { TrainingExampleStatus, UserRole } from '@prisma/client';
+import { fixedReviewPeriodLabel } from '../constants/reviewCycle';
+import { UserRole } from '@prisma/client';
 
+// Identity only - academic rank, department, etc. Every KRA score comes from
+// OCR of uploaded score sheets/evidence instead (see dashboard.utils.ts), never
+// from a typed-in form. This endpoint is idempotent: it updates the profile
+// that was auto-created on the employee's first upload, or creates one if
+// they haven't uploaded anything yet.
 export const ingestFaculty = async (req: Request, res: Response) => {
   const payload = facultyIngestionSchema.parse(req.body);
-  const { features, tqeBenchmarks } = buildProfileArtifacts(payload);
+  const featureEnvelope = buildIdentityFeatureEnvelope(payload);
 
-  const profile = await prisma.facultyProfile.create({
-    data: {
-      employeeId: payload.personalData.employeeId,
-      name: payload.personalData.fullName,
-      semester: payload.performanceReview.reviewPeriod,
-      teachingQuality: null,
-      promotion: null,
-      createdByUserId: req.user!.id,
-      features: buildStoredFeatureEnvelope(payload, features, tqeBenchmarks),
-    },
+  const existingProfile = await prisma.facultyProfile.findFirst({
+    where: { createdByUserId: req.user!.id },
+    orderBy: { createdAt: 'desc' },
+    select: { id: true },
   });
 
-  const trainingDraft = await upsertDraftTrainingItem(profile.id, req.user!.id, payload, features);
+  const profile = existingProfile
+    ? await prisma.facultyProfile.update({
+        where: { id: existingProfile.id },
+        data: {
+          employeeId: payload.personalData.employeeId,
+          name: payload.personalData.fullName,
+          semester: fixedReviewPeriodLabel,
+          features: featureEnvelope,
+        },
+      })
+    : await prisma.facultyProfile.create({
+        data: {
+          employeeId: payload.personalData.employeeId,
+          name: payload.personalData.fullName,
+          semester: fixedReviewPeriodLabel,
+          createdByUserId: req.user!.id,
+          features: featureEnvelope,
+        },
+      });
 
   const linkedDocuments = await attachExistingDocumentsToProfile(req.user!.id, profile.id, {
     fullName: payload.personalData.fullName,
     employeeId: payload.personalData.employeeId,
   });
 
-  return res.status(201).json({
+  return res.status(existingProfile ? 200 : 201).json({
     profileId: profile.id,
-    trainingExampleId: trainingDraft.id,
     linkedDocuments,
-    features,
-    model: {
-      status: 'inactive',
-      reason: 'Training data collection is active, but prediction is intentionally disabled.',
-    },
-    tqeBenchmarks,
   });
 };
 
 export const updateFaculty = async (req: Request, res: Response) => {
   const payload = facultyIngestionSchema.parse(req.body);
-  const { features, tqeBenchmarks } = buildProfileArtifacts(payload);
   const profile = await prisma.facultyProfile.findFirst({
     where: {
       id: req.params.profileId,
       ...(req.user!.role === UserRole.ADMIN ? {} : { createdByUserId: req.user!.id }),
     },
-    select: {
-      id: true,
-      createdByUserId: true,
-    },
+    select: { id: true },
   });
 
   if (!profile) {
@@ -65,17 +70,10 @@ export const updateFaculty = async (req: Request, res: Response) => {
     data: {
       employeeId: payload.personalData.employeeId,
       name: payload.personalData.fullName,
-      semester: payload.performanceReview.reviewPeriod,
-      features: buildStoredFeatureEnvelope(payload, features, tqeBenchmarks),
+      semester: fixedReviewPeriodLabel,
+      features: buildIdentityFeatureEnvelope(payload),
     },
   });
-
-  const trainingDraft = await upsertDraftTrainingItem(
-    updatedProfile.id,
-    profile.createdByUserId ?? req.user!.id,
-    payload,
-    features,
-  );
 
   const linkedDocuments = await attachExistingDocumentsToProfile(req.user!.id, updatedProfile.id, {
     fullName: payload.personalData.fullName,
@@ -84,14 +82,7 @@ export const updateFaculty = async (req: Request, res: Response) => {
 
   return res.json({
     profileId: updatedProfile.id,
-    trainingExampleId: trainingDraft.id,
     linkedDocuments,
-    features,
-    model: {
-      status: 'inactive',
-      reason: 'Training data collection is active, but prediction is intentionally disabled.',
-    },
-    tqeBenchmarks,
     updated: true,
   });
 };
@@ -117,67 +108,11 @@ export const generatePredictions = async (_req: Request, res: Response) => {
   });
 };
 
-function buildProfileArtifacts(payload: ReturnType<typeof facultyIngestionSchema.parse>) {
-  const features = buildFeatureVector(payload);
-  const tqeBenchmarks = findClosestTqeBenchmarks(features, tqeReferenceRecords);
-
-  return {
-    features,
-    tqeBenchmarks,
-  };
-}
-
-function buildStoredFeatureEnvelope(
-  payload: ReturnType<typeof facultyIngestionSchema.parse>,
-  features: ReturnType<typeof buildFeatureVector>,
-  tqeBenchmarks: ReturnType<typeof findClosestTqeBenchmarks>,
-) {
-  const baselineData = {
-    personalData: payload.personalData,
-    promotionHistory: payload.promotionHistory,
-  };
-
+function buildIdentityFeatureEnvelope(payload: ReturnType<typeof facultyIngestionSchema.parse>) {
   return toPrismaJson({
-    baselineData,
-    engineeredFeatures: features,
-    modelStatus: 'inactive',
-    tqeBenchmarks,
-  });
-}
-
-async function upsertDraftTrainingItem(
-  profileId: string,
-  createdByUserId: string,
-  payload: ReturnType<typeof facultyIngestionSchema.parse>,
-  features: ReturnType<typeof buildFeatureVector>,
-) {
-  const existingDraft = await prisma.trainingExample.findFirst({
-    where: {
-      profileId,
-      createdByUserId,
-      status: TrainingExampleStatus.DRAFT,
-    },
-    orderBy: { updatedAt: 'desc' },
-    select: { id: true },
-  });
-
-  if (existingDraft) {
-    return prisma.trainingExample.update({
-      where: { id: existingDraft.id },
-      data: {
-        rawInput: toPrismaJson(payload),
-        featureSnapshot: toPrismaJson(features),
-      },
-    });
-  }
-
-  return prisma.trainingExample.create({
-    data: {
-      createdByUserId,
-      profileId,
-      status: TrainingExampleStatus.DRAFT,
-      rawInput: toPrismaJson(payload),
-      featureSnapshot: toPrismaJson(features),
+    baselineData: {
+      personalData: payload.personalData,
+      promotionHistory: payload.promotionHistory,
     },
   });
 }

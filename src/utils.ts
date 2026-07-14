@@ -1,7 +1,6 @@
 import type {
   DocumentAnalysisResult,
   DocumentExtractionResult,
-  FacultyIngestionPayload,
   FeatureKey,
   FeatureSelectionResult,
   FeatureVector,
@@ -11,7 +10,6 @@ import type {
   NumericSummary,
   Recommendation,
   SupportedModel,
-  ThesisWorkflowResult,
   TqeBenchmarkMatch,
   TqeRecord,
   TqeReferenceSummary,
@@ -183,44 +181,6 @@ export function inferBestUploadPanelKey(text: string, fallback: UploadPanelKey =
   return bestScore > 0 ? bestPanelKey : fallback;
 }
 
-export const buildFeatureVector = (payload: FacultyIngestionPayload): FeatureVector => {
-  const attainment = mapEducationalAttainment(payload.personalData.highestEducationalAttainment);
-  const latestPromotionCount = payload.promotionHistory.filter((entry) => entry.promoted).length;
-  const documentCompleteness = payload.documentExtraction?.completenessScore ?? 0;
-  const documentQualityScore = payload.documentExtraction?.qualityScore ?? 0;
-
-  return {
-    age: normalizeScore(payload.personalData.age, 65),
-    yearsInService: normalizeScore(payload.personalData.yearsInService, 35),
-    highestEducationalAttainmentLevel: attainment,
-    teachingEffectiveness: normalizeScore(
-      payload.performanceReview.teachingEffectiveness ?? payload.documentExtraction?.extractedScores.teachingEffectiveness,
-      5,
-    ),
-    researchOutputs: normalizeScore(
-      payload.performanceReview.researchOutputs ?? payload.documentExtraction?.extractedScores.researchOutputs,
-      20,
-    ),
-    extensionServices: normalizeScore(
-      payload.performanceReview.extensionServices ?? payload.documentExtraction?.extractedScores.extensionServices,
-      10,
-    ),
-    administrativeExperience: normalizeScore(payload.performanceReview.administrativeExperience, 10),
-    professionalDevelopmentHours: normalizeScore(
-      payload.performanceReview.professionalDevelopmentHours ??
-        payload.documentExtraction?.extractedScores.professionalDevelopmentHours,
-      200,
-    ),
-    ipcrAverage: normalizeScore(
-      payload.performanceReview.ipcrAverage ?? payload.documentExtraction?.extractedScores.ipcrAverage,
-      5,
-    ),
-    promotionHistoryCount: normalizeScore(latestPromotionCount, 5),
-    documentCompleteness,
-    documentQualityScore,
-  };
-};
-
 export const selectSignificantFeatures = (features: FeatureVector): FeatureSelectionResult[] => {
   const weights: Record<FeatureKey, number> = {
     age: 0.45,
@@ -306,19 +266,6 @@ export const generateRecommendations = (
   });
 
   return recommendations;
-};
-
-export const runThesisWorkflow = (payload: FacultyIngestionPayload): ThesisWorkflowResult => {
-  const features = buildFeatureVector(payload);
-  const selectedFeatures = selectSignificantFeatures(features);
-  const modelResults = compareModels(features);
-
-  return {
-    selectedFeatures,
-    modelResults,
-    bestModel: modelResults[0],
-    recommendations: generateRecommendations(features, selectedFeatures),
-  };
 };
 
 export const inferPromotionOutcome = (features: FeatureVector): boolean => {
