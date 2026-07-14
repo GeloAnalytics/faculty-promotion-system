@@ -241,6 +241,22 @@ export async function resolveUploadProfileLink(
     };
   }
 
+  // Filename matching exists to disambiguate multiple profiles under one
+  // account - it was never meant to gate a single profile out. With the
+  // auto-created-on-first-upload model there is normally exactly one profile
+  // per employee, and the uploaded file's name (e.g. a real scanned document
+  // bearing the faculty member's own name) has no reason to match "Demo
+  // Employee" or similar account identity text. Default to the most recent
+  // profile rather than stranding the upload with profileId: null.
+  if (profiles.length === 1) {
+    return {
+      profileId: profiles[0].id,
+      matchedBy: 'sole-profile',
+      matchedName: profiles[0].name,
+      matchedEmployeeId: profiles[0].employeeId ?? null,
+    };
+  }
+
   // A brand-new employee has no profile at all yet - the current upload-driven
   // workflow never runs a separate "create my profile" step, so the first
   // upload is what brings the profile into existence (OCR-only design: no

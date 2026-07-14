@@ -255,7 +255,7 @@ export type ProfileLinkCandidate = {
 
 export type ProfileLinkResult = {
   profileId: string | null;
-  matchedBy: 'explicit' | 'filename' | 'auto-created' | 'unmatched';
+  matchedBy: 'explicit' | 'filename' | 'sole-profile' | 'auto-created' | 'unmatched';
   matchedName: string | null;
   matchedEmployeeId: string | null;
 };
