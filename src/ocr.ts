@@ -41,7 +41,12 @@ export function isOcrReady(config: OcrConfig) {
   return false;
 }
 
-export async function extractImageTextWithOcr(fileBuffer: Buffer, originalName: string, config: OcrConfig): Promise<OcrResult> {
+export async function extractImageTextWithOcr(
+  fileBuffer: Buffer,
+  originalName: string,
+  config: OcrConfig,
+  fileTypeHint?: string,
+): Promise<OcrResult> {
   if (config.provider === 'windows') {
     return runWindowsOcr(fileBuffer, originalName, config.scriptPath);
   }
@@ -51,7 +56,7 @@ export async function extractImageTextWithOcr(fileBuffer: Buffer, originalName: 
   }
 
   if (config.provider === 'ocrspace') {
-    return runOcrSpace(fileBuffer, originalName, config);
+    return runOcrSpace(fileBuffer, originalName, config, fileTypeHint);
   }
 
   throw new Error('OCR is not configured');
@@ -137,7 +142,12 @@ async function runHttpOcr(fileBuffer: Buffer, originalName: string, config: OcrC
   }
 }
 
-async function runOcrSpace(fileBuffer: Buffer, originalName: string, config: OcrConfig): Promise<OcrResult> {
+async function runOcrSpace(
+  fileBuffer: Buffer,
+  originalName: string,
+  config: OcrConfig,
+  fileTypeHint?: string,
+): Promise<OcrResult> {
   if (!config.apiUrl || !config.apiKey) {
     throw new Error('OCR.space is not fully configured');
   }
@@ -147,6 +157,13 @@ async function runOcrSpace(fileBuffer: Buffer, originalName: string, config: Ocr
   formData.append('file', blob, originalName);
   formData.append('isOverlayRequired', 'false');
   formData.append('OCREngine', '2');
+  if (fileTypeHint) {
+    // OCR.space normally infers the file type from the upload's file name
+    // extension, but a scanned/image-only PDF forwarded from the PDF upload
+    // path benefits from an explicit hint rather than relying on that
+    // inference alone.
+    formData.append('filetype', fileTypeHint);
+  }
 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), config.timeoutMs);

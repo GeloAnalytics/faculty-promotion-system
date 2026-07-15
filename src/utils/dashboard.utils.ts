@@ -1,4 +1,4 @@
-import { uploadPanels } from '../uploadPanels';
+import { uploadPanels, uploadPanelKeywordMap } from '../uploadPanels';
 import { academicRankOptions, normalizeAcademicRankOption } from '../constants/faculty';
 import { fixedReviewPeriodLabel, reviewCycleMetricKeys, reviewCycleYearLabels } from '../constants/reviewCycle';
 import type { UploadPanelKey } from '../types';
@@ -41,7 +41,7 @@ type ComputedPanelScore = {
   maxScore: number;
   detectedScore: number | null;
   usedScore: number;
-  scoreSource: 'ocr-detected' | 'evidence-checklist' | 'none';
+  scoreSource: 'ocr-detected' | 'evidence-checklist' | 'evidence-relevance-estimate' | 'none';
   scoreSheetCount: number;
   evidenceCount: number;
   required: boolean;
@@ -141,6 +141,7 @@ type ParsedDocumentMetadata = {
   qualityScore: number | null;
   linkage: string | null;
   keywordHits: string[];
+  detectedCategories: string[];
 };
 
 export function summarizeDocumentMetadata(value: unknown): ParsedDocumentMetadata {
@@ -151,6 +152,7 @@ export function summarizeDocumentMetadata(value: unknown): ParsedDocumentMetadat
   const panelKey = typeof metadata.panelKey === 'string' ? metadata.panelKey : null;
   const panelDefinition = panelKey ? uploadPanels.find((panel) => panel.key === panelKey) ?? null : null;
   const keywordHits = Array.isArray(analysis.keywordHits) ? analysis.keywordHits.map(String) : [];
+  const detectedCategories = Array.isArray(analysis.detectedCategories) ? analysis.detectedCategories.map(String) : [];
 
   return {
     uploadType: typeof metadata.uploadType === 'string' ? metadata.uploadType : null,
@@ -167,6 +169,7 @@ export function summarizeDocumentMetadata(value: unknown): ParsedDocumentMetadat
         ? `${linkage.matchedBy}${typeof linkage.matchedName === 'string' ? `: ${linkage.matchedName}` : ''}`
         : null,
     keywordHits,
+    detectedCategories,
   };
 }
 
@@ -191,6 +194,8 @@ export function buildDraftPointSummary(
   const panelUploadTypeCounts = new Map<UploadPanelKey, { scoreSheet: number; evidence: number }>();
   const uploadTypeCounts = new Map<string, number>();
   const panelKeywords = new Map<UploadPanelKey, Set<string>>();
+  const panelQualitySignal = new Map<UploadPanelKey, { total: number; count: number }>();
+  const panelTopicalHits = new Map<UploadPanelKey, Set<string>>();
 
   let instruction = 0;
   let research = 0;
@@ -218,6 +223,18 @@ export function buildDraftPointSummary(
           existingKeywords.add(kw);
         }
         panelKeywords.set(panelKey, existingKeywords);
+
+        const existingTopicalHits = panelTopicalHits.get(panelKey) ?? new Set<string>();
+        for (const category of metadata.detectedCategories) {
+          existingTopicalHits.add(category);
+        }
+        panelTopicalHits.set(panelKey, existingTopicalHits);
+
+        const documentQuality = ((metadata.completenessScore ?? 0) + (metadata.qualityScore ?? 0)) / 2;
+        const existingQuality = panelQualitySignal.get(panelKey) ?? { total: 0, count: 0 };
+        existingQuality.total += documentQuality;
+        existingQuality.count += 1;
+        panelQualitySignal.set(panelKey, existingQuality);
       }
       panelUploadTypeCounts.set(panelKey, existingPanelCounts);
 
@@ -303,6 +320,8 @@ export function buildDraftPointSummary(
     panelUploadTypeCounts,
     evidenceValidation,
     panelKeywords,
+    panelQualitySignal,
+    panelTopicalHits,
   });
   const hasDoctoralGraduateBonus = canUseDoctoralGraduateBonus(
     normalizeAttainment(highestEducationalAttainment),
@@ -1301,12 +1320,20 @@ function deriveScoreValidationStatus(
   return 'missing';
 }
 
+// Ceiling for the unverified relevance-based fallback estimate (as a share
+// of a panel's max score) - kept well below what a real OCR-detected score
+// or a confirmed checklist match could earn, so it always reads as "some
+// relevant evidence is here" rather than a verified result.
+const RELEVANCE_ESTIMATE_MAX_SHARE = 0.45;
+
 function buildEvidenceBasedScoreComputation(args: {
   currentRank: string | null;
   panelScoreByKey: Map<UploadPanelKey, number>;
   panelUploadTypeCounts: Map<UploadPanelKey, { scoreSheet: number; evidence: number }>;
   evidenceValidation: EvidenceValidationSummary;
   panelKeywords: Map<UploadPanelKey, Set<string>>;
+  panelQualitySignal: Map<UploadPanelKey, { total: number; count: number }>;
+  panelTopicalHits: Map<UploadPanelKey, Set<string>>;
 }): EvidenceBasedScoreComputation {
   const panelScores = uploadPanels.map((panel) => {
     const counts = args.panelUploadTypeCounts.get(panel.key) ?? { scoreSheet: 0, evidence: 0 };
@@ -1324,8 +1351,29 @@ function buildEvidenceBasedScoreComputation(args: {
       } else {
         const keywords = Array.from(args.panelKeywords.get(panel.key) ?? []);
         const checklistFraction = getEvidenceChecklistCompleteness(panel.key, keywords);
-        usedScore = checklistFraction * panel.maxScore;
-        scoreSource = 'evidence-checklist';
+        if (checklistFraction > 0) {
+          usedScore = checklistFraction * panel.maxScore;
+          scoreSource = 'evidence-checklist';
+        } else {
+          // No literal score and no checklist match - fall back to how much
+          // of this panel's topic vocabulary (uploadPanelKeywordMap, a much
+          // looser subject-matter word list than the strict evidenceRules
+          // checklist) shows up in the uploaded evidence. This is not biased
+          // by document length the way completeness/qualityScore are, so a
+          // short-but-relevant single-page certificate isn't unfairly
+          // punished versus a long multi-page report. General document
+          // quality is kept as a secondary signal in case the topic words
+          // genuinely aren't present but the document otherwise looks real.
+          const topicVocabulary = uploadPanelKeywordMap[panel.key] ?? [];
+          const topicalHits = args.panelTopicalHits.get(panel.key) ?? new Set<string>();
+          const topicalRelevanceFraction =
+            topicVocabulary.length > 0 ? Math.min(1, topicalHits.size / topicVocabulary.length) : 0;
+          const quality = args.panelQualitySignal.get(panel.key);
+          const documentQualityFraction = quality && quality.count > 0 ? Math.min(1, quality.total / quality.count) : 0;
+          const relevanceFraction = Math.max(topicalRelevanceFraction, documentQualityFraction);
+          usedScore = relevanceFraction * RELEVANCE_ESTIMATE_MAX_SHARE * panel.maxScore;
+          scoreSource = 'evidence-relevance-estimate';
+        }
       }
     }
     usedScore = canCount ? Math.min(panel.maxScore, Math.max(0, usedScore)) : 0;
@@ -1434,10 +1482,13 @@ function getComputedPanelScoreNote(
     if (scoreSource === 'ocr-detected') {
       return `OCR detected a score of ${usedScore} for this panel from the uploaded evidence.`;
     }
-    if (usedScore > 0) {
+    if (scoreSource === 'evidence-checklist') {
       return `No explicit score was found in the uploaded evidence, so this panel is estimated at ${usedScore} from how much of the required documentary evidence checklist it satisfies.`;
     }
-    return 'Evidence is uploaded, but it does not yet satisfy any of the required documentary evidence checklist for this panel, so it currently contributes 0.';
+    if (usedScore > 0) {
+      return `No explicit score or checklist match was found, so this panel is given a conservative estimate of ${usedScore} based on how relevant the uploaded evidence looks to this panel's topic.`;
+    }
+    return 'Evidence is uploaded, but it does not look relevant to this panel yet for even an estimated score, so it currently contributes 0.';
   }
   if (status === 'missing-evidence') {
     return 'Supporting evidence is missing for this panel, so the computed score is 0.';

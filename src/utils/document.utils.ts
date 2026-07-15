@@ -10,7 +10,7 @@ import { repoRoot } from '../config/globals';
 import { fixedReviewPeriodLabel } from '../constants/reviewCycle';
 import { uploadPanels } from '../uploadPanels';
 import { analyzeDocumentContent, inferBestUploadPanelKey } from '../utils';
-import { extractImageTextWithOcr, type OcrConfig } from '../ocr';
+import { extractImageTextWithOcr, isOcrReady, type OcrConfig } from '../ocr';
 import { EmployeeUploadType, UploadPanelDefinition, ProcessedUploadResult, ProfileLinkResult } from '../types';
 import { findBestMatchingProfile, scoreProfileFilename } from './profileMatching';
 
@@ -76,9 +76,35 @@ export async function processUploadedDocument(args: {
 
   if (mimeType === 'application/pdf' || fileName.toLowerCase().endsWith('.pdf')) {
     const data = await pdf(file.buffer);
-    const detectedPanelKey = inferBestUploadPanelKey(data.text, panelKey);
+    let extractedText = data.text;
+    let ocrFallback: { provider: string; lineCount: number } | null = null;
+
+    // pdf-parse only reads a PDF's embedded text layer - a scanned or
+    // photographed document saved as PDF (common for certificates,
+    // appointment letters, ID scans) has no text layer at all and always
+    // comes back empty here, even though the same image content would OCR
+    // just fine if it were uploaded as a plain image. When pdf-parse found
+    // next to nothing, forward the original PDF buffer to the OCR provider
+    // instead (OCR.space can OCR PDF files directly) rather than silently
+    // accepting a blank document. Local Windows OCR only works from
+    // decoded bitmaps, so it can't be used for this fallback.
+    const MIN_MEANINGFUL_PDF_TEXT_LENGTH = 20;
+    const canAttemptPdfOcrFallback = ocrConfig.provider !== 'windows' && isOcrReady(ocrConfig);
+    if (extractedText.trim().length < MIN_MEANINGFUL_PDF_TEXT_LENGTH && canAttemptPdfOcrFallback) {
+      try {
+        const ocrResult = await extractImageTextWithOcr(file.buffer, fileName, ocrConfig, 'PDF');
+        if (ocrResult.text.trim().length > extractedText.trim().length) {
+          extractedText = ocrResult.text.trim();
+          ocrFallback = { provider: ocrResult.provider, lineCount: ocrResult.lineCount };
+        }
+      } catch {
+        // Best-effort only - keep whatever pdf-parse already found (even if empty) if OCR also fails.
+      }
+    }
+
+    const detectedPanelKey = inferBestUploadPanelKey(extractedText, panelKey);
     const detectedPanelDefinition = findUploadPanelDefinition(detectedPanelKey);
-    const analysis = analyzeDocumentContent(data.text, detectedPanelKey, 'pdf');
+    const analysis = analyzeDocumentContent(extractedText, detectedPanelKey, 'pdf');
 
     try {
       const savedDocument = await prisma.uploadedDocument.create({
@@ -88,12 +114,13 @@ export async function processUploadedDocument(args: {
           kind,
           originalName: fileName,
           mimeType: file.mimetype,
-          extractedText: data.text,
+          extractedText,
           extractionMetadata: toPrismaJson({
             uploadType,
             panelKey: detectedPanelKey,
             panelTitle: detectedPanelDefinition.title,
             storedForTraining: true,
+            ...(ocrFallback ? { ocr: ocrFallback } : {}),
             analysis,
             linkage,
             storage,
@@ -109,7 +136,7 @@ export async function processUploadedDocument(args: {
         panelKey: detectedPanelKey,
         profileId,
         linkage,
-        textPreview: data.text.slice(0, 1000),
+        textPreview: extractedText.slice(0, 1000),
         analysis,
       };
     } catch (error) {

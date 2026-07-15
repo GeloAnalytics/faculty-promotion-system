@@ -259,7 +259,7 @@ test('evidence-based score computation uses the OCR-detected score from the evid
   assert.notEqual(researchPanel?.usedScore, researchPanel?.maxScore);
 });
 
-test('evidence-based score computation counts the panel as present but contributes 0 when evidence is uploaded with no detectable score yet', () => {
+test('evidence-based score computation contributes 0 when evidence is uploaded with no detectable score, checklist match, or document-quality signal', () => {
   const draftPoints = buildDraftPointSummary(
     {
       features: {
@@ -291,7 +291,92 @@ test('evidence-based score computation counts the panel as present but contribut
   const researchPanel = draftPoints.scoreComputation?.panelScores.find((panel) => panel.key === 'kra2_research_outputs');
   assert.equal(researchPanel?.status, 'counted');
   assert.equal(researchPanel?.usedScore, 0);
-  assert.equal(researchPanel?.scoreSource, 'evidence-checklist');
+  assert.equal(researchPanel?.scoreSource, 'evidence-relevance-estimate');
+});
+
+test('evidence-based score computation gives a conservative document-quality estimate when nothing else is detected', () => {
+  const draftPoints = buildDraftPointSummary(
+    {
+      features: {
+        rawInput: {
+          personalData: {
+            fullName: 'Mia V. Villarica',
+            academicRank: 'Assistant Professor IV',
+            highestEducationalAttainment: 'Masteral Graduate',
+          },
+          promotionHistory: [],
+        },
+      },
+      semester: '2026-1',
+    },
+    [
+      {
+        extractionMetadata: {
+          // No detected score and no checklist keywords matched, but the
+          // document itself looks substantive (decent completeness/quality
+          // heuristics) - that should land at a conservative estimate, not 0
+          // and nowhere near full marks.
+          uploadType: 'evidence',
+          panelKey: 'kra2_research_outputs',
+          panelTitle: 'Research Outputs',
+          analysis: {
+            extractedScores: {},
+            completenessScore: 0.8,
+            qualityScore: 0.6,
+          },
+        },
+      },
+    ],
+  );
+
+  const researchPanel = draftPoints.scoreComputation?.panelScores.find((panel) => panel.key === 'kra2_research_outputs');
+  assert.equal(researchPanel?.status, 'counted');
+  assert.equal(researchPanel?.scoreSource, 'evidence-relevance-estimate');
+  assert.equal(researchPanel?.usedScore, 31.5);
+  assert.ok((researchPanel?.usedScore ?? 0) < 0.5 * (researchPanel?.maxScore ?? 0));
+});
+
+test('evidence-based score computation credits a short but topically relevant document, not just long ones', () => {
+  const draftPoints = buildDraftPointSummary(
+    {
+      features: {
+        rawInput: {
+          personalData: {
+            fullName: 'Mia V. Villarica',
+            academicRank: 'Assistant Professor IV',
+            highestEducationalAttainment: 'Masteral Graduate',
+          },
+          promotionHistory: [],
+        },
+      },
+      semester: '2026-1',
+    },
+    [
+      {
+        extractionMetadata: {
+          // kra4_awards_recognition's strict checklist (OR: 'certificate of
+          // recognition' / 'plaque') isn't matched, and completeness/quality
+          // are both 0 (e.g. a short single-page scan) - but the document's
+          // subject-matter vocabulary (uploadPanelKeywordMap: 'award',
+          // 'recognition', 'distinction') hits 1 of 3 terms, so a short but
+          // clearly on-topic document should still earn some credit instead
+          // of being punished purely for being short.
+          uploadType: 'evidence',
+          panelKey: 'kra4_awards_recognition',
+          panelTitle: 'Awards and Recognitions',
+          analysis: {
+            extractedScores: {},
+            detectedCategories: ['recognition'],
+          },
+        },
+      },
+    ],
+  );
+
+  const awardsPanel = draftPoints.scoreComputation?.panelScores.find((panel) => panel.key === 'kra4_awards_recognition');
+  assert.equal(awardsPanel?.status, 'counted');
+  assert.equal(awardsPanel?.scoreSource, 'evidence-relevance-estimate');
+  assert.equal(awardsPanel?.usedScore, 3);
 });
 
 test('evidence-based score computation gives partial credit from the evidence checklist when no OCR score is detected', () => {
