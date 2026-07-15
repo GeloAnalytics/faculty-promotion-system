@@ -12,19 +12,16 @@ The system has two user-facing sides.
 
 The employee side should make the faculty member's task as simple as possible:
 
-1. Upload score sheets.
-2. Upload documentary evidence.
-3. Let the system read the uploaded documents.
-4. Show detected scores in the UI.
-5. Check whether all required evidence has been uploaded.
-6. Show missing score sheets, missing evidence, and incomplete KRA panels.
-7. Compute overall scores from what is actually presented.
-8. Mark missing scores or missing evidence as `0` where no valid score/evidence is presented.
-9. Let the employee view uploaded files.
-10. Let the employee modify uploads by replacing or re-uploading files.
-11. Let the employee delete uploaded files.
+1. Upload documentary evidence per KRA/criterion (score sheets are optional - they are only issued after JC evaluation, so the pre-JC draft cannot depend on them).
+2. Let the system read the uploaded documents.
+3. Check whether all required evidence has been uploaded and validated.
+4. Show missing evidence and incomplete KRA panels.
+5. Compute the draft score from validated evidence: a panel with validated evidence counts at full marks, a panel with missing or invalid evidence counts as `0`.
+6. Let the employee view uploaded files.
+7. Let the employee modify uploads by replacing or re-uploading files.
+8. Let the employee delete uploaded files.
 
-The employee should not need to manually retype KRA scores if the score sheet already contains them.
+The employee should not need to manually retype KRA scores. The draft score is derived entirely from validated documentary evidence.
 
 ### Evaluator Side
 
@@ -89,10 +86,10 @@ After this documentation consolidation, `README.md` is the single markdown docum
 - Employee file replacement for score sheets and evidence documents.
 - Employee file deletion.
 - Uploaded-document storage and metadata extraction (Supabase Storage).
-- Panel score preview metadata for score-sheet uploads.
+- Panel score preview metadata for score-sheet uploads (optional, informational only).
 - Evidence completeness checking.
-- Missing score sheet and missing evidence detection per required panel.
-- Evidence-based score computation that counts missing score sheets or missing evidence as `0` for the panel.
+- Missing evidence detection per required panel.
+- Evidence-based score computation that awards a panel full marks once its required evidence is validated, and counts missing/invalid evidence as `0`.
 - Panel score cards that show computed score previews and zero fallback when evidence is incomplete.
 - Live score summary UI with KRA totals, criterion scores, total score, weighted score, panel coverage, and zeroed-panel count.
 - Employee-side OCR-backed summary.
@@ -105,7 +102,7 @@ After this documentation consolidation, `README.md` is the single markdown docum
 
 These are the highest-priority items needed to match the target system goal:
 
-1. Continue visual polish on the score summary after testing with real score sheets and evidence packets.
+1. Continue visual polish on the score summary after testing with real evidence packets.
 
 ## Current Development Checkpoint
 
@@ -113,8 +110,8 @@ This checkpoint is the active development baseline before the next feature pass:
 
 - Documentation has been compressed into this single `README.md`.
 - The employee portal now shows a live score summary with per-KRA totals, per-criterion values, total score, weighted score, panel coverage, and zeroed-panel count.
-- The backend computes evidence-based scores with the policy `zero-if-missing-score-or-evidence`.
-- Required panels without score sheets, detected scores, or supporting evidence are counted as `0`.
+- The backend computes evidence-based scores with the policy `zero-if-missing-evidence`.
+- Required panels without validated supporting evidence are counted as `0`; score sheets are not required or used for this draft score, since they are only issued after JC evaluation.
 - Employee uploads now support view, replace, and delete actions.
 - Replacement uploads keep the old document intact if the new file fails OCR or processing.
 - Evaluator cards now surface evidence score and zeroed-panel signals.
@@ -124,15 +121,15 @@ This checkpoint is the active development baseline before the next feature pass:
 
 1. A faculty member signs in.
 2. The faculty member creates or updates the basic faculty profile.
-3. The faculty member uploads score sheets and evidence files per KRA/criterion.
+3. The faculty member uploads documentary evidence per KRA/criterion (a score sheet can be attached too, but it is optional and not required for the draft, since score sheets are only issued after JC evaluation).
 4. The backend stores the uploaded files.
 5. The backend extracts text from PDFs or images.
-6. OCR/PDF parsing attempts to detect KRA/criterion scores.
+6. OCR/PDF parsing checks the evidence text against the required evidence keywords for the panel.
 7. The system links uploaded files to KRA/criterion panels.
-8. The system checks whether required evidence is present.
+8. The system checks whether required evidence is present and validated.
 9. Missing required evidence keeps the packet incomplete.
-10. Missing scores or missing required evidence should count as `0` in the computed total.
-11. The employee sees detected scores, uploaded files, missing requirements, and computed summaries.
+10. A panel with validated evidence counts at full marks; missing or invalid required evidence counts as `0` in the computed total.
+11. The employee sees the computed draft score, uploaded files, missing requirements, and computed summaries.
 12. The evaluator views all submitted records, documents, scores, and validation flags.
 13. The evaluator verifies the output and uses the system to reduce manual review work.
 
@@ -143,11 +140,10 @@ The validation logic should follow these rules:
 - `AND` means every listed document is required.
 - `OR` means at least one valid alternative is required.
 - Optional or bonus evidence does not replace required evidence.
-- A score sheet alone is not enough if supporting evidence is missing.
-- Supporting evidence alone is not enough if the score sheet is required for OCR score comparison.
+- Score sheets are only issued after JC evaluation, so the draft score never depends on a score sheet - documentary evidence alone is enough.
 - Missing required documents should produce an incomplete state.
 - Incomplete evidence should block final promotable status.
-- If no valid score or evidence is presented for a criterion, that criterion should be computed as `0`.
+- If no valid evidence is presented for a criterion, that criterion should be computed as `0`.
 
 ## KRA Evidence Areas
 
@@ -182,17 +178,16 @@ The validation logic should follow these rules:
 
 The system should compute from evidence actually submitted and recognized:
 
-1. Read score-sheet values through OCR/PDF parsing.
-2. Match detected scores to the correct KRA/criterion panel.
-3. Check that supporting evidence exists for the panel.
-4. Use the detected score only when the score and evidence pass validation.
-5. Use `0` when no score is detected.
-6. Use `0` when required evidence is missing.
-7. Sum criterion scores into KRA totals.
-8. Compute the overall score from KRA totals using the official DBM/NBC 461 rules.
-9. Show score brackets and draft rank as advisory only.
+1. Read the uploaded evidence text through OCR/PDF parsing.
+2. Match the detected keywords to the correct KRA/criterion panel's evidence rule.
+3. Check that the required evidence rule for the panel is satisfied.
+4. Award the panel's full max score once its evidence rule passes.
+5. Use `0` when required evidence is missing or does not satisfy the rule.
+6. Sum criterion scores into KRA totals.
+7. Compute the overall score from KRA totals using the official DBM/NBC 461 rules.
+8. Show score brackets and draft rank as advisory only.
 
-The current backend now returns a zero-if-missing score-computation payload, and the employee UI shows live KRA, criterion, total, weighted-score, coverage, and zeroed-panel summaries. The remaining scoring work is to validate the exact official formula against the final documentary-evidence source files and real packets.
+The current backend now returns a zero-if-missing-evidence score-computation payload, and the employee UI shows live KRA, criterion, total, weighted-score, coverage, and zeroed-panel summaries. A score sheet plays no part in this draft - it is only produced after JC evaluation. The remaining scoring work is to validate the exact official formula against the final documentary-evidence source files and real packets.
 
 ## Evaluator Metrics To Add
 

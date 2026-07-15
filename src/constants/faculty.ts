@@ -22,9 +22,23 @@ export const academicRankOptions = [
 
 export const educationalAttainmentOptions = [
   'Doctorate Graduate',
-  'Doctorate Units',
   "Master's",
-  "Bachelor's",
+] as const;
+
+export const collegeDepartmentOptions = [
+  'College of Agriculture',
+  'College of Business Administration and Accountancy',
+  'College of Computer Studies',
+  'College of Fisheries',
+  'College of Teacher Education',
+  'College of Law',
+  'College of Arts and Sciences',
+  'College of Criminal Justice Education',
+  'College of Food, Nutrition and Dietetics',
+  'College of International Hospitality and Tourism Management',
+  'College of Industrial Technology',
+  'College of Engineering',
+  'College of Nursing and Allied Health',
 ] as const;
 
 const academicRankAliases = academicRankOptions.reduce<Record<string, string>>((aliases, rank) => {
@@ -33,7 +47,7 @@ const academicRankAliases = academicRankOptions.reduce<Record<string, string>>((
   return aliases;
 }, {});
 
-const attainmentAliases: Record<string, (typeof educationalAttainmentOptions)[number]> = {
+const attainmentAliases: Record<string, string> = {
   [normalizeKey('Doctorate Graduate')]: 'Doctorate Graduate',
   [normalizeKey('Doctoral Graduate')]: 'Doctorate Graduate',
   [normalizeKey('Doctorate')]: 'Doctorate Graduate',
@@ -62,6 +76,19 @@ export function normalizeEducationalAttainmentOption(value: string | null | unde
   }
 
   return attainmentAliases[normalizeKey(value)] ?? null;
+}
+
+const collegeDepartmentAliases = collegeDepartmentOptions.reduce<Record<string, string>>((aliases, department) => {
+  aliases[normalizeKey(department)] = department;
+  return aliases;
+}, {});
+
+export function normalizeCollegeDepartmentOption(value: string | null | undefined) {
+  if (!value) {
+    return null;
+  }
+
+  return collegeDepartmentAliases[normalizeKey(value)] ?? null;
 }
 
 function normalizeKey(value: string) {

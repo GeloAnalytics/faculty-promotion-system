@@ -1,5 +1,9 @@
 import { z } from 'zod';
-import { normalizeAcademicRankOption, normalizeEducationalAttainmentOption } from '../constants/faculty';
+import {
+  normalizeAcademicRankOption,
+  normalizeEducationalAttainmentOption,
+  normalizeCollegeDepartmentOption,
+} from '../constants/faculty';
 
 const academicRankSchema = z
   .string()
@@ -23,6 +27,14 @@ const optionalAcademicRankSchema = z
   .refine((value) => value === undefined || value !== null, 'Select a valid academic rank')
   .transform((value) => value ?? undefined);
 
+const collegeDepartmentSchema = z
+  .string()
+  .trim()
+  .optional()
+  .transform((value) => (value ? normalizeCollegeDepartmentOption(value) : undefined))
+  .refine((value) => value === undefined || value !== null, 'Select a valid college department')
+  .transform((value) => value ?? undefined);
+
 const employeeIdSchema = z
   .string()
   .trim()
@@ -37,7 +49,7 @@ export const personalDataSchema = z.object({
   academicRank: academicRankSchema,
   yearsInService: z.number().nonnegative().optional(),
   highestEducationalAttainment: educationalAttainmentSchema,
-  department: z.string().trim().optional(),
+  department: collegeDepartmentSchema,
 });
 
 export const promotionHistorySchema = z.object({

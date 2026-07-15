@@ -17,9 +17,9 @@
       <main class="content-grid dashboard-grid dashboard-grid-employee">
         <header class="hero panel panel-wide">
           <p class="eyebrow">Employee Portal</p>
-          <h1 id="workspace-greeting">Upload each KRA score sheet and its matching evidence separately. The system will OCR the documents, sort them into clear KRA sections, and prepare the draft score for review.</h1>
+          <h1 id="workspace-greeting">Upload your documentary evidence for each KRA or criterion. The system will OCR the documents, sort them into clear KRA sections, and prepare the draft score for review.</h1>
           <p class="hero-text">
-            The employee flow is document-first: every KRA or criterion card now has its own score-sheet upload and supporting evidence upload, so the two document types stay separate while still lining up with the same panel.
+            The employee flow is document-first: every KRA or criterion card has its own evidence upload, and the draft score is computed entirely from validated documentary evidence.
           </p>
           <div class="hero-meta">
             <div class="stat-card session-card">
@@ -47,7 +47,7 @@
             </div>
           </div>
           <p class="card-copy">
-            These are the only fields you type in - every KRA score comes from OCR of your uploaded score sheets and evidence instead. Academic rank determines the scoring weights used for your promotion draft.
+            These are the only fields you type in - every KRA score comes from OCR of your uploaded documentary evidence instead. Academic rank determines the scoring weights used for your promotion draft.
           </p>
           <form id="employee-profile-form" class="stack-form">
             <label class="field">
@@ -59,8 +59,8 @@
               <select id="profile-attainment" required></select>
             </label>
             <label class="field">
-              <span>Department</span>
-              <input type="text" id="profile-department" placeholder="e.g. College of Engineering" />
+              <span>College Department</span>
+              <select id="profile-department"></select>
             </label>
             <label class="field">
               <span>Years in Service</span>
@@ -99,7 +99,7 @@
           <div class="panel-heading">
             <div>
               <p class="section-kicker">Upload Workflow</p>
-              <h2>Each KRA or criterion card keeps score-sheet and evidence uploads separate</h2>
+              <h2>Each KRA or criterion card has its own documentary evidence upload</h2>
             </div>
           </div>
           <div id="employee-upload-workflow" class="workflow-grid"></div>
@@ -110,7 +110,7 @@
           <div class="panel-heading">
             <div>
               <p class="section-kicker">Uploaded Files</p>
-              <h2>Stored score sheet and evidence, sorted newest first within each section</h2>
+              <h2>Stored documentary evidence, sorted newest first within each section</h2>
             </div>
           </div>
           <div id="employee-upload-list" class="database-viewer">

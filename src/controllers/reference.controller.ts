@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import pdf from 'pdf-parse';
 import { extractGuidelineReference } from '../utils';
-import { academicRankOptions, educationalAttainmentOptions } from '../constants/faculty';
+import { academicRankOptions, educationalAttainmentOptions, collegeDepartmentOptions } from '../constants/faculty';
 import { uploadPanels } from '../uploadPanels';
 import { tqeReferenceSummary, guidelinePdfPath } from '../config/globals';
 import { getEmployeeUploadWorkflowSummary } from '../uploadWorkflow';
@@ -35,6 +35,7 @@ export const getFacultyOptions = (_req: Request, res: Response) => {
   res.json({
     academicRanks: academicRankOptions,
     educationalAttainments: educationalAttainmentOptions,
+    collegeDepartments: collegeDepartmentOptions,
   });
 };
 

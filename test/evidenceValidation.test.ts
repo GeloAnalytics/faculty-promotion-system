@@ -58,10 +58,10 @@ test('validateEvidencePacket blocks promotion when a required evidence panel is 
   assert.match(result.note, /Incomplete promotion packet/i);
 });
 
-test('validateEvidencePacket requires score sheet and documentary evidence for each required panel', () => {
+test('validateEvidencePacket only requires documentary evidence, not a score sheet, for each required panel', () => {
   const requiredPanelKeys = uploadPanels.filter((panel) => panel.appliesTo === 'ALL_FACULTY').map((panel) => panel.key);
   const missingEvidencePanel = requiredPanelKeys[0];
-  const missingScoreSheetPanel = requiredPanelKeys[1];
+  const noScoreSheetPanel = requiredPanelKeys[1];
 
   const result = validateEvidencePacket({
     requestForm: {
@@ -74,14 +74,16 @@ test('validateEvidencePacket requires score sheet and documentary evidence for e
     },
     uploadedPanelKeys: requiredPanelKeys,
     uploadTypeCounts: {
-      'score-sheet': requiredPanelKeys.length - 1,
+      'score-sheet': 0,
       evidence: requiredPanelKeys.length - 1,
     },
     panelUploadCounts: Object.fromEntries(
       requiredPanelKeys.map((panelKey) => [
         panelKey,
         {
-          scoreSheet: panelKey === missingScoreSheetPanel ? 0 : 1,
+          // No panel has a score sheet - score sheets are only issued after JC
+          // evaluation, so a missing score sheet must never block completeness.
+          scoreSheet: 0,
           evidence: panelKey === missingEvidencePanel ? 0 : 1,
         },
       ]),
@@ -89,8 +91,8 @@ test('validateEvidencePacket requires score sheet and documentary evidence for e
   });
 
   assert.equal(result.status, 'incomplete');
-  assert.deepEqual(result.missingScoreSheetPanelKeys, [missingScoreSheetPanel]);
   assert.deepEqual(result.missingEvidencePanelKeys, [missingEvidencePanel]);
-  assert.match(result.note, /Missing score sheet panel/i);
   assert.match(result.note, /Missing documentary evidence panel/i);
+  // The panel with evidence but no score sheet must not be reported as missing.
+  assert.equal(result.missingPanelKeys.includes(noScoreSheetPanel), false);
 });

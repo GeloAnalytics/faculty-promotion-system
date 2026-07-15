@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.findGuidelinePdfPath = exports.extractGuidelineReference = exports.findClosestTqeBenchmarks = exports.summarizeTqeReferenceData = exports.loadTqeReferenceData = exports.inferPromotionOutcome = exports.runThesisWorkflow = exports.generateRecommendations = exports.compareModels = exports.selectSignificantFeatures = exports.buildFeatureVector = exports.analyzeDocumentContent = exports.extractDocumentInsights = void 0;
+exports.findGuidelinePdfPath = exports.extractGuidelineReference = exports.findClosestTqeBenchmarks = exports.summarizeTqeReferenceData = exports.loadTqeReferenceData = exports.inferPromotionOutcome = exports.generateRecommendations = exports.compareModels = exports.selectSignificantFeatures = exports.analyzeDocumentContent = exports.extractDocumentInsights = void 0;
 exports.inferBestUploadPanelKey = inferBestUploadPanelKey;
 const types_1 = require("./types");
 const uploadPanels_1 = require("./uploadPanels");
@@ -145,28 +145,6 @@ function inferBestUploadPanelKey(text, fallback = 'kra1_teaching_effectiveness')
     }
     return bestScore > 0 ? bestPanelKey : fallback;
 }
-const buildFeatureVector = (payload) => {
-    const attainment = mapEducationalAttainment(payload.personalData.highestEducationalAttainment);
-    const latestPromotionCount = payload.promotionHistory.filter((entry) => entry.promoted).length;
-    const documentCompleteness = payload.documentExtraction?.completenessScore ?? 0;
-    const documentQualityScore = payload.documentExtraction?.qualityScore ?? 0;
-    return {
-        age: normalizeScore(payload.personalData.age, 65),
-        yearsInService: normalizeScore(payload.personalData.yearsInService, 35),
-        highestEducationalAttainmentLevel: attainment,
-        teachingEffectiveness: normalizeScore(payload.performanceReview.teachingEffectiveness ?? payload.documentExtraction?.extractedScores.teachingEffectiveness, 5),
-        researchOutputs: normalizeScore(payload.performanceReview.researchOutputs ?? payload.documentExtraction?.extractedScores.researchOutputs, 20),
-        extensionServices: normalizeScore(payload.performanceReview.extensionServices ?? payload.documentExtraction?.extractedScores.extensionServices, 10),
-        administrativeExperience: normalizeScore(payload.performanceReview.administrativeExperience, 10),
-        professionalDevelopmentHours: normalizeScore(payload.performanceReview.professionalDevelopmentHours ??
-            payload.documentExtraction?.extractedScores.professionalDevelopmentHours, 200),
-        ipcrAverage: normalizeScore(payload.performanceReview.ipcrAverage ?? payload.documentExtraction?.extractedScores.ipcrAverage, 5),
-        promotionHistoryCount: normalizeScore(latestPromotionCount, 5),
-        documentCompleteness,
-        documentQualityScore,
-    };
-};
-exports.buildFeatureVector = buildFeatureVector;
 const selectSignificantFeatures = (features) => {
     const weights = {
         age: 0.45,
@@ -243,18 +221,6 @@ const generateRecommendations = (features, selectedFeatures) => {
     return recommendations;
 };
 exports.generateRecommendations = generateRecommendations;
-const runThesisWorkflow = (payload) => {
-    const features = (0, exports.buildFeatureVector)(payload);
-    const selectedFeatures = (0, exports.selectSignificantFeatures)(features);
-    const modelResults = (0, exports.compareModels)(features);
-    return {
-        selectedFeatures,
-        modelResults,
-        bestModel: modelResults[0],
-        recommendations: (0, exports.generateRecommendations)(features, selectedFeatures),
-    };
-};
-exports.runThesisWorkflow = runThesisWorkflow;
 const inferPromotionOutcome = (features) => {
     const probability = calculateBaseProbability(features);
     return probability >= 0.5;

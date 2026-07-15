@@ -8,6 +8,7 @@ const employeeProfileForm = byId('employee-profile-form');
 const employeeProfileStatus = byId('employee-profile-status');
 const profileAcademicRank = byId('profile-academic-rank');
 const profileAttainment = byId('profile-attainment');
+const profileDepartment = byId('profile-department');
 const employeePoints = byId('employee-points');
 const employeeUploadWorkflow = byId('employee-upload-workflow');
 const employeeUploadStatus = byId('employee-upload-status');
@@ -107,7 +108,7 @@ async function refreshSession() {
           ? `Hello ${data.user.fullName}. Review the uploaded PDFs, verify the OCR output, and confirm the computed score.`
           : portal === 'admin'
             ? `Hello ${data.user.fullName}. Manage accounts and monitor the system.`
-            : `Hello ${data.user.fullName}. Upload each KRA's score sheet and its matching evidence bundle separately so the system can OCR the scores for you.`;
+            : `Hello ${data.user.fullName}. Upload your documentary evidence for each KRA so the system can OCR-verify it for your draft score.`;
     }
     return data;
   } catch (error) {
@@ -121,7 +122,7 @@ async function refreshSession() {
           ? 'Hello. Review the uploaded PDFs and verify the OCR output.'
           : portal === 'admin'
             ? 'Hello. Manage accounts and monitor the system.'
-            : 'Hello. Upload each KRA score sheet and matching evidence bundle separately.';
+            : 'Hello. Upload your documentary evidence for each KRA.';
     }
     return null;
   }
@@ -147,7 +148,7 @@ async function loadEmployeeWorkspace() {
   );
   renderEmployeeUploads(employeeDashboard?.uploads || []);
   renderEmployeeProfileForm(facultyOptions, employeeDashboard?.latestProfile?.baselineData?.personalData);
-  setNotice(employeeUploadStatus, 'Upload each score sheet separately from its matching evidence bundle. PDFs can be previewed inside the portal.');
+  setNotice(employeeUploadStatus, 'Upload your documentary evidence for each panel. PDFs can be previewed inside the portal.');
 }
 
 async function loadEvaluatorWorkspace() {
@@ -212,11 +213,12 @@ function renderEmployeeProfileForm(facultyOptions, personalData) {
 
   populateSelectOptions(profileAcademicRank, facultyOptions?.academicRanks || []);
   populateSelectOptions(profileAttainment, facultyOptions?.educationalAttainments || []);
+  populateSelectOptions(profileDepartment, facultyOptions?.collegeDepartments || [], { includeBlank: 'Select college department' });
 
   if (personalData) {
     setSelectValue(profileAcademicRank, personalData.academicRank);
     setSelectValue(profileAttainment, personalData.highestEducationalAttainment);
-    setInputValue('profile-department', personalData.department);
+    setSelectValue(profileDepartment, personalData.department);
     setInputValue('profile-years-in-service', personalData.yearsInService);
     setInputValue('profile-age', personalData.age);
     setInputValue('profile-sex', personalData.sex);
@@ -227,12 +229,13 @@ function renderEmployeeProfileForm(facultyOptions, personalData) {
   }
 }
 
-function populateSelectOptions(select, options) {
+function populateSelectOptions(select, options, { includeBlank } = {}) {
   if (!select) {
     return;
   }
   const previousValue = select.value;
-  select.innerHTML = options.map((option) => `<option value="${escapeHtml(option)}">${escapeHtml(option)}</option>`).join('');
+  const blankOption = includeBlank ? `<option value="">${escapeHtml(includeBlank)}</option>` : '';
+  select.innerHTML = blankOption + options.map((option) => `<option value="${escapeHtml(option)}">${escapeHtml(option)}</option>`).join('');
   if (previousValue) {
     select.value = previousValue;
   }
@@ -260,7 +263,7 @@ async function handleEmployeeProfileSubmit(event) {
     fullName: currentUser?.fullName || '',
     academicRank: profileAcademicRank?.value || '',
     highestEducationalAttainment: profileAttainment?.value || '',
-    department: byId('profile-department')?.value || undefined,
+    department: profileDepartment?.value || undefined,
     yearsInService: numberOrUndefined(byId('profile-years-in-service')?.value),
     age: numberOrUndefined(byId('profile-age')?.value),
     sex: byId('profile-sex')?.value || undefined,
@@ -292,7 +295,7 @@ function renderEmployeeSummary(dashboard) {
   const draftPoints = dashboard?.latestProfile?.draftPoints;
   if (!draftPoints) {
     employeePoints.innerHTML = `
-      <div class="notice">Upload the score sheet and evidence bundle to generate an OCR-backed summary.</div>
+      <div class="notice">Upload your evidence bundle to generate an OCR-backed summary.</div>
     `;
     return;
   }
@@ -300,7 +303,6 @@ function renderEmployeeSummary(dashboard) {
   const evidenceCoverage = draftPoints.evidenceCoverage || {};
   const promotionDraft = draftPoints.promotionDraft || {};
   const scoreComputation = draftPoints.scoreComputation || {};
-  const zeroedPanelCount = Number(scoreComputation.zeroedPanelCount || 0);
   const evidenceScore = formatOptionalNumber(scoreComputation.weightedScore, formatNumber(scoreComputation.rawTotal));
   const panelCoverage = `${evidenceCoverage.uploadedPanelCount ?? 0}/${evidenceCoverage.expectedPanelCount ?? 0}`;
 
@@ -321,7 +323,6 @@ function renderEmployeeSummary(dashboard) {
         <div class="scoreboard-chip-row">
           <span class="scoreboard-chip" data-tone="${scoreComputation.status === 'complete' ? 'ready' : 'pending'}">${escapeHtml(scoreComputation.status || 'pending')}</span>
           <span class="scoreboard-chip">${escapeHtml(panelCoverage)} panels</span>
-          <span class="scoreboard-chip">${escapeHtml(String(zeroedPanelCount))} zeroed</span>
         </div>
       </div>
 
@@ -360,9 +361,8 @@ function renderEmployeeNotifications(draftPoints) {
   }
 
   const missingEvidencePanels = coverage.missingEvidencePanels || [];
-  const missingScoreSheetPanels = coverage.missingScoreSheetPanels || [];
-  
-  if (missingEvidencePanels.length === 0 && missingScoreSheetPanels.length === 0) {
+
+  if (missingEvidencePanels.length === 0) {
     return '';
   }
 
@@ -370,10 +370,9 @@ function renderEmployeeNotifications(draftPoints) {
     <section class="employee-notification-panel warning">
       <div class="notification-header">
         <h3>⚠️ Action Required: Missing Requirements</h3>
-        <p>The system zeroed some KRA panels because the required OCR-verified evidence or score sheet is missing.</p>
+        <p>The system zeroed some KRA panels because the required OCR-verified documentary evidence is missing.</p>
       </div>
       <ul class="notification-list">
-        ${missingScoreSheetPanels.map(p => `<li class="notification-item"><span class="notification-tag">Needs Score Sheet</span> ${escapeHtml(p)}</li>`).join('')}
         ${missingEvidencePanels.map(p => `<li class="notification-item"><span class="notification-tag">Needs Evidence</span> ${escapeHtml(p)}</li>`).join('')}
       </ul>
     </section>
@@ -384,7 +383,7 @@ function renderScoreboardKraSections(scoreComputation) {
   const sections = Array.isArray(scoreComputation?.kraSections) ? scoreComputation.kraSections : [];
 
   if (!sections.length) {
-    return '<div class="notice">Scores will update after the first score sheet and evidence upload.</div>';
+    return '<div class="notice">Scores will update after your first evidence upload.</div>';
   }
 
   return sections.map(renderScoreboardKraSection).join('');
@@ -442,9 +441,8 @@ function renderEmployeeWorkflow(workflowItems, uploads, scoreComputation = null)
 
   const groupedPanels = groupPanelsByKra(workflowItems);
   const uploadedMap = buildUploadTypeCounts(uploads);
-  const scoreSheetCount = Number(uploadedMap['score-sheet'] || 0);
   const evidenceCount = Number(uploadedMap['evidence'] || 0);
-  const completedPanels = workflowItems.filter((panel) => hasPanelUpload(panel.key, uploads, 'score-sheet') && hasPanelUpload(panel.key, uploads, 'evidence')).length;
+  const completedPanels = workflowItems.filter((panel) => hasPanelUpload(panel.key, uploads, 'evidence')).length;
   const progressPct = workflowItems.length ? Math.round((completedPanels / workflowItems.length) * 100) : 0;
 
   employeeUploadWorkflow.innerHTML = `
@@ -458,14 +456,11 @@ function renderEmployeeWorkflow(workflowItems, uploads, scoreComputation = null)
       </div>
     </div>
     <p class="workflow-intro">
-      Each KRA and criterion card keeps the score sheet and evidence uploads separate.
-      Upload the score sheet first when you have it, then attach the supporting evidence for the same panel.
+      Upload the supporting documentary evidence for each KRA or criterion. The draft score is computed from validated evidence alone.
     </p>
     <div class="workflow-summary-row">
-      <span class="workflow-summary-chip">Score sheets: ${scoreSheetCount}</span>
       <span class="workflow-summary-chip">Evidence files: ${evidenceCount}</span>
       <span class="workflow-summary-chip">Panels tracked: ${workflowItems.length}</span>
-      <span class="workflow-summary-chip">Zeroed panels: ${Number(scoreComputation?.zeroedPanelCount || 0)}</span>
     </div>
     ${groupedPanels
       .map(([kraTitle, items]) => renderEmployeeUploadGroup(kraTitle, items, uploads, scoreComputation))
@@ -478,7 +473,7 @@ function renderEmployeeWorkflow(workflowItems, uploads, scoreComputation = null)
 }
 
 function renderEmployeeUploadGroup(kraTitle, items, uploads, scoreComputation) {
-  const completedCount = items.filter((panel) => hasPanelUpload(panel.key, uploads, 'score-sheet') && hasPanelUpload(panel.key, uploads, 'evidence')).length;
+  const completedCount = items.filter((panel) => hasPanelUpload(panel.key, uploads, 'evidence')).length;
   const groupComplete = completedCount === items.length && items.length > 0;
 
   return `
@@ -486,7 +481,7 @@ function renderEmployeeUploadGroup(kraTitle, items, uploads, scoreComputation) {
       <summary class="upload-group-summary">
         <div class="upload-group-heading">
           <h3>${escapeHtml(kraTitle)}</h3>
-          <p class="card-copy">Score sheets and evidence bundles are uploaded separately for each criterion in this KRA.</p>
+          <p class="card-copy">Documentary evidence is uploaded separately for each criterion in this KRA.</p>
         </div>
         <span class="kra-progress-chip${groupComplete ? ' kra-progress-done' : ''}">
           ${groupComplete ? 'Complete' : `${completedCount}/${items.length} panels ready`}
@@ -501,9 +496,8 @@ function renderEmployeeUploadGroup(kraTitle, items, uploads, scoreComputation) {
 
 function renderEmployeeUploadCard(panel, uploads, scoreComputation) {
   const accept = Array.isArray(panel.acceptedFormats) ? panel.acceptedFormats.map((ext) => `.${ext}`).join(',') : '';
-  const scoreSheetCount = getPanelUploadCount(panel.key, uploads, 'score-sheet');
   const evidenceCount = getPanelUploadCount(panel.key, uploads, 'evidence');
-  const panelComplete = scoreSheetCount > 0 && evidenceCount > 0;
+  const panelComplete = evidenceCount > 0;
   const computedScorePanel = scoreComputation?.kraSections?.flatMap(k => k.panels)?.find(p => p.key === panel.key) || null;
   const computedScore = getPanelComputedScore(scoreComputation, panel.key);
 
@@ -515,9 +509,6 @@ function renderEmployeeUploadCard(panel, uploads, scoreComputation) {
           <p class="card-copy">${escapeHtml(panel.description)}</p>
         </div>
         <div class="upload-card-badges">
-          <span class="upload-status-badge" data-status="${scoreSheetCount > 0 ? 'uploaded' : 'pending'}">
-            ${scoreSheetCount > 0 ? `${scoreSheetCount} score sheet${scoreSheetCount === 1 ? '' : 's'}` : 'Score sheet pending'}
-          </span>
           <span class="upload-status-badge" data-status="${evidenceCount > 0 ? 'uploaded' : 'pending'}">
             ${evidenceCount > 0 ? `${evidenceCount} evidence file${evidenceCount === 1 ? '' : 's'}` : 'Evidence pending'}
           </span>
@@ -526,19 +517,8 @@ function renderEmployeeUploadCard(panel, uploads, scoreComputation) {
       </div>
       ${panel.audienceLabel ? `<p class="upload-audience-chip">${escapeHtml(panel.audienceLabel)}</p>` : ''}
       ${renderComputedPanelScore(computedScore, panel.maxScore)}
-      ${computedScore?.status === 'missing-evidence' ? '<div class="notice" style="color:var(--color-danger)">Mismatch: Score sheet uploaded but documentary evidence is missing. Score cannot be counted.</div>' : ''}
-      ${computedScore?.status === 'missing-score-sheet' ? '<div class="notice" style="color:var(--color-warning)">Missing score sheet. Please upload to compute the score.</div>' : ''}
+      ${computedScore?.status === 'missing-evidence' ? '<div class="notice" style="color:var(--color-danger)">Missing documentary evidence. This panel cannot be counted until validated evidence is uploaded.</div>' : ''}
       <div class="upload-variant-grid">
-        ${renderUploadVariantForm({
-          panelKey: panel.key,
-          uploadType: 'score-sheet',
-          title: 'Score Sheet Upload',
-          helper: 'One file only. This is the KRA or criterion score sheet.',
-          buttonLabel: 'Upload Score Sheet',
-          accept,
-          multiple: false,
-          count: scoreSheetCount,
-        })}
         ${renderUploadVariantForm({
           panelKey: panel.key,
           uploadType: 'evidence',
@@ -583,7 +563,6 @@ function renderEmployeeUploads(uploads) {
   const orderedUploads = sortUploadsForDisplay(uploads);
   const grouped = groupEmployeeUploads(orderedUploads);
   const groupOrder = [
-    'Score Sheet',
     'KRA I - Instruction',
     'KRA II - Research, Innovation and Creative Work',
     'KRA III - Extension Services',
@@ -597,21 +576,19 @@ function renderEmployeeUploads(uploads) {
   }
 
   const latestUpload = orderedUploads[0];
-  const scoreSheetCount = orderedUploads.filter((upload) => upload.metadata?.uploadType === 'score-sheet').length;
   const evidenceCount = orderedUploads.filter((upload) => upload.metadata?.uploadType === 'evidence').length;
-  const legacyCount = orderedUploads.length - scoreSheetCount - evidenceCount;
+  const legacyCount = orderedUploads.length - evidenceCount;
 
   employeeUploadList.innerHTML = `
     <div class="uploaded-files-ledger-summary">
       <div class="database-counts ledger-counts">
         ${renderLedgerStatCard('Total uploads', String(orderedUploads.length))}
-        ${renderLedgerStatCard('Score sheets', String(scoreSheetCount))}
         ${renderLedgerStatCard('Evidence files', String(evidenceCount))}
         ${renderLedgerStatCard('Legacy files', String(legacyCount))}
         ${renderLedgerStatCard('Latest upload', formatDate(latestUpload.createdAt))}
       </div>
       <p class="uploaded-files-ledger-note">
-        Files are sorted with the newest upload first inside each section. Score sheets appear before evidence, then any legacy or unassigned files.
+        Files are sorted with the newest upload first inside each KRA section.
       </p>
       ${groupOrder
         .filter((type) => grouped[type] && grouped[type].length)
@@ -641,10 +618,6 @@ function renderUploadGroup(label, groupUploads) {
 }
 
 function getUploadGroupSubheading(label, count) {
-  if (label === 'Score Sheet') {
-    return count === 1 ? 'Score sheet grouped by KRA and criterion' : 'Score sheets grouped by KRA and criterion';
-  }
-
   if (label === 'Unassigned / Legacy') {
     return 'Legacy uploads or files without a detected KRA';
   }
@@ -654,7 +627,6 @@ function getUploadGroupSubheading(label, count) {
 
 function groupEmployeeUploads(uploads) {
   const groups = {
-    'Score Sheet': [],
     'KRA I - Instruction': [],
     'KRA II - Research, Innovation and Creative Work': [],
     'KRA III - Extension Services': [],
@@ -672,10 +644,6 @@ function groupEmployeeUploads(uploads) {
 }
 
 function getEmployeeUploadGroupLabel(upload) {
-  if (upload.metadata?.uploadType === 'score-sheet') {
-    return 'Score Sheet';
-  }
-
   const kraLabel = getKraLabel(upload.metadata?.panelKey);
   if (kraLabel) {
     return kraLabel;
@@ -705,10 +673,6 @@ function sortUploadsForDisplay(uploads) {
 }
 
 function getUploadSortPriority(upload) {
-  if (upload.metadata?.uploadType === 'score-sheet') {
-    return 0;
-  }
-
   const kraLabel = getKraLabel(upload.metadata?.panelKey);
   if (kraLabel === 'KRA I - Instruction') {
     return 1;
@@ -754,7 +718,6 @@ function renderEvaluatorDocumentLibrary(items) {
 
   const latestDocument = documents[0];
   const employeeCount = new Set(documents.map((document) => document.profileId)).size;
-  const scoreSheetCount = documents.filter((document) => document.uploadType === 'score-sheet').length;
   const kraCount = new Set(
     documents
       .map((document) => document.kraLabel)
@@ -772,7 +735,6 @@ function renderEvaluatorDocumentLibrary(items) {
       <div class="database-counts ledger-counts">
         ${renderLedgerStatCard('Documents', String(documents.length))}
         ${renderLedgerStatCard('Employees', String(employeeCount))}
-        ${renderLedgerStatCard('Score sheets', String(scoreSheetCount))}
         ${renderLedgerStatCard('Latest upload', formatDate(latestDocument.createdAt))}
       </div>
       <p class="uploaded-files-ledger-note">
@@ -892,9 +854,6 @@ function renderEvaluatorInsights(items) {
   }
 
   const totalRecords = items.length;
-  const evaluatorBackedCount = items.filter((item) => item.latestTrainingItem).length;
-  const totalUploads = items.reduce((sum, item) => sum + (Array.isArray(item.uploadLogs) ? item.uploadLogs.length : 0), 0);
-  const zeroedPanels = items.reduce((sum, item) => sum + Number(item.draftPoints?.scoreComputation?.zeroedPanelCount ?? 0), 0);
   const averageEvidenceScore = totalRecords
     ? Math.round(
         (items.reduce(
@@ -917,7 +876,6 @@ function renderEvaluatorInsights(items) {
   const needsReviewCount = items.filter((item) => Number(item.draftPoints?.scoreComputation?.zeroedPanelCount ?? 0) > 0).length;
   const incompleteCount = items.filter((item) => item.draftPoints?.evidenceCoverage?.validationStatus === 'incomplete' && Number(item.draftPoints?.scoreComputation?.zeroedPanelCount ?? 0) === 0).length;
 
-  const totalScoreSheets = items.reduce((sum, item) => sum + (Array.isArray(item.uploadLogs) ? item.uploadLogs.filter(u => u.metadata?.uploadType === 'score-sheet').length : 0), 0);
   const totalEvidenceFiles = items.reduce((sum, item) => sum + (Array.isArray(item.uploadLogs) ? item.uploadLogs.filter(u => u.metadata?.uploadType === 'evidence').length : 0), 0);
 
   const missingPanelCounts = {};
@@ -940,17 +898,13 @@ function renderEvaluatorInsights(items) {
   });
 
   evaluatorInsights.innerHTML = `
-    <div class="insight-stat-grid" style="grid-template-columns: repeat(5, minmax(0, 1fr)); margin-bottom: 24px;">
+    <div class="insight-stat-grid">
       ${renderInsightStatCard('Queue records', String(totalRecords))}
       ${renderInsightStatCard('Complete packets', String(completeCount))}
       ${renderInsightStatCard('Needs attention', String(needsReviewCount))}
-      ${renderInsightStatCard('Score sheets', String(totalScoreSheets))}
       ${renderInsightStatCard('Evidence files', String(totalEvidenceFiles))}
-      ${renderInsightStatCard('Zeroed panels', String(zeroedPanels))}
       ${renderInsightStatCard('Avg evidence score', `${averageEvidenceScore}`)}
       ${renderInsightStatCard('Avg coverage', `${averageCoverage}%`)}
-      ${renderInsightStatCard('Total uploads', String(totalUploads))}
-      ${renderInsightStatCard('Evaluator-backed', String(evaluatorBackedCount))}
     </div>
     
     <div class="insight-chart-grid">
@@ -1035,13 +989,11 @@ function renderReviewCard(item) {
           <strong>${escapeHtml(item.name || 'Unnamed employee')}</strong>
           <span class="review-rank-chip">${escapeHtml(item.employeeId || 'No Employee ID')}</span>
         </div>
-        <span class="training-example-status">${escapeHtml(item.latestTrainingItem ? 'Evaluator-backed' : 'Pending') }</span>
       </div>
       <div class="review-card-meta">
         <span class="review-meta-chip">Submitted by ${escapeHtml(item.createdBy?.fullName || '-')}</span>
         <span class="review-meta-chip">Cycle ${escapeHtml(item.cycleData?.performanceReview?.reviewPeriod || item.semester || 'Current cycle')}</span>
         <span class="review-meta-chip">Evidence score ${escapeHtml(evidenceScore)}</span>
-        <span class="review-meta-chip">Zeroed panels ${escapeHtml(String(scoreComputation.zeroedPanelCount ?? 0))}</span>
         <span class="review-meta-chip">${escapeHtml(String(uploads.length))} file(s)</span>
       </div>
       <div class="review-card-metrics">
@@ -1051,7 +1003,7 @@ function renderReviewCard(item) {
         ${renderReviewMetric('Evaluator total', formatOptionalNumber(latestTraining?.totalScore, 'Pending'))}
       </div>
       ${draftPoints.note ? `<p class="card-copy review-card-note">${escapeHtml(draftPoints.note)}</p>` : ''}
-      <p class="card-copy">${escapeHtml(scoreComputation.note || 'Missing scores or evidence are counted as 0 for the computed score.')}</p>
+      <p class="card-copy">${escapeHtml(scoreComputation.note || 'Missing evidence is counted as 0 for the computed score.')}</p>
       <div class="uploaded-files-group">
         <div class="uploaded-files-group-header">
           <h3>Uploaded documents</h3>
@@ -1208,15 +1160,17 @@ function renderRequestForm(item) {
       <div class="card-header">
         <h3>${escapeHtml(item.name || 'Unnamed employee')} - Request Form</h3>
       </div>
-      <table class="table">
-        <tbody>
-          <tr><th>Full Name</th><td>${escapeHtml(requestForm.fullName || 'N/A')}</td></tr>
-          <tr><th>Employee ID</th><td>${escapeHtml(requestForm.employeeId || 'N/A')}</td></tr>
-          <tr><th>Academic Rank</th><td>${escapeHtml(requestForm.academicRank || 'N/A')}</td></tr>
-          <tr><th>Highest Educational Attainment</th><td>${escapeHtml(requestForm.highestEducationalAttainment || 'N/A')}</td></tr>
-          <tr><th>Review Period</th><td>${escapeHtml(requestForm.reviewPeriod || 'N/A')}</td></tr>
-        </tbody>
-      </table>
+      <div class="table-scroll">
+        <table class="table">
+          <tbody>
+            <tr><th>Full Name</th><td>${escapeHtml(requestForm.fullName || 'N/A')}</td></tr>
+            <tr><th>Employee ID</th><td>${escapeHtml(requestForm.employeeId || 'N/A')}</td></tr>
+            <tr><th>Academic Rank</th><td>${escapeHtml(requestForm.academicRank || 'N/A')}</td></tr>
+            <tr><th>Highest Educational Attainment</th><td>${escapeHtml(requestForm.highestEducationalAttainment || 'N/A')}</td></tr>
+            <tr><th>Review Period</th><td>${escapeHtml(requestForm.reviewPeriod || 'N/A')}</td></tr>
+          </tbody>
+        </table>
+      </div>
     </article>
   `;
 }
@@ -1230,37 +1184,39 @@ function renderSummarySheet(item) {
       <div class="card-header">
         <h3>${escapeHtml(item.name || 'Unnamed employee')} - Summary Sheet</h3>
       </div>
-      <table class="table">
-        <thead>
-          <tr>
-            <th>KRA / Criterion</th>
-            <th>Max Score</th>
-            <th>System Score</th>
-            <th>Evaluator Validated</th>
-            <th>Status</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${kraSections.map(kra => `
-            <tr class="table-row-kra">
-              <td colspan="5"><strong>${escapeHtml(kra.title)}</strong> (Max: ${kra.maxScore}) - Faculty Total: ${kra.facultyScore}, Validated Total: ${kra.validatedScore}</td>
+      <div class="table-scroll">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>KRA / Criterion</th>
+              <th>Max Score</th>
+              <th>System Score</th>
+              <th>Evaluator Validated</th>
+              <th>Status</th>
             </tr>
-            ${kra.criteria.map(crit => `
-              <tr class="${crit.status === 'needs-review' ? 'table-row-warning' : ''}">
-                <td>${escapeHtml(crit.title)}</td>
-                <td>${crit.maxScore}</td>
-                <td>${crit.facultyScore ?? '0'}</td>
-                <td>${crit.validatedScore ?? 'Pending'}</td>
-                <td>
-                  <span class="badge badge-${crit.status === 'needs-review' ? 'danger' : crit.status === 'matched' ? 'success' : 'neutral'}">
-                    ${escapeHtml(crit.status)}
-                  </span>
-                </td>
+          </thead>
+          <tbody>
+            ${kraSections.map(kra => `
+              <tr class="table-row-kra">
+                <td colspan="5"><strong>${escapeHtml(kra.title)}</strong> (Max: ${kra.maxScore}) - Faculty Total: ${kra.facultyScore}, Validated Total: ${kra.validatedScore}</td>
               </tr>
+              ${kra.criteria.map(crit => `
+                <tr class="${crit.status === 'needs-review' ? 'table-row-warning' : ''}">
+                  <td>${escapeHtml(crit.title)}</td>
+                  <td>${crit.maxScore}</td>
+                  <td>${crit.facultyScore ?? '0'}</td>
+                  <td>${crit.validatedScore ?? 'Pending'}</td>
+                  <td>
+                    <span class="badge badge-${crit.status === 'needs-review' ? 'danger' : crit.status === 'matched' ? 'success' : 'neutral'}">
+                      ${escapeHtml(crit.status)}
+                    </span>
+                  </td>
+                </tr>
+              `).join('')}
             `).join('')}
-          `).join('')}
-        </tbody>
-      </table>
+          </tbody>
+        </table>
+      </div>
     </article>
   `;
 }
@@ -1302,7 +1258,7 @@ function renderComputedPanelScore(computedScore, fallbackMaxScore) {
       <div class="upload-score-preview" data-status="pending">
         <span>Computed score</span>
         <strong>0 / ${escapeHtml(String(fallbackMaxScore))}</strong>
-        <small>Upload a readable score sheet and evidence to count this panel.</small>
+        <small>Upload validated documentary evidence to count this panel.</small>
       </div>
     `;
   }
@@ -1323,16 +1279,10 @@ function formatScoreWithMax(score, maxScore) {
 
 function getComputedStatusLabel(status) {
   if (status === 'counted') {
-    return 'Counted toward the official evidence-based score.';
-  }
-  if (status === 'missing-score-sheet') {
-    return 'Score sheet missing. This panel is counted as 0.';
+    return 'Counted at full marks toward the evidence-based draft score.';
   }
   if (status === 'missing-evidence') {
     return 'Supporting evidence missing. This panel is counted as 0.';
-  }
-  if (status === 'missing-score') {
-    return 'No score detected. This panel is counted as 0.';
   }
   return 'Not required for the base packet.';
 }

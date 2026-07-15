@@ -5,8 +5,8 @@ export type AppUserRole = 'ADMIN' | 'EMPLOYEE' | 'EVALUATOR';
 export type UploadDocumentKind = 'REQUIREMENT' | 'GUIDELINE' | 'TRAINING_SUPPORT';
 export type TrainingStatus = 'DRAFT' | 'LABELED' | 'VALIDATED';
 export type EmployeeUploadType = 'score-sheet' | 'evidence' | 'legacy';
-export type UploadPanelKey = 'kra1_teaching_effectiveness' | 'kra1_curriculum_instructional_materials' | 'kra1_thesis_dissertation_mentorship' | 'kra2_research_outputs' | 'kra2_inventions' | 'kra2_creative_works' | 'kra3_service_to_institution' | 'kra3_service_to_community' | 'kra3_extension_involvement' | 'kra4_professional_organizations' | 'kra4_continuing_development' | 'kra4_awards_recognition' | 'kra4_academic_experience' | 'kra4_industry_experience';
-export type UploadPanelAudience = 'ALL_FACULTY' | 'NEW_ENTRANTS_ONLY';
+export type UploadPanelKey = 'kra1_teaching_effectiveness' | 'kra1_curriculum_instructional_materials' | 'kra1_thesis_dissertation_mentorship' | 'kra2_research_outputs' | 'kra2_inventions' | 'kra2_creative_works' | 'kra3_service_to_institution' | 'kra3_service_to_community' | 'kra3_extension_involvement' | 'kra3_administrative_designation' | 'kra4_professional_organizations' | 'kra4_continuing_development' | 'kra4_awards_recognition' | 'kra4_academic_experience' | 'kra4_industry_experience';
+export type UploadPanelAudience = 'ALL_FACULTY' | 'NEW_ENTRANTS_ONLY' | 'ADMIN_DESIGNATION_ONLY';
 export interface PersonalData {
     employeeId?: string;
     fullName: string;
@@ -81,9 +81,7 @@ export interface EmployeeUploadWorkflowItem {
 }
 export interface FacultyIngestionPayload {
     personalData: PersonalData;
-    performanceReview: PerformanceReview;
     promotionHistory: PromotionHistoryEntry[];
-    documentExtraction?: DocumentExtractionResult;
     notes?: string;
 }
 export interface FeatureSelectionResult {
@@ -159,6 +157,7 @@ export interface SessionUser {
     id: string;
     email: string;
     fullName: string;
+    employeeId: string | null;
     role: AppUserRole;
 }
 export interface AuthResponse {
@@ -194,7 +193,7 @@ export type ProfileLinkCandidate = {
 };
 export type ProfileLinkResult = {
     profileId: string | null;
-    matchedBy: 'explicit' | 'filename' | 'unmatched';
+    matchedBy: 'explicit' | 'filename' | 'sole-profile' | 'auto-created' | 'unmatched';
     matchedName: string | null;
     matchedEmployeeId: string | null;
 };

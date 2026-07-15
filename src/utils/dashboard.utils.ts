@@ -44,7 +44,7 @@ type ComputedPanelScore = {
   scoreSheetCount: number;
   evidenceCount: number;
   required: boolean;
-  status: 'counted' | 'missing-score-sheet' | 'missing-evidence' | 'missing-score' | 'optional';
+  status: 'counted' | 'missing-evidence' | 'optional';
   note: string;
 };
 
@@ -57,7 +57,7 @@ type ComputedKraScore = {
 };
 
 type EvidenceBasedScoreComputation = {
-  policy: 'zero-if-missing-score-or-evidence';
+  policy: 'zero-if-missing-evidence';
   status: 'complete' | 'incomplete';
   currentRank: string | null;
   rawTotal: number;
@@ -73,9 +73,7 @@ type EvidenceBasedScoreComputation = {
   panelScores: ComputedPanelScore[];
   countedPanelCount: number;
   zeroedPanelCount: number;
-  missingScoreSheetPanels: string[];
   missingEvidencePanels: string[];
-  missingScorePanels: string[];
   note: string;
 };
 
@@ -343,6 +341,11 @@ export function buildDraftPointSummary(
     latestEvaluation?.status ?? null,
   );
   const evidenceAwarePromotionDraft = applyEvidenceValidationToPromotionDraft(promotionDraft, evidenceValidation);
+  const evidenceBasedPanelScoreByKey = new Map<UploadPanelKey, number>(
+    scoreComputation.panelScores
+      .filter((panel) => panel.status === 'counted')
+      .map((panel) => [panel.key, panel.usedScore]),
+  );
 
   return {
     note: evidenceValidation.status === 'complete'
@@ -370,7 +373,6 @@ export function buildDraftPointSummary(
       workflowCoveragePercent: roundScore(coverage * 100),
       validationStatus: evidenceValidation.status,
       missingPanels: evidenceValidation.missingPanelTitles,
-      missingScoreSheetPanels: evidenceValidation.missingScoreSheetPanelTitles,
       missingEvidencePanels: evidenceValidation.missingEvidencePanelTitles,
       missingRequestFields: evidenceValidation.missingRequestFields,
     },
@@ -380,7 +382,7 @@ export function buildDraftPointSummary(
       semester: profile?.semester ?? null,
       highestEducationalAttainment,
       currentRank,
-      panelScoreByKey,
+      panelScoreByKey: evidenceBasedPanelScoreByKey,
       panelEvidenceCount,
       approximateKraTotals,
       approximateOutcome: preliminaryOutcome,
@@ -1310,21 +1312,15 @@ function buildEvidenceBasedScoreComputation(args: {
     const counts = args.panelUploadTypeCounts.get(panel.key) ?? { scoreSheet: 0, evidence: 0 };
     const detectedScore = readOptionalNumber(args.panelScoreByKey.get(panel.key));
     const required = panel.appliesTo === 'ALL_FACULTY';
-    const hasScoreSheet = counts.scoreSheet > 0;
     const panelKeywordsSet = args.panelKeywords.get(panel.key as UploadPanelKey) ?? new Set<string>();
     const hasEvidence = counts.evidence > 0 && validatePanelEvidence(panel.key, Array.from(panelKeywordsSet));
-    const hasDetectedScore = detectedScore !== null;
-    const canCount = hasScoreSheet && hasEvidence && hasDetectedScore;
-    const usedScore = canCount ? Math.min(panel.maxScore, Math.max(0, detectedScore)) : 0;
+    const canCount = hasEvidence;
+    const usedScore = canCount ? panel.maxScore : 0;
     const status: ComputedPanelScore['status'] = canCount
       ? 'counted'
-      : !required && !hasScoreSheet && !hasEvidence
+      : !required && counts.evidence === 0
         ? 'optional'
-        : !hasScoreSheet
-          ? 'missing-score-sheet'
-          : !hasEvidence
-            ? 'missing-evidence'
-            : 'missing-score';
+        : 'missing-evidence';
 
     return {
       key: panel.key,
@@ -1355,18 +1351,12 @@ function buildEvidenceBasedScoreComputation(args: {
   const weightedScore = weightProfile ? computeWeightedScore(kraTotals, weightProfile.weights) : null;
   const countedPanelCount = panelScores.filter((panel) => panel.status === 'counted').length;
   const zeroedPanelCount = panelScores.filter((panel) => panel.required && panel.usedScore === 0).length;
-  const missingScoreSheetPanels = panelScores
-    .filter((panel) => panel.required && panel.status === 'missing-score-sheet')
-    .map((panel) => panel.title);
   const missingEvidencePanels = panelScores
     .filter((panel) => panel.required && panel.status === 'missing-evidence')
     .map((panel) => panel.title);
-  const missingScorePanels = panelScores
-    .filter((panel) => panel.required && panel.status === 'missing-score')
-    .map((panel) => panel.title);
 
   return {
-    policy: 'zero-if-missing-score-or-evidence',
+    policy: 'zero-if-missing-evidence',
     status: args.evidenceValidation.status,
     currentRank: args.currentRank,
     rawTotal,
@@ -1377,13 +1367,11 @@ function buildEvidenceBasedScoreComputation(args: {
     panelScores,
     countedPanelCount,
     zeroedPanelCount,
-    missingScoreSheetPanels,
     missingEvidencePanels,
-    missingScorePanels,
     note:
       args.evidenceValidation.status === 'complete'
-        ? 'Evidence-based score counts only panels with a detected score sheet value and supporting evidence.'
-        : 'Missing required score sheets, detected scores, or evidence are counted as 0 until completed.',
+        ? 'Evidence-based draft score awards each panel full marks once its required documentary evidence is validated. Score sheets are not available until after JC evaluation, so they play no part in this draft.'
+        : 'Panels without validated supporting evidence are counted as 0 until the required documentary evidence is uploaded.',
   };
 }
 
@@ -1424,18 +1412,12 @@ function getWeightProfileForRank(rank: string | null) {
 
 function getComputedPanelScoreNote(status: ComputedPanelScore['status']) {
   if (status === 'counted') {
-    return 'Detected score and supporting evidence are present; this panel is counted.';
-  }
-  if (status === 'missing-score-sheet') {
-    return 'No score sheet is uploaded for this panel, so the computed score is 0.';
+    return 'Validated supporting evidence is present; this panel is counted at full marks for the draft.';
   }
   if (status === 'missing-evidence') {
     return 'Supporting evidence is missing for this panel, so the computed score is 0.';
   }
-  if (status === 'missing-score') {
-    return 'A score sheet is uploaded, but no panel score was detected, so the computed score is 0.';
-  }
-  return 'Optional panel has no submitted score/evidence and is not required for the base packet.';
+  return 'Optional panel has no submitted evidence and is not required for the base packet.';
 }
 
 function applyEvidenceValidationToPromotionDraft(

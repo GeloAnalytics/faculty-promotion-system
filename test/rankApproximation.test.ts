@@ -179,7 +179,7 @@ test('workbook mirror follows the reference workbook naming and parses request f
   assert.equal(draftPoints.workbookMirror.summarySheet.scoreBracket, draftPoints.promotionDraft.scoreBracket);
 });
 
-test('evidence-based score computation falls back to 0 when score sheets or evidence are missing', () => {
+test('evidence-based score computation falls back to 0 when required evidence is missing or unvalidated', () => {
   const draftPoints = buildDraftPointSummary(
     {
       features: {
@@ -197,6 +197,9 @@ test('evidence-based score computation falls back to 0 when score sheets or evid
     [
       {
         extractionMetadata: {
+          // A score sheet alone - with no matching evidence upload - must not
+          // count, since score sheets are only issued after JC evaluation and
+          // play no part in this pre-JC draft.
           uploadType: 'score-sheet',
           panelKey: 'kra1_teaching_effectiveness',
           panelTitle: 'Teaching Effectiveness',
@@ -209,11 +212,14 @@ test('evidence-based score computation falls back to 0 when score sheets or evid
       },
       {
         extractionMetadata: {
+          // Evidence uploaded, but its text doesn't match the required
+          // keywords for the panel's evidence rule, so it fails validation.
           uploadType: 'evidence',
           panelKey: 'kra2_research_outputs',
           panelTitle: 'Research Outputs',
           analysis: {
             extractedScores: {},
+            keywordHits: [],
           },
         },
       },
@@ -224,4 +230,39 @@ test('evidence-based score computation falls back to 0 when score sheets or evid
   assert.equal(draftPoints.scoreComputation?.panelScores.find((panel) => panel.key === 'kra2_research_outputs')?.usedScore, 0);
   assert.equal(draftPoints.scoreComputation?.rawTotal, 0);
   assert.equal(draftPoints.scoreComputation?.zeroedPanelCount > 0, true);
+});
+
+test('evidence-based score computation awards full marks once required evidence is validated, without any score sheet', () => {
+  const draftPoints = buildDraftPointSummary(
+    {
+      features: {
+        rawInput: {
+          personalData: {
+            fullName: 'Mia V. Villarica',
+            academicRank: 'Assistant Professor IV',
+            highestEducationalAttainment: 'Masteral Graduate',
+          },
+          promotionHistory: [],
+        },
+      },
+      semester: '2026-1',
+    },
+    [
+      {
+        extractionMetadata: {
+          uploadType: 'evidence',
+          panelKey: 'kra2_research_outputs',
+          panelTitle: 'Research Outputs',
+          analysis: {
+            extractedScores: {},
+            keywordHits: ['research output', 'peer review'],
+          },
+        },
+      },
+    ],
+  );
+
+  const researchPanel = draftPoints.scoreComputation?.panelScores.find((panel) => panel.key === 'kra2_research_outputs');
+  assert.equal(researchPanel?.status, 'counted');
+  assert.equal(researchPanel?.usedScore, researchPanel?.maxScore);
 });

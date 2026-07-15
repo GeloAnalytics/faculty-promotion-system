@@ -11,6 +11,7 @@ const auth_middleware_1 = require("./middlewares/auth.middleware");
 const error_middleware_1 = require("./middlewares/error.middleware");
 const index_1 = __importDefault(require("./routes/index"));
 const db_1 = require("./config/db");
+const supabase_1 = require("./config/supabase");
 const app = (0, express_1.default)();
 const repoRoot = process.cwd();
 const publicDir = node_path_1.default.join(repoRoot, 'public');
@@ -40,16 +41,34 @@ app.get('/employee', (_req, res) => {
 app.get('/evaluator', (_req, res) => {
     res.sendFile(node_path_1.default.join(publicDir, 'evaluator.html'));
 });
+app.get('/admin', (_req, res) => {
+    res.sendFile(node_path_1.default.join(publicDir, 'admin.html'));
+});
 app.use(express_1.default.static(publicDir, { extensions: ['html'], maxAge: 0 }));
 // Mount API routes
 app.use('/api', index_1.default);
 // Global Error Handler
 app.use(error_middleware_1.errorHandler);
-const server = app.listen(env_1.env.PORT, () => {
-    console.log(`Faculty promotion system listening on port ${env_1.env.PORT} in ${env_1.env.NODE_ENV} mode`);
-});
+let server;
+async function bootstrap() {
+    try {
+        await (0, supabase_1.ensureDocumentsBucket)();
+    }
+    catch (error) {
+        console.error('Failed to ensure Supabase documents bucket exists:', error);
+    }
+    server = app.listen(env_1.env.PORT, () => {
+        console.log(`Faculty promotion system listening on port ${env_1.env.PORT} in ${env_1.env.NODE_ENV} mode`);
+    });
+}
+void bootstrap();
 async function shutdown(signal) {
     console.log(`Received ${signal}. Closing server...`);
+    if (!server) {
+        await db_1.prisma.$disconnect();
+        process.exit(0);
+        return;
+    }
     server.close(async () => {
         await db_1.prisma.$disconnect();
         process.exit(0);

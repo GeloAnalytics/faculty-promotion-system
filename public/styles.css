@@ -493,6 +493,7 @@ select {
   border: 1px solid var(--border);
   border-radius: 18px;
   padding: 16px;
+  min-width: 0;
 }
 
 .upload-card {
@@ -990,6 +991,39 @@ select {
   font-size: 0.9rem;
 }
 
+.table-scroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.table {
+  width: 100%;
+  min-width: 520px;
+  border-collapse: collapse;
+}
+
+.table th,
+.table td {
+  padding: 10px 12px;
+  border-bottom: 1px solid rgba(23, 33, 31, 0.08);
+  text-align: left;
+  vertical-align: top;
+  font-size: 0.88rem;
+}
+
+.table thead th,
+.table tbody th {
+  background: rgba(13, 107, 87, 0.06);
+  color: var(--accent-strong);
+  font-family: "Space Grotesk", sans-serif;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.table tbody th {
+  white-space: normal;
+}
+
 .training-example-list {
   display: grid;
   gap: 12px;
@@ -1234,7 +1268,7 @@ select {
 
 .insight-stat-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
 }
 
@@ -2758,6 +2792,16 @@ body[data-portal="evaluator"] #scoring-panel .stack-form {
     align-items: flex-start;
     gap: 8px;
   }
+
+  .uploaded-files-toolbar {
+    grid-template-columns: 1fr;
+  }
+
+  .uploaded-files-group-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+  }
 }
 
 /* ═══════════════════════════════════════════════
@@ -2887,13 +2931,15 @@ body[data-portal="evaluator"] #scoring-panel .stack-form {
 .uploaded-file-panel {
   display: inline-flex;
   align-items: center;
+  max-width: 100%;
   padding: 2px 8px;
   border-radius: 999px;
   background: var(--accent-soft);
   color: var(--accent-strong);
   font-size: 0.72rem;
   font-weight: 700;
-  white-space: nowrap;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .uploaded-file-date {
@@ -3275,6 +3321,15 @@ body[data-portal="evaluator"] #scoring-panel .stack-form {
 
   .uploaded-file-row .delete-upload-button {
     justify-self: end;
+  }
+
+  .account-row {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  .account-actions {
+    justify-content: flex-start;
   }
 
   .cycle-period-banner,
