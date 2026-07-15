@@ -179,7 +179,7 @@ test('workbook mirror follows the reference workbook naming and parses request f
   assert.equal(draftPoints.workbookMirror.summarySheet.scoreBracket, draftPoints.promotionDraft.scoreBracket);
 });
 
-test('evidence-based score computation falls back to 0 when required evidence is missing or unvalidated', () => {
+test('evidence-based score computation falls back to 0 only when no evidence file is uploaded for the panel', () => {
   const draftPoints = buildDraftPointSummary(
     {
       features: {
@@ -212,8 +212,9 @@ test('evidence-based score computation falls back to 0 when required evidence is
       },
       {
         extractionMetadata: {
-          // Evidence uploaded, but its text doesn't match the required
-          // keywords for the panel's evidence rule, so it fails validation.
+          // An uploaded evidence file counts the panel at full marks even
+          // when no keywords were detected in it - keyword matching no
+          // longer gates the score, only the presence of an evidence upload.
           uploadType: 'evidence',
           panelKey: 'kra2_research_outputs',
           panelTitle: 'Research Outputs',
@@ -227,12 +228,11 @@ test('evidence-based score computation falls back to 0 when required evidence is
   );
 
   assert.equal(draftPoints.scoreComputation?.panelScores.find((panel) => panel.key === 'kra1_teaching_effectiveness')?.usedScore, 0);
-  assert.equal(draftPoints.scoreComputation?.panelScores.find((panel) => panel.key === 'kra2_research_outputs')?.usedScore, 0);
-  assert.equal(draftPoints.scoreComputation?.rawTotal, 0);
+  assert.equal(draftPoints.scoreComputation?.panelScores.find((panel) => panel.key === 'kra2_research_outputs')?.usedScore, 100);
   assert.equal(draftPoints.scoreComputation?.zeroedPanelCount > 0, true);
 });
 
-test('evidence-based score computation awards full marks once required evidence is validated, without any score sheet', () => {
+test('evidence-based score computation awards full marks once evidence is uploaded, without any score sheet', () => {
   const draftPoints = buildDraftPointSummary(
     {
       features: {
@@ -255,7 +255,6 @@ test('evidence-based score computation awards full marks once required evidence 
           panelTitle: 'Research Outputs',
           analysis: {
             extractedScores: {},
-            keywordHits: ['research output', 'peer review'],
           },
         },
       },

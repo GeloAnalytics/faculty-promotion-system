@@ -1,6 +1,5 @@
 import { uploadPanels } from '../uploadPanels';
 import type { UploadPanelKey } from '../types';
-import { evidenceRules, RequirementRule } from './evidenceRules';
 
 export type EvidencePacketRequestForm = {
   fullName: string | null;
@@ -28,23 +27,13 @@ export function validateEvidencePacket(args: {
   uploadedPanelKeys: Iterable<UploadPanelKey>;
   uploadTypeCounts: Record<string, number>;
   panelUploadCounts?: Partial<Record<UploadPanelKey, { scoreSheet: number; evidence: number }>>;
-  panelKeywords?: Map<UploadPanelKey, Set<string>>;
 }): EvidenceValidationSummary {
   const uploadedPanelSet = new Set(args.uploadedPanelKeys);
   const requiredPanels = uploadPanels.filter((panel) => panel.appliesTo === 'ALL_FACULTY');
   const requiredPanelKeys = requiredPanels.map((panel) => panel.key);
   const hasPerPanelUploadCounts = Boolean(args.panelUploadCounts);
   const missingEvidencePanels = hasPerPanelUploadCounts
-    ? requiredPanels.filter((panel) => {
-        const hasUpload = (args.panelUploadCounts?.[panel.key]?.evidence ?? 0) >= 1;
-        if (!hasUpload) return true;
-        if (args.panelKeywords) {
-          const kwSet = args.panelKeywords.get(panel.key);
-          const keywordsArray = kwSet ? Array.from(kwSet) : [];
-          return !validatePanelEvidence(panel.key, keywordsArray);
-        }
-        return false;
-      })
+    ? requiredPanels.filter((panel) => (args.panelUploadCounts?.[panel.key]?.evidence ?? 0) < 1)
     : [];
   const missingPanelKeys = hasPerPanelUploadCounts
     ? missingEvidencePanels.map((panel) => panel.key)
@@ -107,29 +96,4 @@ export function validateEvidencePacket(args: {
 
 function hasText(value: string | null) {
   return typeof value === 'string' && value.trim().length > 0;
-}
-
-export function evaluateEvidenceRule(rule: RequirementRule | string, detectedKeywords: string[]): boolean {
-  if (typeof rule === 'string') {
-    return detectedKeywords.some(kw => kw.toLowerCase().includes(rule.toLowerCase()));
-  }
-
-  if (rule.type === 'AND') {
-    return rule.conditions.every(cond => evaluateEvidenceRule(cond, detectedKeywords));
-  }
-
-  if (rule.type === 'OR') {
-    return rule.conditions.some(cond => evaluateEvidenceRule(cond, detectedKeywords));
-  }
-
-  return false;
-}
-
-export function validatePanelEvidence(panelKey: string, detectedKeywords: string[]): boolean {
-  const rule = evidenceRules[panelKey];
-  if (!rule) {
-    // If no specific strict rule is defined, default to requiring at least one evidence document
-    return detectedKeywords.length > 0;
-  }
-  return evaluateEvidenceRule(rule, detectedKeywords);
 }

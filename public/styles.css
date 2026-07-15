@@ -541,8 +541,7 @@ select {
   flex-wrap: wrap;
   gap: 6px;
   align-items: center;
-  justify-content: flex-end;
-  margin-left: auto;
+  justify-content: flex-start;
 }
 
 .upload-status-badge {

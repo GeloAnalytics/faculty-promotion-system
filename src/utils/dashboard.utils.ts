@@ -2,7 +2,7 @@ import { uploadPanels } from '../uploadPanels';
 import { academicRankOptions, normalizeAcademicRankOption } from '../constants/faculty';
 import { fixedReviewPeriodLabel, reviewCycleMetricKeys, reviewCycleYearLabels } from '../constants/reviewCycle';
 import type { UploadPanelKey } from '../types';
-import { validateEvidencePacket, type EvidenceValidationSummary, validatePanelEvidence } from './evidenceValidation';
+import { validateEvidencePacket, type EvidenceValidationSummary } from './evidenceValidation';
 
 type EvaluatorAssessmentSnapshot = {
   totalScore: number;
@@ -189,7 +189,6 @@ export function buildDraftPointSummary(
   const panelEvidenceCount = new Map<UploadPanelKey, number>();
   const panelUploadTypeCounts = new Map<UploadPanelKey, { scoreSheet: number; evidence: number }>();
   const uploadTypeCounts = new Map<string, number>();
-  const panelKeywords = new Map<UploadPanelKey, Set<string>>();
 
   let instruction = 0;
   let research = 0;
@@ -211,12 +210,6 @@ export function buildDraftPointSummary(
       if (metadata.uploadType === 'evidence') {
         existingPanelCounts.evidence += 1;
         panelEvidenceCount.set(panelKey, (panelEvidenceCount.get(panelKey) ?? 0) + 1);
-        
-        const existingKeywords = panelKeywords.get(panelKey) ?? new Set<string>();
-        for (const kw of metadata.keywordHits) {
-          existingKeywords.add(kw);
-        }
-        panelKeywords.set(panelKey, existingKeywords);
       }
       panelUploadTypeCounts.set(panelKey, existingPanelCounts);
 
@@ -295,14 +288,12 @@ export function buildDraftPointSummary(
     panelUploadCounts: Object.fromEntries(panelUploadTypeCounts) as Partial<
       Record<UploadPanelKey, { scoreSheet: number; evidence: number }>
     >,
-    panelKeywords,
   });
   const scoreComputation = buildEvidenceBasedScoreComputation({
     currentRank,
     panelScoreByKey,
     panelUploadTypeCounts,
     evidenceValidation,
-    panelKeywords,
   });
   const hasDoctoralGraduateBonus = canUseDoctoralGraduateBonus(
     normalizeAttainment(highestEducationalAttainment),
@@ -1306,14 +1297,12 @@ function buildEvidenceBasedScoreComputation(args: {
   panelScoreByKey: Map<UploadPanelKey, number>;
   panelUploadTypeCounts: Map<UploadPanelKey, { scoreSheet: number; evidence: number }>;
   evidenceValidation: EvidenceValidationSummary;
-  panelKeywords: Map<UploadPanelKey, Set<string>>;
 }): EvidenceBasedScoreComputation {
   const panelScores = uploadPanels.map((panel) => {
     const counts = args.panelUploadTypeCounts.get(panel.key) ?? { scoreSheet: 0, evidence: 0 };
     const detectedScore = readOptionalNumber(args.panelScoreByKey.get(panel.key));
     const required = panel.appliesTo === 'ALL_FACULTY';
-    const panelKeywordsSet = args.panelKeywords.get(panel.key as UploadPanelKey) ?? new Set<string>();
-    const hasEvidence = counts.evidence > 0 && validatePanelEvidence(panel.key, Array.from(panelKeywordsSet));
+    const hasEvidence = counts.evidence > 0;
     const canCount = hasEvidence;
     const usedScore = canCount ? panel.maxScore : 0;
     const status: ComputedPanelScore['status'] = canCount
@@ -1370,8 +1359,8 @@ function buildEvidenceBasedScoreComputation(args: {
     missingEvidencePanels,
     note:
       args.evidenceValidation.status === 'complete'
-        ? 'Evidence-based draft score awards each panel full marks once its required documentary evidence is validated. Score sheets are not available until after JC evaluation, so they play no part in this draft.'
-        : 'Panels without validated supporting evidence are counted as 0 until the required documentary evidence is uploaded.',
+        ? 'Evidence-based draft score awards each panel full marks once its required documentary evidence is uploaded. Score sheets are not available until after JC evaluation, so they play no part in this draft.'
+        : 'Panels without supporting evidence are counted as 0 until the required documentary evidence is uploaded.',
   };
 }
 
@@ -1412,7 +1401,7 @@ function getWeightProfileForRank(rank: string | null) {
 
 function getComputedPanelScoreNote(status: ComputedPanelScore['status']) {
   if (status === 'counted') {
-    return 'Validated supporting evidence is present; this panel is counted at full marks for the draft.';
+    return 'Supporting evidence is uploaded; this panel is counted at full marks for the draft.';
   }
   if (status === 'missing-evidence') {
     return 'Supporting evidence is missing for this panel, so the computed score is 0.';

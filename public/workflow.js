@@ -456,7 +456,7 @@ function renderEmployeeWorkflow(workflowItems, uploads, scoreComputation = null)
       </div>
     </div>
     <p class="workflow-intro">
-      Upload the supporting documentary evidence for each KRA or criterion. The draft score is computed from validated evidence alone.
+      Upload the supporting documentary evidence for each KRA or criterion. The draft score is computed from uploaded evidence alone.
     </p>
     <div class="workflow-summary-row">
       <span class="workflow-summary-chip">Evidence files: ${evidenceCount}</span>
@@ -517,7 +517,7 @@ function renderEmployeeUploadCard(panel, uploads, scoreComputation) {
       </div>
       ${panel.audienceLabel ? `<p class="upload-audience-chip">${escapeHtml(panel.audienceLabel)}</p>` : ''}
       ${renderComputedPanelScore(computedScore, panel.maxScore)}
-      ${computedScore?.status === 'missing-evidence' ? '<div class="notice" style="color:var(--color-danger)">Missing documentary evidence. This panel cannot be counted until validated evidence is uploaded.</div>' : ''}
+      ${computedScore?.status === 'missing-evidence' ? '<div class="notice" style="color:var(--color-danger)">Missing documentary evidence. This panel cannot be counted until evidence is uploaded.</div>' : ''}
       <div class="upload-variant-grid">
         ${renderUploadVariantForm({
           panelKey: panel.key,
@@ -1258,7 +1258,7 @@ function renderComputedPanelScore(computedScore, fallbackMaxScore) {
       <div class="upload-score-preview" data-status="pending">
         <span>Computed score</span>
         <strong>0 / ${escapeHtml(String(fallbackMaxScore))}</strong>
-        <small>Upload validated documentary evidence to count this panel.</small>
+        <small>Upload documentary evidence to count this panel.</small>
       </div>
     `;
   }
