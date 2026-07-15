@@ -1279,7 +1279,7 @@ function formatScoreWithMax(score, maxScore) {
 
 function getComputedStatusLabel(status) {
   if (status === 'counted') {
-    return 'Counted at full marks toward the evidence-based draft score.';
+    return 'Counted toward the evidence-based draft score.';
   }
   if (status === 'missing-evidence') {
     return 'Supporting evidence missing. This panel is counted as 0.';

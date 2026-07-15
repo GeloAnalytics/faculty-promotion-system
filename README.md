@@ -13,15 +13,15 @@ The system has two user-facing sides.
 The employee side should make the faculty member's task as simple as possible:
 
 1. Upload documentary evidence per KRA/criterion (score sheets are optional - they are only issued after JC evaluation, so the pre-JC draft cannot depend on them).
-2. Let the system read the uploaded documents.
-3. Check whether all required evidence has been uploaded and validated.
+2. Let the system read the uploaded documents and OCR-detect a score for the panel from that evidence itself.
+3. Check whether all required evidence has been uploaded.
 4. Show missing evidence and incomplete KRA panels.
-5. Compute the draft score from validated evidence: a panel with validated evidence counts at full marks, a panel with missing or invalid evidence counts as `0`.
+5. Compute the draft score from the evidence actually uploaded: a panel with evidence uses the OCR-detected score for that document (capped to the panel's max), and a panel with no detectable score yet contributes `0` even though it's uploaded; a panel with no evidence uploaded at all counts as `0`.
 6. Let the employee view uploaded files.
 7. Let the employee modify uploads by replacing or re-uploading files.
 8. Let the employee delete uploaded files.
 
-The employee should not need to manually retype KRA scores. The draft score is derived entirely from validated documentary evidence.
+The employee should not need to manually retype KRA scores. The draft score is derived entirely from OCR-detected values in the uploaded documentary evidence.
 
 ### Evaluator Side
 
@@ -89,7 +89,7 @@ After this documentation consolidation, `README.md` is the single markdown docum
 - Panel score preview metadata for score-sheet uploads (optional, informational only).
 - Evidence completeness checking.
 - Missing evidence detection per required panel.
-- Evidence-based score computation that awards a panel full marks once its required evidence is validated, and counts missing/invalid evidence as `0`.
+- Evidence-based score computation that uses the OCR-detected score from a panel's own uploaded evidence (capped to the panel max), and counts missing evidence as `0`.
 - Panel score cards that show computed score previews and zero fallback when evidence is incomplete.
 - Live score summary UI with KRA totals, criterion scores, total score, weighted score, panel coverage, and zeroed-panel count.
 - Employee-side OCR-backed summary.
@@ -123,27 +123,25 @@ This checkpoint is the active development baseline before the next feature pass:
 2. The faculty member creates or updates the basic faculty profile.
 3. The faculty member uploads documentary evidence per KRA/criterion (a score sheet can be attached too, but it is optional and not required for the draft, since score sheets are only issued after JC evaluation).
 4. The backend stores the uploaded files.
-5. The backend extracts text from PDFs or images.
-6. OCR/PDF parsing checks the evidence text against the required evidence keywords for the panel.
-7. The system links uploaded files to KRA/criterion panels.
-8. The system checks whether required evidence is present and validated.
-9. Missing required evidence keeps the packet incomplete.
-10. A panel with validated evidence counts at full marks; missing or invalid required evidence counts as `0` in the computed total.
-11. The employee sees the computed draft score, uploaded files, missing requirements, and computed summaries.
-12. The evaluator views all submitted records, documents, scores, and validation flags.
-13. The evaluator verifies the output and uses the system to reduce manual review work.
+5. The backend extracts text from PDFs or images and attempts to detect a numeric score for the panel from that text.
+6. The system links uploaded files to KRA/criterion panels.
+7. The system checks whether required evidence is present.
+8. Missing required evidence keeps the packet incomplete.
+9. A panel with evidence uses the OCR-detected score from that evidence (capped to the panel max); a panel with no detectable score contributes `0`; a panel with no evidence uploaded at all counts as `0` in the computed total.
+10. The employee sees the computed draft score, uploaded files, missing requirements, and computed summaries.
+11. The evaluator views all submitted records, documents, scores, and validation flags.
+12. The evaluator verifies the output and uses the system to reduce manual review work.
 
 ## Evidence Validation Rules
 
 The validation logic should follow these rules:
 
-- `AND` means every listed document is required.
-- `OR` means at least one valid alternative is required.
+- A required panel needs at least one uploaded evidence file to be considered present - the file's content is not content-matched against a keyword rule to decide whether it counts.
 - Optional or bonus evidence does not replace required evidence.
 - Score sheets are only issued after JC evaluation, so the draft score never depends on a score sheet - documentary evidence alone is enough.
 - Missing required documents should produce an incomplete state.
 - Incomplete evidence should block final promotable status.
-- If no valid evidence is presented for a criterion, that criterion should be computed as `0`.
+- If no evidence is uploaded for a criterion, that criterion should be computed as `0`. If evidence is uploaded but OCR does not detect a score in it yet, that criterion is also `0` until a score is detected.
 
 ## KRA Evidence Areas
 
@@ -179,10 +177,10 @@ The validation logic should follow these rules:
 The system should compute from evidence actually submitted and recognized:
 
 1. Read the uploaded evidence text through OCR/PDF parsing.
-2. Match the detected keywords to the correct KRA/criterion panel's evidence rule.
-3. Check that the required evidence rule for the panel is satisfied.
-4. Award the panel's full max score once its evidence rule passes.
-5. Use `0` when required evidence is missing or does not satisfy the rule.
+2. Attempt to detect a numeric score for the correct KRA/criterion panel directly from that evidence text.
+3. Check that at least one evidence file is uploaded for the panel.
+4. Use the OCR-detected score for the panel (capped to its max) once evidence is uploaded and a score is detected.
+5. Use `0` when required evidence is missing, or when evidence is uploaded but no score has been detected in it yet.
 6. Sum criterion scores into KRA totals.
 7. Compute the overall score from KRA totals using the official DBM/NBC 461 rules.
 8. Show score brackets and draft rank as advisory only.

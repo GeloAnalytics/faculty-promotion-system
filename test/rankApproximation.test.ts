@@ -179,7 +179,7 @@ test('workbook mirror follows the reference workbook naming and parses request f
   assert.equal(draftPoints.workbookMirror.summarySheet.scoreBracket, draftPoints.promotionDraft.scoreBracket);
 });
 
-test('evidence-based score computation falls back to 0 only when no evidence file is uploaded for the panel', () => {
+test('evidence-based score computation counts 0 for a required panel with no evidence uploaded at all', () => {
   const draftPoints = buildDraftPointSummary(
     {
       features: {
@@ -210,29 +210,56 @@ test('evidence-based score computation falls back to 0 only when no evidence fil
           },
         },
       },
+    ],
+  );
+
+  const teachingPanel = draftPoints.scoreComputation?.panelScores.find((panel) => panel.key === 'kra1_teaching_effectiveness');
+  assert.equal(teachingPanel?.status, 'missing-evidence');
+  assert.equal(teachingPanel?.usedScore, 0);
+  assert.equal(draftPoints.scoreComputation?.zeroedPanelCount > 0, true);
+});
+
+test('evidence-based score computation uses the OCR-detected score from the evidence itself, without any score sheet', () => {
+  const draftPoints = buildDraftPointSummary(
+    {
+      features: {
+        rawInput: {
+          personalData: {
+            fullName: 'Mia V. Villarica',
+            academicRank: 'Assistant Professor IV',
+            highestEducationalAttainment: 'Masteral Graduate',
+          },
+          promotionHistory: [],
+        },
+      },
+      semester: '2026-1',
+    },
+    [
       {
         extractionMetadata: {
-          // An uploaded evidence file counts the panel at full marks even
-          // when no keywords were detected in it - keyword matching no
-          // longer gates the score, only the presence of an evidence upload.
+          // The evidence document's own OCR text contains a detectable score
+          // for this panel - that real number should be used, not a flat
+          // full-marks award just because a file was attached.
           uploadType: 'evidence',
           panelKey: 'kra2_research_outputs',
           panelTitle: 'Research Outputs',
           analysis: {
-            extractedScores: {},
-            keywordHits: [],
+            extractedScores: {
+              kra2_research_outputs: 72,
+            },
           },
         },
       },
     ],
   );
 
-  assert.equal(draftPoints.scoreComputation?.panelScores.find((panel) => panel.key === 'kra1_teaching_effectiveness')?.usedScore, 0);
-  assert.equal(draftPoints.scoreComputation?.panelScores.find((panel) => panel.key === 'kra2_research_outputs')?.usedScore, 100);
-  assert.equal(draftPoints.scoreComputation?.zeroedPanelCount > 0, true);
+  const researchPanel = draftPoints.scoreComputation?.panelScores.find((panel) => panel.key === 'kra2_research_outputs');
+  assert.equal(researchPanel?.status, 'counted');
+  assert.equal(researchPanel?.usedScore, 72);
+  assert.notEqual(researchPanel?.usedScore, researchPanel?.maxScore);
 });
 
-test('evidence-based score computation awards full marks once evidence is uploaded, without any score sheet', () => {
+test('evidence-based score computation counts the panel as present but contributes 0 when evidence is uploaded with no detectable score yet', () => {
   const draftPoints = buildDraftPointSummary(
     {
       features: {
@@ -263,5 +290,45 @@ test('evidence-based score computation awards full marks once evidence is upload
 
   const researchPanel = draftPoints.scoreComputation?.panelScores.find((panel) => panel.key === 'kra2_research_outputs');
   assert.equal(researchPanel?.status, 'counted');
-  assert.equal(researchPanel?.usedScore, researchPanel?.maxScore);
+  assert.equal(researchPanel?.usedScore, 0);
+  assert.equal(researchPanel?.scoreSource, 'evidence-checklist');
+});
+
+test('evidence-based score computation gives partial credit from the evidence checklist when no OCR score is detected', () => {
+  const draftPoints = buildDraftPointSummary(
+    {
+      features: {
+        rawInput: {
+          personalData: {
+            fullName: 'Mia V. Villarica',
+            academicRank: 'Assistant Professor IV',
+            highestEducationalAttainment: 'Masteral Graduate',
+          },
+          promotionHistory: [],
+        },
+      },
+      semester: '2026-1',
+    },
+    [
+      {
+        extractionMetadata: {
+          // kra2_research_outputs requires an AND of 'research output' and
+          // 'peer review' - only one of the two is detected here, so this
+          // panel should land at half its max, not 0 and not full marks.
+          uploadType: 'evidence',
+          panelKey: 'kra2_research_outputs',
+          panelTitle: 'Research Outputs',
+          analysis: {
+            extractedScores: {},
+            keywordHits: ['research output'],
+          },
+        },
+      },
+    ],
+  );
+
+  const researchPanel = draftPoints.scoreComputation?.panelScores.find((panel) => panel.key === 'kra2_research_outputs');
+  assert.equal(researchPanel?.status, 'counted');
+  assert.equal(researchPanel?.scoreSource, 'evidence-checklist');
+  assert.equal(researchPanel?.usedScore, 50);
 });

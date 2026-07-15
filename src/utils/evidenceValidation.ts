@@ -1,5 +1,6 @@
 import { uploadPanels } from '../uploadPanels';
 import type { UploadPanelKey } from '../types';
+import { evidenceRules, RequirementRule } from './evidenceRules';
 
 export type EvidencePacketRequestForm = {
   fullName: string | null;
@@ -96,4 +97,38 @@ export function validateEvidencePacket(args: {
 
 function hasText(value: string | null) {
   return typeof value === 'string' && value.trim().length > 0;
+}
+
+// Fraction (0-1) of a panel's documentary-evidence checklist that the
+// detected keywords satisfy. Used to give partial credit when a panel's
+// evidence is uploaded but OCR could not read an explicit score off the
+// document itself - a leaf string is a single checklist item, `AND` needs
+// every item, `OR` only needs its best-matching alternative.
+function ruleMatchFraction(rule: RequirementRule | string, detectedKeywords: string[]): number {
+  if (typeof rule === 'string') {
+    return detectedKeywords.some((kw) => kw.toLowerCase().includes(rule.toLowerCase())) ? 1 : 0;
+  }
+
+  if (rule.type === 'AND') {
+    if (!rule.conditions.length) return 1;
+    const total = rule.conditions.reduce((sum, condition) => sum + ruleMatchFraction(condition, detectedKeywords), 0);
+    return total / rule.conditions.length;
+  }
+
+  if (rule.type === 'OR') {
+    if (!rule.conditions.length) return 0;
+    return Math.max(...rule.conditions.map((condition) => ruleMatchFraction(condition, detectedKeywords)));
+  }
+
+  return 0;
+}
+
+export function getEvidenceChecklistCompleteness(panelKey: string, detectedKeywords: string[]): number {
+  const rule = evidenceRules[panelKey];
+  if (!rule) {
+    // No documented checklist for this panel - presence of any evidence is
+    // the only signal available, so treat it as fully satisfied.
+    return detectedKeywords.length > 0 ? 1 : 0;
+  }
+  return ruleMatchFraction(rule, detectedKeywords);
 }

@@ -2,7 +2,7 @@ import { uploadPanels } from '../uploadPanels';
 import { academicRankOptions, normalizeAcademicRankOption } from '../constants/faculty';
 import { fixedReviewPeriodLabel, reviewCycleMetricKeys, reviewCycleYearLabels } from '../constants/reviewCycle';
 import type { UploadPanelKey } from '../types';
-import { validateEvidencePacket, type EvidenceValidationSummary } from './evidenceValidation';
+import { validateEvidencePacket, getEvidenceChecklistCompleteness, type EvidenceValidationSummary } from './evidenceValidation';
 
 type EvaluatorAssessmentSnapshot = {
   totalScore: number;
@@ -41,6 +41,7 @@ type ComputedPanelScore = {
   maxScore: number;
   detectedScore: number | null;
   usedScore: number;
+  scoreSource: 'ocr-detected' | 'evidence-checklist' | 'none';
   scoreSheetCount: number;
   evidenceCount: number;
   required: boolean;
@@ -189,6 +190,7 @@ export function buildDraftPointSummary(
   const panelEvidenceCount = new Map<UploadPanelKey, number>();
   const panelUploadTypeCounts = new Map<UploadPanelKey, { scoreSheet: number; evidence: number }>();
   const uploadTypeCounts = new Map<string, number>();
+  const panelKeywords = new Map<UploadPanelKey, Set<string>>();
 
   let instruction = 0;
   let research = 0;
@@ -210,10 +212,16 @@ export function buildDraftPointSummary(
       if (metadata.uploadType === 'evidence') {
         existingPanelCounts.evidence += 1;
         panelEvidenceCount.set(panelKey, (panelEvidenceCount.get(panelKey) ?? 0) + 1);
+
+        const existingKeywords = panelKeywords.get(panelKey) ?? new Set<string>();
+        for (const kw of metadata.keywordHits) {
+          existingKeywords.add(kw);
+        }
+        panelKeywords.set(panelKey, existingKeywords);
       }
       panelUploadTypeCounts.set(panelKey, existingPanelCounts);
 
-      if (metadata.panelScore !== null && metadata.uploadType !== 'evidence') {
+      if (metadata.panelScore !== null) {
         panelScoreByKey.set(panelKey, Math.max(panelScoreByKey.get(panelKey) ?? 0, metadata.panelScore));
       }
     }
@@ -294,6 +302,7 @@ export function buildDraftPointSummary(
     panelScoreByKey,
     panelUploadTypeCounts,
     evidenceValidation,
+    panelKeywords,
   });
   const hasDoctoralGraduateBonus = canUseDoctoralGraduateBonus(
     normalizeAttainment(highestEducationalAttainment),
@@ -1297,6 +1306,7 @@ function buildEvidenceBasedScoreComputation(args: {
   panelScoreByKey: Map<UploadPanelKey, number>;
   panelUploadTypeCounts: Map<UploadPanelKey, { scoreSheet: number; evidence: number }>;
   evidenceValidation: EvidenceValidationSummary;
+  panelKeywords: Map<UploadPanelKey, Set<string>>;
 }): EvidenceBasedScoreComputation {
   const panelScores = uploadPanels.map((panel) => {
     const counts = args.panelUploadTypeCounts.get(panel.key) ?? { scoreSheet: 0, evidence: 0 };
@@ -1304,7 +1314,22 @@ function buildEvidenceBasedScoreComputation(args: {
     const required = panel.appliesTo === 'ALL_FACULTY';
     const hasEvidence = counts.evidence > 0;
     const canCount = hasEvidence;
-    const usedScore = canCount ? panel.maxScore : 0;
+
+    let usedScore = 0;
+    let scoreSource: ComputedPanelScore['scoreSource'] = 'none';
+    if (canCount) {
+      if (detectedScore !== null) {
+        usedScore = detectedScore;
+        scoreSource = 'ocr-detected';
+      } else {
+        const keywords = Array.from(args.panelKeywords.get(panel.key) ?? []);
+        const checklistFraction = getEvidenceChecklistCompleteness(panel.key, keywords);
+        usedScore = checklistFraction * panel.maxScore;
+        scoreSource = 'evidence-checklist';
+      }
+    }
+    usedScore = canCount ? Math.min(panel.maxScore, Math.max(0, usedScore)) : 0;
+
     const status: ComputedPanelScore['status'] = canCount
       ? 'counted'
       : !required && counts.evidence === 0
@@ -1318,11 +1343,12 @@ function buildEvidenceBasedScoreComputation(args: {
       maxScore: panel.maxScore,
       detectedScore,
       usedScore: roundScore(usedScore),
+      scoreSource,
       scoreSheetCount: counts.scoreSheet,
       evidenceCount: counts.evidence,
       required,
       status,
-      note: getComputedPanelScoreNote(status),
+      note: getComputedPanelScoreNote(status, scoreSource, roundScore(usedScore)),
     } satisfies ComputedPanelScore;
   });
 
@@ -1359,7 +1385,7 @@ function buildEvidenceBasedScoreComputation(args: {
     missingEvidencePanels,
     note:
       args.evidenceValidation.status === 'complete'
-        ? 'Evidence-based draft score awards each panel full marks once its required documentary evidence is uploaded. Score sheets are not available until after JC evaluation, so they play no part in this draft.'
+        ? 'Evidence-based draft score uses the score OCR detects from each panel\'s uploaded documentary evidence. Score sheets are not available until after JC evaluation, so they play no part in this draft.'
         : 'Panels without supporting evidence are counted as 0 until the required documentary evidence is uploaded.',
   };
 }
@@ -1399,9 +1425,19 @@ function getWeightProfileForRank(rank: string | null) {
   return rankGroups.find((group) => group.key === groupKey) ?? null;
 }
 
-function getComputedPanelScoreNote(status: ComputedPanelScore['status']) {
+function getComputedPanelScoreNote(
+  status: ComputedPanelScore['status'],
+  scoreSource: ComputedPanelScore['scoreSource'],
+  usedScore: number,
+) {
   if (status === 'counted') {
-    return 'Supporting evidence is uploaded; this panel is counted at full marks for the draft.';
+    if (scoreSource === 'ocr-detected') {
+      return `OCR detected a score of ${usedScore} for this panel from the uploaded evidence.`;
+    }
+    if (usedScore > 0) {
+      return `No explicit score was found in the uploaded evidence, so this panel is estimated at ${usedScore} from how much of the required documentary evidence checklist it satisfies.`;
+    }
+    return 'Evidence is uploaded, but it does not yet satisfy any of the required documentary evidence checklist for this panel, so it currently contributes 0.';
   }
   if (status === 'missing-evidence') {
     return 'Supporting evidence is missing for this panel, so the computed score is 0.';
