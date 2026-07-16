@@ -360,23 +360,10 @@ function renderEmployeeNotifications(draftPoints) {
     `;
   }
 
-  const missingEvidencePanels = coverage.missingEvidencePanels || [];
-
-  if (missingEvidencePanels.length === 0) {
-    return '';
-  }
-
-  return `
-    <section class="employee-notification-panel warning">
-      <div class="notification-header">
-        <h3>⚠️ Action Required: Missing Requirements</h3>
-        <p>The system zeroed some KRA panels because the required OCR-verified documentary evidence is missing.</p>
-      </div>
-      <ul class="notification-list">
-        ${missingEvidencePanels.map(p => `<li class="notification-item"><span class="notification-tag">Needs Evidence</span> ${escapeHtml(p)}</li>`).join('')}
-      </ul>
-    </section>
-  `;
+  // Not every faculty member will have documentary evidence available for
+  // every panel - a panel with no evidence is simply scored 0 (shown plainly
+  // in the KRA breakdown above) rather than called out with a warning here.
+  return '';
 }
 
 function renderScoreboardKraSections(scoreComputation) {
@@ -517,7 +504,6 @@ function renderEmployeeUploadCard(panel, uploads, scoreComputation) {
       </div>
       ${panel.audienceLabel ? `<p class="upload-audience-chip">${escapeHtml(panel.audienceLabel)}</p>` : ''}
       ${renderComputedPanelScore(computedScore, panel.maxScore)}
-      ${computedScore?.status === 'missing-evidence' ? '<div class="notice" style="color:var(--color-danger)">Missing documentary evidence. This panel cannot be counted until evidence is uploaded.</div>' : ''}
       <div class="upload-variant-grid">
         ${renderUploadVariantForm({
           panelKey: panel.key,
@@ -1282,7 +1268,7 @@ function getComputedStatusLabel(status) {
     return 'Counted toward the evidence-based draft score.';
   }
   if (status === 'missing-evidence') {
-    return 'Supporting evidence missing. This panel is counted as 0.';
+    return 'No evidence uploaded. Scored as 0.';
   }
   return 'Not required for the base packet.';
 }
