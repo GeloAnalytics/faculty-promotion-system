@@ -45,7 +45,7 @@ export function validateEvidencePacket(args: {
 
   const requestFields: Array<{ label: string; value: string | null }> = [
     { label: 'full name', value: args.requestForm.fullName },
-    { label: 'employee ID', value: args.requestForm.employeeId },
+    { label: 'faculty ID', value: args.requestForm.employeeId },
     { label: 'current academic rank', value: args.requestForm.academicRank },
     { label: 'highest educational attainment', value: args.requestForm.highestEducationalAttainment },
     { label: 'review period', value: args.requestForm.reviewPeriod },

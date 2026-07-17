@@ -9,10 +9,10 @@ export const registerSchema = z
     employeeId: z
       .string()
       .trim()
-      .regex(/^\d{10}$/, 'Employee ID must contain exactly 10 digits')
+      .regex(/^\d{10}$/, 'Faculty ID must contain exactly 10 digits')
       .optional(),
     role: z.nativeEnum(UserRole).refine((value) => value === UserRole.EMPLOYEE || value === UserRole.EVALUATOR, {
-      message: 'Registration role must be Employee or Evaluator',
+      message: 'Registration role must be Faculty or Evaluator',
     }),
   })
   .superRefine((value, ctx) => {
@@ -20,7 +20,7 @@ export const registerSchema = z
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ['employeeId'],
-        message: 'Employee ID is required for employee accounts',
+        message: 'Faculty ID is required for faculty accounts',
       });
     }
   });

@@ -44,7 +44,7 @@
           <div class="form-group">
             <label for="reg-role">Role</label>
             <select id="reg-role" v-model="registerForm.role" required>
-              <option value="EMPLOYEE">Faculty Member (Employee)</option>
+              <option value="EMPLOYEE">Faculty Member</option>
               <option value="EVALUATOR">Evaluator / HR</option>
             </select>
           </div>

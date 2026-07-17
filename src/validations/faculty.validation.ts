@@ -38,7 +38,7 @@ const collegeDepartmentSchema = z
 const employeeIdSchema = z
   .string()
   .trim()
-  .regex(/^\d{10}$/, 'Employee ID must contain exactly 10 digits');
+  .regex(/^\d{10}$/, 'Faculty ID must contain exactly 10 digits');
 
 export const personalDataSchema = z.object({
   employeeId: employeeIdSchema,

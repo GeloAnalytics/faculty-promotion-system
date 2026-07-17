@@ -80,7 +80,7 @@ export const register = async (req: Request, res: Response) => {
   if (payload.employeeId) {
     const existingEmployeeId = await prisma.user.findUnique({ where: { employeeId: payload.employeeId } });
     if (existingEmployeeId) {
-      return res.status(409).json({ error: 'An account with that Employee ID already exists' });
+      return res.status(409).json({ error: 'An account with that Faculty ID already exists' });
     }
   }
 

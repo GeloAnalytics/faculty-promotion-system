@@ -630,7 +630,7 @@ function buildPromotionDraftSnapshot(
     appliedWeightProfile: rankOutcome.appliedWeightProfile,
     pendingRequirement: rankOutcome.pendingRequirement,
     confidence: 'high',
-    note: `${rankOutcome.note} This evaluator-backed result takes priority over the preliminary employee-side estimate.`,
+    note: `${rankOutcome.note} This evaluator-backed result takes priority over the preliminary faculty-side estimate.`,
   };
 }
 
@@ -774,7 +774,7 @@ function derivePreliminaryConfidence(coverage: number, averagedCompleteness: num
 
 function buildPreliminaryRankNote(baseNote: string, confidence: 'low' | 'medium' | 'high') {
   const confidenceLabel = confidence.charAt(0).toUpperCase() + confidence.slice(1);
-  return `Preliminary estimate from employee inputs and uploaded evidence. Confidence: ${confidenceLabel}. ${baseNote} Evaluator scoring, when available, will strengthen and refine this result.`;
+  return `Preliminary estimate from faculty inputs and uploaded evidence. Confidence: ${confidenceLabel}. ${baseNote} Evaluator scoring, when available, will strengthen and refine this result.`;
 }
 
 function resolveOfficialRankOutcome(
@@ -823,7 +823,7 @@ function resolveOfficialRankOutcome(
         appliedWeightProfile: nextGroup.label,
         pendingRequirement: null,
         note: buildRankResolutionNote(
-          `Official ranking was recomputed using ${nextGroup.label} weights. The employee did not qualify for the next rank, so the highest ${activeGroup.label} sub-rank was retained.`,
+          `Official ranking was recomputed using ${nextGroup.label} weights. The faculty member did not qualify for the next rank, so the highest ${activeGroup.label} sub-rank was retained.`,
           recomputedIncrementRule.bonusApplied,
         ),
       };
@@ -876,7 +876,7 @@ function resolveOfficialRankOutcome(
         ? 'EAC accreditation is still required before the Professor rank can be awarded for the first time.'
         : 'Professor rank requires doctorate-level units or a completed doctorate degree, plus EAC accreditation.',
       note: buildRankResolutionNote(
-        'The employee qualifies for a Professor rank based on the official score, but the award remains pending until EAC accreditation is completed.',
+        'The faculty member qualifies for a Professor rank based on the official score, but the award remains pending until EAC accreditation is completed.',
         bonusApplied,
       ),
     };

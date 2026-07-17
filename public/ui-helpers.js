@@ -27,7 +27,7 @@ export function normalizePortalPath(pathname) {
 
 export function prettyRole(role) {
   if (role === "EMPLOYEE") {
-    return "Employee";
+    return "Faculty";
   }
   if (role === "EVALUATOR") {
     return "Evaluator";

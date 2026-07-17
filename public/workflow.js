@@ -161,7 +161,7 @@ async function loadEvaluatorWorkspace() {
   renderEvaluatorDocumentLibrary(reviewerQueueItems);
   renderReviewQueue(reviewerQueueItems);
   renderEvaluatorWorkbooks(reviewerQueueItems);
-  setNotice(reviewQueueFilterStatus, `${reviewerQueueItems.length} employee submission(s) ready for read-only review.`);
+  setNotice(reviewQueueFilterStatus, `${reviewerQueueItems.length} faculty submission(s) ready for read-only review.`);
 }
 
 async function loadAdminWorkspace() {
@@ -213,7 +213,7 @@ function renderEmployeeProfileForm(facultyOptions, personalData) {
 
   populateSelectOptions(profileAcademicRank, facultyOptions?.academicRanks || []);
   populateSelectOptions(profileAttainment, facultyOptions?.educationalAttainments || []);
-  populateSelectOptions(profileDepartment, facultyOptions?.collegeDepartments || [], { includeBlank: 'Select college department' });
+  populateSelectOptions(profileDepartment, facultyOptions?.collegeDepartments || [], { includeBlank: 'Select college' });
 
   if (personalData) {
     setSelectValue(profileAcademicRank, personalData.academicRank);
@@ -713,18 +713,18 @@ function renderEvaluatorDocumentLibrary(items) {
 
   if (evaluatorDocumentLibraryStatus) {
     evaluatorDocumentLibraryStatus.textContent =
-      'Documents are grouped by employee and sorted with the newest upload first.';
+      'Documents are grouped by faculty and sorted with the newest upload first.';
   }
 
   evaluatorDocumentLibrary.innerHTML = `
     <div class="uploaded-files-ledger-summary">
       <div class="database-counts ledger-counts">
         ${renderLedgerStatCard('Documents', String(documents.length))}
-        ${renderLedgerStatCard('Employees', String(employeeCount))}
+        ${renderLedgerStatCard('Faculty', String(employeeCount))}
         ${renderLedgerStatCard('Latest upload', formatDate(latestDocument.createdAt))}
       </div>
       <p class="uploaded-files-ledger-note">
-        Browsing is organized by employee profile first, then by upload date. KRA labels are still visible on each file so evaluators can jump straight to the evidence they need.
+        Browsing is organized by faculty profile first, then by upload date. KRA labels are still visible on each file so evaluators can jump straight to the evidence they need.
       </p>
       <div class="uploaded-files-ledger-note-chip-row">
         ${renderLedgerNoteChip(`${kraCount} KRA group${kraCount === 1 ? '' : 's'}`)}
@@ -744,7 +744,7 @@ function collectEvaluatorDocuments(items) {
       (Array.isArray(item.uploadLogs) ? item.uploadLogs : []).map((upload) => ({
         ...upload,
         profileId: item.id,
-        profileLabel: item.name || 'Unnamed employee',
+        profileLabel: item.name || 'Unnamed faculty member',
         employeeId: item.employeeId || '',
         submittedBy: item.createdBy?.fullName || '-',
         cycleLabel: item.cycleData?.performanceReview?.reviewPeriod || item.semester || 'Current cycle',
@@ -948,7 +948,7 @@ function renderReviewQueue(items) {
   }
 
   if (!items.length) {
-    reviewQueue.innerHTML = '<div class="notice">No employee submissions are waiting in the evaluator queue.</div>';
+    reviewQueue.innerHTML = '<div class="notice">No faculty submissions are waiting in the evaluator queue.</div>';
     return;
   }
 
@@ -972,8 +972,8 @@ function renderReviewCard(item) {
     <article class="card review-card">
       <div class="training-example-header">
         <div class="review-card-identity">
-          <strong>${escapeHtml(item.name || 'Unnamed employee')}</strong>
-          <span class="review-rank-chip">${escapeHtml(item.employeeId || 'No Employee ID')}</span>
+          <strong>${escapeHtml(item.name || 'Unnamed faculty member')}</strong>
+          <span class="review-rank-chip">${escapeHtml(item.employeeId || 'No Faculty ID')}</span>
         </div>
       </div>
       <div class="review-card-meta">
@@ -1130,8 +1130,8 @@ function renderEvaluatorWorkbooks(items) {
   }
 
   if (!items.length) {
-    evaluatorWorkbookRequestForm.innerHTML = '<div class="notice">No employee submissions available.</div>';
-    evaluatorWorkbookSummarySheet.innerHTML = '<div class="notice">No employee submissions available.</div>';
+    evaluatorWorkbookRequestForm.innerHTML = '<div class="notice">No faculty submissions available.</div>';
+    evaluatorWorkbookSummarySheet.innerHTML = '<div class="notice">No faculty submissions available.</div>';
     return;
   }
 
@@ -1144,13 +1144,13 @@ function renderRequestForm(item) {
   return `
     <article class="card">
       <div class="card-header">
-        <h3>${escapeHtml(item.name || 'Unnamed employee')} - Request Form</h3>
+        <h3>${escapeHtml(item.name || 'Unnamed faculty member')} - Request Form</h3>
       </div>
       <div class="table-scroll">
         <table class="table">
           <tbody>
             <tr><th>Full Name</th><td>${escapeHtml(requestForm.fullName || 'N/A')}</td></tr>
-            <tr><th>Employee ID</th><td>${escapeHtml(requestForm.employeeId || 'N/A')}</td></tr>
+            <tr><th>Faculty ID</th><td>${escapeHtml(requestForm.employeeId || 'N/A')}</td></tr>
             <tr><th>Academic Rank</th><td>${escapeHtml(requestForm.academicRank || 'N/A')}</td></tr>
             <tr><th>Highest Educational Attainment</th><td>${escapeHtml(requestForm.highestEducationalAttainment || 'N/A')}</td></tr>
             <tr><th>Review Period</th><td>${escapeHtml(requestForm.reviewPeriod || 'N/A')}</td></tr>
@@ -1168,7 +1168,7 @@ function renderSummarySheet(item) {
   return `
     <article class="card">
       <div class="card-header">
-        <h3>${escapeHtml(item.name || 'Unnamed employee')} - Summary Sheet</h3>
+        <h3>${escapeHtml(item.name || 'Unnamed faculty member')} - Summary Sheet</h3>
       </div>
       <div class="table-scroll">
         <table class="table">
@@ -1675,7 +1675,7 @@ function prettyRole(role) {
     return 'Evaluator';
   }
   if (role === 'EMPLOYEE') {
-    return 'Employee';
+    return 'Faculty';
   }
   return 'Admin';
 }

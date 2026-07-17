@@ -13,7 +13,7 @@
     <main class="container page-content">
       <div class="card">
         <div class="card-header">
-          <h2>Employee Dashboard</h2>
+          <h2>Faculty Dashboard</h2>
         </div>
         <div class="card-body">
           <p>Welcome to the new Vue.js Frontend!</p>
