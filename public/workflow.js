@@ -189,6 +189,8 @@ async function loadAdminWorkspace() {
     renderAdminOverview(overviewData);
     setNotice(adminOverviewStatus, 'System overview loaded.');
   }
+
+  await loadEvaluatorWorkspace();
 }
 
 function renderAdminOverview(overview) {
@@ -965,6 +967,7 @@ function renderReviewCard(item) {
   const promotionDraft = draftPoints.promotionDraft || {};
   const scoreComputation = draftPoints.scoreComputation || {};
   const latestTraining = item.latestTrainingItem?.evaluatorAssessment || null;
+  const isApproved = item.latestTrainingItem?.status === 'VALIDATED';
   const evidenceScore = formatOptionalNumber(scoreComputation.weightedScore ?? scoreComputation.rawTotal, '0.00');
   const systemScore = formatOptionalNumber(promotionDraft.weightedScore, 'Pending');
 
@@ -987,6 +990,10 @@ function renderReviewCard(item) {
         ${renderReviewMetric('Projected rank', promotionDraft.suggestedRank || 'Pending')}
         ${renderReviewMetric('Weighted score', systemScore, true)}
         ${renderReviewMetric('Evaluator total', formatOptionalNumber(latestTraining?.totalScore, 'Pending'))}
+      </div>
+      <div class="uploaded-file-actions">
+        <button class="button ${isApproved ? 'button-secondary' : 'button-primary'} approve-draft-button" data-profile-id="${escapeHtml(item.id)}" data-profile-name="${escapeHtml(item.name || 'this faculty member')}" data-upload-action="approve" type="button">${isApproved ? 'Re-approve draft score' : 'Approve draft score'}</button>
+        ${isApproved ? '<span class="review-meta-chip">Approved by evaluator</span>' : ''}
       </div>
       ${draftPoints.note ? `<p class="card-copy review-card-note">${escapeHtml(draftPoints.note)}</p>` : ''}
       <p class="card-copy">${escapeHtml(scoreComputation.note || 'Missing evidence is counted as 0 for the computed score.')}</p>
@@ -1224,6 +1231,11 @@ function renderEvaluatorUploadRow(upload) {
         <p class="card-copy">${escapeHtml(upload.metadata?.analysisSummary || 'OCR summary pending.')}</p>
         <div class="uploaded-file-actions">
           <button class="button button-secondary preview-upload-button" data-document-id="${escapeHtml(upload.id)}" data-file-name="${escapeHtml(upload.originalName)}" data-mime-type="${escapeHtml(upload.mimeType || '')}" data-upload-action="preview" type="button">${escapeHtml(previewLabel)}</button>
+          ${
+            portal === 'admin'
+              ? `<button class="button button-danger delete-upload-button" data-document-id="${escapeHtml(upload.id)}" data-file-name="${escapeHtml(upload.originalName)}" data-upload-action="delete" type="button">Delete</button>`
+              : ''
+          }
         </div>
       </div>
     </article>
@@ -1468,6 +1480,26 @@ function handleUploadListActionClick(event) {
 }
 
 function handleReviewQueueActionClick(event) {
+  const approveButton = event.target.closest('button[data-upload-action="approve"]');
+  if (approveButton) {
+    const profileId = approveButton.dataset.profileId || '';
+    const profileName = approveButton.dataset.profileName || 'this faculty member';
+    if (profileId) {
+      void approveDraftScore(profileId, profileName);
+    }
+    return;
+  }
+
+  const deleteButton = event.target.closest('button[data-upload-action="delete"]');
+  if (deleteButton) {
+    const documentId = deleteButton.dataset.documentId || '';
+    const fileName = deleteButton.dataset.fileName || 'this file';
+    if (documentId) {
+      void deleteUploadDocument(documentId, fileName);
+    }
+    return;
+  }
+
   const button = event.target.closest('button[data-upload-action="preview"]');
   if (!button) {
     return;
@@ -1487,6 +1519,24 @@ function handleReviewQueueActionClick(event) {
   });
 }
 
+async function approveDraftScore(profileId, profileName) {
+  const confirmed = window.confirm(`Approve the current system-computed draft score for ${profileName}? This records your endorsement as the evaluator total.`);
+  if (!confirmed) {
+    return;
+  }
+
+  try {
+    setNotice(reviewQueueFilterStatus, `Approving draft score for ${profileName}...`);
+    await apiFetch(`/api/training/profiles/${encodeURIComponent(profileId)}/approve`, {
+      method: 'POST',
+    });
+    setNotice(reviewQueueFilterStatus, `Draft score approved for ${profileName}.`);
+    await loadEvaluatorWorkspace();
+  } catch (error) {
+    setNotice(reviewQueueFilterStatus, toErrorMessage(error), true);
+  }
+}
+
 async function deleteUploadDocument(documentId, fileName) {
   const confirmed = window.confirm(`Delete ${fileName}? This cannot be undone.`);
   if (!confirmed) {
@@ -1500,7 +1550,7 @@ async function deleteUploadDocument(documentId, fileName) {
     });
     setNotice(employeeUploadStatus || reviewQueueFilterStatus, `${fileName} was deleted.`);
     await loadEmployeeWorkspace();
-    if (portal === 'evaluator') {
+    if (portal === 'evaluator' || portal === 'admin') {
       await loadEvaluatorWorkspace();
     }
   } catch (error) {
