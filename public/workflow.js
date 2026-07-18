@@ -790,18 +790,18 @@ function groupDocumentsByProfile(documents) {
 
 function renderEvaluatorDocumentGroup(group) {
   return `
-    <article class="uploaded-files-group evaluator-document-group">
-      <div class="uploaded-files-group-header">
+    <details class="uploaded-files-group evaluator-document-group">
+      <summary class="uploaded-files-group-header">
         <div>
           <h3>${escapeHtml(group.label)}${group.employeeId ? ` <span class="uploaded-files-group-id">${escapeHtml(group.employeeId)}</span>` : ''}</h3>
           <span>${escapeHtml(group.submittedBy)} - ${escapeHtml(group.cycleLabel)}</span>
         </div>
         <span>${escapeHtml(String(group.documents.length))} file(s)</span>
-      </div>
+      </summary>
       <div class="uploaded-files-list">
         ${group.documents.map((document) => renderEvaluatorUploadRow(document)).join('')}
       </div>
-    </article>
+    </details>
   `;
 }
 

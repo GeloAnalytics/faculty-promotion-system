@@ -2876,6 +2876,41 @@ body[data-portal="evaluator"] #scoring-panel .stack-form {
   font-size: 1rem;
 }
 
+.evaluator-document-group {
+  padding: 0;
+}
+
+.evaluator-document-group > summary.uploaded-files-group-header {
+  cursor: pointer;
+  list-style: none;
+  margin: 0;
+  padding: 16px;
+  border-bottom: none;
+}
+
+.evaluator-document-group > summary.uploaded-files-group-header::-webkit-details-marker {
+  display: none;
+}
+
+.evaluator-document-group > summary.uploaded-files-group-header::after {
+  content: "\25B8";
+  color: var(--muted);
+  flex-shrink: 0;
+  transition: transform 0.15s ease;
+}
+
+.evaluator-document-group[open] > summary.uploaded-files-group-header {
+  border-bottom: 1px solid var(--border);
+}
+
+.evaluator-document-group[open] > summary.uploaded-files-group-header::after {
+  transform: rotate(90deg);
+}
+
+.evaluator-document-group > .uploaded-files-list {
+  padding: 16px;
+}
+
 .uploaded-files-group-header h3 .uploaded-files-group-id {
   display: inline-flex;
   align-items: center;
