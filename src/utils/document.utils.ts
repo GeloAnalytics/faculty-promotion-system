@@ -10,7 +10,7 @@ import { repoRoot } from '../config/globals';
 import { fixedReviewPeriodLabel } from '../constants/reviewCycle';
 import { uploadPanels } from '../uploadPanels';
 import { analyzeDocumentContent, inferBestUploadPanelKey } from '../utils';
-import { extractImageTextWithOcr, isOcrReady, type OcrConfig } from '../ocr';
+import { extractImageTextWithOcr, isOcrReady, runTesseractOcr, type OcrConfig } from '../ocr';
 import { EmployeeUploadType, UploadPanelDefinition, ProcessedUploadResult, ProfileLinkResult } from '../types';
 import { findBestMatchingProfile, scoreProfileFilename } from './profileMatching';
 
@@ -90,6 +90,7 @@ export async function processUploadedDocument(args: {
     // decoded bitmaps, so it can't be used for this fallback.
     const MIN_MEANINGFUL_PDF_TEXT_LENGTH = 20;
     const canAttemptPdfOcrFallback = ocrConfig.provider !== 'windows' && isOcrReady(ocrConfig);
+    let ocrError: string | null = null;
     if (extractedText.trim().length < MIN_MEANINGFUL_PDF_TEXT_LENGTH && canAttemptPdfOcrFallback) {
       try {
         const ocrResult = await extractImageTextWithOcr(file.buffer, fileName, ocrConfig, 'PDF');
@@ -97,8 +98,29 @@ export async function processUploadedDocument(args: {
           extractedText = ocrResult.text.trim();
           ocrFallback = { provider: ocrResult.provider, lineCount: ocrResult.lineCount };
         }
-      } catch {
-        // Best-effort only - keep whatever pdf-parse already found (even if empty) if OCR also fails.
+      } catch (error) {
+        // Best-effort only - keep whatever pdf-parse already found (even if empty) if OCR also
+        // fails, but record why so a stuck-at-zero score doesn't require digging through the
+        // OCR provider's logs to diagnose (e.g. free-tier file-size caps, timeouts).
+        ocrError = error instanceof Error ? error.message : 'OCR fallback failed';
+      }
+    }
+
+    // The configured provider may reject the file outright (OCR.space's free
+    // plan 413s anything over 1.5MB), time out, or simply come back short.
+    // Self-hosted Tesseract has no size cap, so it gets a final attempt
+    // whenever we still don't have real text - unless it's already the
+    // configured provider, in which case the block above already tried it.
+    if (extractedText.trim().length < MIN_MEANINGFUL_PDF_TEXT_LENGTH && ocrConfig.provider !== 'tesseract') {
+      try {
+        const tesseractResult = await runTesseractOcr(file.buffer, fileName, 'PDF');
+        if (tesseractResult.text.trim().length > extractedText.trim().length) {
+          extractedText = tesseractResult.text.trim();
+          ocrFallback = { provider: tesseractResult.provider, lineCount: tesseractResult.lineCount };
+          ocrError = null;
+        }
+      } catch (error) {
+        ocrError = ocrError ?? (error instanceof Error ? error.message : 'Tesseract OCR fallback failed');
       }
     }
 
@@ -121,6 +143,7 @@ export async function processUploadedDocument(args: {
             panelTitle: detectedPanelDefinition.title,
             storedForTraining: true,
             ...(ocrFallback ? { ocr: ocrFallback } : {}),
+            ...(ocrError ? { ocrError } : {}),
             analysis,
             linkage,
             storage,
@@ -146,7 +169,20 @@ export async function processUploadedDocument(args: {
   }
 
   if (mimeType.startsWith('image/') || /\.(png|jpg|jpeg|bmp|tif|tiff)$/i.test(fileName)) {
-    const ocrResult = await extractImageTextWithOcr(file.buffer, fileName, ocrConfig);
+    let ocrResult;
+    let ocrError: string | null = null;
+    try {
+      ocrResult = await extractImageTextWithOcr(file.buffer, fileName, ocrConfig);
+    } catch (error) {
+      // Same rationale as the PDF path above: the configured provider can
+      // reject the file (e.g. OCR.space's free-plan size cap) or time out,
+      // so fall back to the uncapped self-hosted engine before giving up.
+      if (ocrConfig.provider === 'tesseract') {
+        throw error;
+      }
+      ocrError = error instanceof Error ? error.message : 'OCR failed';
+      ocrResult = await runTesseractOcr(file.buffer, fileName);
+    }
     const extractedText = ocrResult.text.trim();
     const detectedPanelKey = inferBestUploadPanelKey(extractedText, panelKey);
     const detectedPanelDefinition = findUploadPanelDefinition(detectedPanelKey);
@@ -170,6 +206,7 @@ export async function processUploadedDocument(args: {
               provider: ocrResult.provider,
               lineCount: ocrResult.lineCount,
             },
+            ...(ocrError ? { ocrError } : {}),
             analysis,
             linkage,
             storage,

@@ -4,10 +4,17 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
+import { createWorker } from 'tesseract.js';
 
 const execFileAsync = promisify(execFile);
 
-export type OcrProvider = 'windows' | 'http' | 'ocrspace' | 'disabled';
+export type OcrProvider = 'windows' | 'http' | 'ocrspace' | 'tesseract' | 'disabled';
+
+// Self-hosted, so there's no per-file size cap or monthly quota the way there
+// is with OCR.space's free plan - a large scanned PDF just takes longer
+// instead of getting rejected outright. Cap page count rather than file size
+// so a pathologically large PDF can't tie up a request thread indefinitely.
+const MAX_TESSERACT_PDF_PAGES = 30;
 
 export interface OcrConfig {
   provider: OcrProvider;
@@ -38,6 +45,10 @@ export function isOcrReady(config: OcrConfig) {
     return Boolean(config.apiUrl && config.apiKey);
   }
 
+  if (config.provider === 'tesseract') {
+    return true;
+  }
+
   return false;
 }
 
@@ -57,6 +68,10 @@ export async function extractImageTextWithOcr(
 
   if (config.provider === 'ocrspace') {
     return runOcrSpace(fileBuffer, originalName, config, fileTypeHint);
+  }
+
+  if (config.provider === 'tesseract') {
+    return runTesseractOcr(fileBuffer, originalName, fileTypeHint);
   }
 
   throw new Error('OCR is not configured');
@@ -209,6 +224,50 @@ async function runOcrSpace(
   } finally {
     clearTimeout(timeout);
   }
+}
+
+export async function runTesseractOcr(
+  fileBuffer: Buffer,
+  originalName: string,
+  fileTypeHint?: string,
+): Promise<OcrResult> {
+  const isPdf = fileTypeHint === 'PDF' || /\.pdf$/i.test(originalName);
+  const pageImages = isPdf ? await rasterizePdfPages(fileBuffer) : [fileBuffer];
+
+  const worker = await createWorker('eng');
+  try {
+    const pageTexts: string[] = [];
+    for (const pageImage of pageImages) {
+      const { data } = await worker.recognize(pageImage);
+      pageTexts.push(data.text);
+    }
+
+    const text = pageTexts.join('\n').trim();
+    return {
+      provider: 'tesseract',
+      text,
+      lineCount: countLines(text),
+    };
+  } finally {
+    await worker.terminate();
+  }
+}
+
+async function rasterizePdfPages(fileBuffer: Buffer): Promise<Buffer[]> {
+  // pdf-to-img is ESM-only; this project compiles to CommonJS, so it has to
+  // be loaded via a dynamic import rather than a static one.
+  const { pdf } = await import('pdf-to-img');
+  const dataUrl = `data:application/pdf;base64,${fileBuffer.toString('base64')}`;
+  const document = await pdf(dataUrl, { scale: 2 });
+
+  const pages: Buffer[] = [];
+  for await (const page of document) {
+    pages.push(page as Buffer);
+    if (pages.length >= MAX_TESSERACT_PDF_PAGES) {
+      break;
+    }
+  }
+  return pages;
 }
 
 function extractTextFromApiPayload(payload: Record<string, unknown>) {

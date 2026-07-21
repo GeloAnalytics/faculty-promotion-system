@@ -395,6 +395,16 @@ export const findGuidelinePdfPath = (rootDir: string): string | null => {
   return path.join(rootDir, candidates[0]);
 };
 
+// Score patterns match "<label>...<number within ~70 chars>", which also
+// happily grabs the nearest date, page number, or ID in scanned evaluation
+// forms (e.g. "Thesis, Dissertation, and Mentorship Services ... 2021" from
+// an "A.Y. 2020-2021" header). Anything that reads as a bare calendar year,
+// or is implausibly large for any real KRA score/hour count, is almost
+// certainly not the score field and is rejected rather than propagated as a
+// detected score.
+const MAX_PLAUSIBLE_EXTRACTED_SCORE = 999;
+const CALENDAR_YEAR_PATTERN = /^(19|20)\d{2}$/;
+
 function extractScore(text: string, regex: RegExp): number | undefined {
   const match = text.match(regex);
   if (!match) {
@@ -402,8 +412,20 @@ function extractScore(text: string, regex: RegExp): number | undefined {
   }
 
   const value = match.find((entry: string | undefined) => entry && /^\d+(\.\d+)?$/.test(entry));
+  if (!value) {
+    return undefined;
+  }
 
-  return value ? Number.parseFloat(value) : undefined;
+  if (CALENDAR_YEAR_PATTERN.test(value)) {
+    return undefined;
+  }
+
+  const parsed = Number.parseFloat(value);
+  if (!Number.isFinite(parsed) || parsed > MAX_PLAUSIBLE_EXTRACTED_SCORE) {
+    return undefined;
+  }
+
+  return parsed;
 }
 
 function buildDocumentSummary(

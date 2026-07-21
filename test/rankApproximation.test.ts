@@ -26,35 +26,37 @@ function buildProfileFeatures({
 // Every KRA score must come from an OCR-tagged upload, never a typed field -
 // these fixtures mirror what processUploadedDocument would have written to
 // extractionMetadata.analysis.extractedScores for a real scanned document.
-function buildOcrDocument(panelKey: string, extractedScores: Record<string, number>) {
+// The authoritative per-panel score computation reads the score keyed by the
+// exact panel key (summarizeDocumentMetadata.panelScore), and clamps it to
+// that panel's own maxScore - unlike the old raw-number-times-fudge-factor
+// approximate formula this replaced, so fixture scores must already be on
+// each panel's real point scale, not an arbitrary small input number.
+function buildOcrDocument(panelKey: string, score: number) {
   return {
     extractionMetadata: {
       uploadType: 'evidence',
       panelKey,
       panelTitle: panelKey,
-      analysis: { extractedScores },
+      analysis: { extractedScores: { [panelKey]: score } },
     },
   };
 }
 
-function buildOcrDocuments({
-  teachingEffectiveness = 91.8,
-  researchOutputs = 4.4,
-  extensionServices = 3,
-  professionalDevelopmentHours = 48,
-  ipcrAverage = 4.5,
-}: {
-  teachingEffectiveness?: number;
-  researchOutputs?: number;
-  extensionServices?: number;
-  professionalDevelopmentHours?: number;
-  ipcrAverage?: number;
-}) {
+// One covered panel per KRA - partial coverage is intentional (these tests
+// exercise the rank-cap/doctoral-bonus logic under an incomplete evidence
+// packet, matching real early-stage submissions). Each panel is scored 45,
+// chosen from the panels in its KRA whose own maxScore can actually hold 45
+// (kra3_service_to_institution tops out at 30, kra4_professional_organizations
+// at 20, so those can't be used alone). Since all four KRA totals come out
+// identical, the weighted score is 45 under every rank-group's weight
+// profile (weights always sum to 1), landing in the 41-50 bracket
+// (subrankIncrements = 1) regardless of which weight profile applies.
+function buildOcrDocuments() {
   return [
-    buildOcrDocument('kra1_teaching_effectiveness', { teachingEffectiveness, ipcrAverage }),
-    buildOcrDocument('kra2_research_outputs', { researchOutputs }),
-    buildOcrDocument('kra3_service_to_institution', { extensionServices }),
-    buildOcrDocument('kra4_professional_organizations', { professionalDevelopmentHours }),
+    buildOcrDocument('kra1_teaching_effectiveness', 45),
+    buildOcrDocument('kra2_research_outputs', 45),
+    buildOcrDocument('kra3_service_to_community', 45),
+    buildOcrDocument('kra4_continuing_development', 45),
   ];
 }
 
@@ -67,7 +69,7 @@ test('associate professor projection is capped without doctoral units or graduat
       }),
       semester: '2026-1',
     },
-    buildOcrDocuments({}),
+    buildOcrDocuments(),
   );
 
   assert.equal(draftPoints.promotionDraft.status, 'pending-doctoral-attainment');
@@ -84,7 +86,7 @@ test('professor ranks are capped to one rank increase from KRA scoring', () => {
       }),
       semester: '2026-1',
     },
-    buildOcrDocuments({}),
+    buildOcrDocuments(),
   );
 
   assert.equal(draftPoints.promotionDraft.status, 'pending');
@@ -102,7 +104,7 @@ test('doctoral graduate bonus does not push professor projections beyond one ran
       }),
       semester: '2026-1',
     },
-    buildOcrDocuments({}),
+    buildOcrDocuments(),
   );
 
   assert.equal(draftPoints.promotionDraft.status, 'pending');
@@ -113,13 +115,7 @@ test('doctoral graduate bonus does not push professor projections beyond one ran
 });
 
 test('doctoral graduates receive the one-time +1 rank bonus when no prior promotion is recorded', () => {
-  const documents = buildOcrDocuments({
-    teachingEffectiveness: 91.8,
-    researchOutputs: 2,
-    extensionServices: 1,
-    professionalDevelopmentHours: 0,
-    ipcrAverage: 0,
-  });
+  const documents = buildOcrDocuments();
 
   const bonusDraft = buildDraftPointSummary(
     {

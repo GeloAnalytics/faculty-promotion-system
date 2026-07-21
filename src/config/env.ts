@@ -13,7 +13,7 @@ const envSchema = z
     AUTH_SECRET: z.string().min(32),
     CORS_ORIGIN: z.string().default('http://localhost:3000'),
     TRUST_PROXY: z.coerce.number().int().nonnegative().default(1),
-    OCR_PROVIDER: z.enum(['windows', 'http', 'ocrspace', 'disabled']).default('windows'),
+    OCR_PROVIDER: z.enum(['windows', 'http', 'ocrspace', 'tesseract', 'disabled']).default('windows'),
     OCR_API_URL: z.string().trim().optional(),
     OCR_API_KEY: z.string().trim().optional(),
     OCR_API_KEY_HEADER: z.string().trim().default('Authorization'),

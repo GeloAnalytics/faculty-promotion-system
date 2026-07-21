@@ -283,15 +283,6 @@ export function buildDraftPointSummary(
   const coverage = uploadPanels.length ? uploadedPanels.size / uploadPanels.length : 0;
   const averagedCompleteness = completenessSamples ? completenessTotal / completenessSamples : 0;
   const overallEstimate = instruction + research + extension + professionalDevelopment + ipcrAverage;
-  const approximateKraTotals = computeApproximateKraTotals({
-    instruction,
-    research,
-    extension,
-    professionalDevelopment,
-    ipcrAverage,
-    coverage,
-    averagedCompleteness,
-  });
   const currentRank =
     typeof personalData.academicRank === 'string' ? normalizeAcademicRank(personalData.academicRank) : null;
   const highestEducationalAttainment =
@@ -329,7 +320,7 @@ export function buildDraftPointSummary(
   );
   const preliminaryOutcome =
     currentRank && getAcademicRankIndex(currentRank) >= 0
-      ? resolveOfficialRankOutcome(currentRank, approximateKraTotals, highestEducationalAttainment, hasDoctoralGraduateBonus)
+      ? resolveOfficialRankOutcome(currentRank, scoreComputation.kraTotals, highestEducationalAttainment, hasDoctoralGraduateBonus)
       : null;
   const evaluatorAssessment = latestEvaluation?.assessment ?? null;
   const hasEvaluatorScore =
@@ -347,11 +338,7 @@ export function buildDraftPointSummary(
     highestEducationalAttainment,
     promotionHistory,
     {
-      instruction,
-      research,
-      extension,
-      professionalDevelopment,
-      ipcrAverage,
+      kraTotals: scoreComputation.kraTotals,
       coverage,
       averagedCompleteness,
       uploadedPanelCount: uploadedPanels.size,
@@ -403,7 +390,7 @@ export function buildDraftPointSummary(
       currentRank,
       panelScoreByKey: evidenceBasedPanelScoreByKey,
       panelEvidenceCount,
-      approximateKraTotals,
+      approximateKraTotals: scoreComputation.kraTotals,
       approximateOutcome: preliminaryOutcome,
       validatedOutcome,
       validatedKraTotals,
@@ -533,11 +520,7 @@ function buildPromotionDraftSnapshot(
   highestEducationalAttainment: string | null,
   promotionHistory: unknown,
   approximateInputs: {
-    instruction: number;
-    research: number;
-    extension: number;
-    professionalDevelopment: number;
-    ipcrAverage: number;
+    kraTotals: { instruction: number; research: number; extension: number; professionalDevelopment: number };
     coverage: number;
     averagedCompleteness: number;
     uploadedPanelCount: number;
@@ -574,7 +557,6 @@ function buildPromotionDraftSnapshot(
     };
   }
 
-  const approximateKraTotals = computeApproximateKraTotals(approximateInputs);
   const preliminaryConfidence = derivePreliminaryConfidence(
     approximateInputs.coverage,
     approximateInputs.averagedCompleteness,
@@ -584,7 +566,7 @@ function buildPromotionDraftSnapshot(
   if (!hasEvaluatorScore) {
     const approximateOutcome = resolveOfficialRankOutcome(
       currentRank,
-      approximateKraTotals,
+      approximateInputs.kraTotals,
       highestEducationalAttainment,
       hasDoctoralGraduateBonus,
     );
@@ -730,32 +712,6 @@ function computeKraTotals(criterionScores: Record<string, number>) {
     research: Math.min(100, roundScore(research)),
     extension: Math.min(100, roundScore(extension)),
     professionalDevelopment: Math.min(100, roundScore(professionalDevelopment)),
-  };
-}
-
-function computeApproximateKraTotals(inputs: {
-  instruction: number;
-  research: number;
-  extension: number;
-  professionalDevelopment: number;
-  ipcrAverage: number;
-  coverage: number;
-  averagedCompleteness: number;
-}) {
-  const coverageBoost = clampScore(inputs.coverage * 100);
-  const completenessBoost = clampScore(inputs.averagedCompleteness * 100);
-  const instruction = clampScore(inputs.instruction);
-  const research = clampScore(Math.max(inputs.research * 20, coverageBoost * 0.75, completenessBoost * 0.55));
-  const extension = clampScore(Math.max(inputs.extension * 20, coverageBoost * 0.7, completenessBoost * 0.5));
-  const professionalDevelopment = clampScore(
-    Math.max(inputs.professionalDevelopment / 60 * 100, coverageBoost * 0.6, completenessBoost * 0.45),
-  );
-
-  return {
-    instruction: clampScore(instruction * 0.75 + clampScore(inputs.ipcrAverage * 20) * 0.25),
-    research,
-    extension,
-    professionalDevelopment,
   };
 }
 
@@ -925,10 +881,6 @@ function computeWeightedScore(
       kraTotals.extension * weights.extension +
       kraTotals.professionalDevelopment * weights.professionalDevelopment,
   );
-}
-
-function clampScore(value: number) {
-  return Math.max(0, Math.min(100, roundScore(value)));
 }
 
 function getSubrankIncrement(score: number) {
