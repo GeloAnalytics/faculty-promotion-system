@@ -1,3 +1,5 @@
+import { DocumentDateCheck } from './utils/promotionWindow';
+
 export const featureKeys = [
   'age',
   'yearsInService',
@@ -270,6 +272,7 @@ export type ProcessedUploadResult = {
   linkage: ProfileLinkResult;
   textPreview: string;
   analysis: DocumentAnalysisResult;
+  dateCheck: DocumentDateCheck;
 };
 
 declare global {

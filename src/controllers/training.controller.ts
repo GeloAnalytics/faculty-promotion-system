@@ -5,7 +5,7 @@ import { TrainingExampleStatus } from '@prisma/client';
 import { toPrismaJson } from '../utils/document.utils';
 import { createEvaluatorAssessment, serializeEvaluatorAssessment } from '../utils/evaluator.utils';
 import { buildDraftPointSummary } from '../utils/dashboard.utils';
-import { TrainingExampleSubmission } from '../types';
+import { TrainingExampleSubmission, UploadPanelKey } from '../types';
 
 export const createTrainingExample = async (req: Request, res: Response) => {
   const payload = trainingSubmissionSchema.parse(req.body) as TrainingExampleSubmission;
@@ -64,6 +64,7 @@ export const approveDraftScore = async (req: Request, res: Response) => {
     include: {
       documents: { select: { extractionMetadata: true } },
       trainingItems: { orderBy: { updatedAt: 'desc' }, take: 1 },
+      criterionReviews: { select: { panelKey: true, decision: true } },
     },
   });
 
@@ -71,7 +72,16 @@ export const approveDraftScore = async (req: Request, res: Response) => {
     return res.status(404).json({ error: 'Faculty profile not found' });
   }
 
-  const draftPoints = buildDraftPointSummary({ features: profile.features, semester: profile.semester }, profile.documents);
+  const criterionReviews = new Map<UploadPanelKey, 'PENDING' | 'APPROVED' | 'DISAPPROVED'>(
+    profile.criterionReviews.map((review) => [review.panelKey as UploadPanelKey, review.decision]),
+  );
+  const draftPoints = buildDraftPointSummary(
+    { features: profile.features, semester: profile.semester },
+    profile.documents,
+    undefined,
+    undefined,
+    criterionReviews,
+  );
   const { scoreComputation, promotionDraft } = draftPoints;
 
   const criterionScores = Object.fromEntries(scoreComputation.panelScores.map((panel) => [panel.key, panel.usedScore]));

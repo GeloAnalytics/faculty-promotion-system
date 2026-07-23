@@ -34,6 +34,12 @@ enum ReviewStatus {
   REJECTED
 }
 
+enum CriterionDecision {
+  PENDING
+  APPROVED
+  DISAPPROVED
+}
+
 enum AuditLogAction {
   UPLOAD
   REPLACE
@@ -58,9 +64,10 @@ model User {
   updatedAt     DateTime          @updatedAt
   profiles      FacultyProfile[]
   predictions   Prediction[]
-  documents     UploadedDocument[]
-  trainingItems TrainingExample[]
-  auditLogs     AuditLog[]
+  documents        UploadedDocument[]
+  trainingItems    TrainingExample[]
+  auditLogs        AuditLog[]
+  criterionReviews CriterionReview[]
 
   @@map("users")
 }
@@ -78,11 +85,28 @@ model FacultyProfile {
   reviewStatus    ReviewStatus       @default(DRAFT)
   createdAt       DateTime           @default(now())
   updatedAt       DateTime           @updatedAt
-  predictions     Prediction[]
-  documents       UploadedDocument[]
-  trainingItems   TrainingExample[]
+  predictions       Prediction[]
+  documents         UploadedDocument[]
+  trainingItems     TrainingExample[]
+  criterionReviews  CriterionReview[]
 
   @@map("faculty_profiles")
+}
+
+model CriterionReview {
+  id               String            @id @default(cuid())
+  profileId        String
+  profile          FacultyProfile    @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  panelKey         String
+  decision         CriterionDecision @default(PENDING)
+  notes            String?
+  reviewedByUserId String?
+  reviewedBy       User?             @relation(fields: [reviewedByUserId], references: [id], onDelete: SetNull)
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+
+  @@unique([profileId, panelKey])
+  @@map("criterion_reviews")
 }
 
 model Prediction {

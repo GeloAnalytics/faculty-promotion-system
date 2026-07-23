@@ -46,6 +46,7 @@ document.querySelectorAll("[data-action='logout']").forEach((button) => {
 employeeUploadList?.addEventListener('click', handleUploadListActionClick);
 reviewQueue?.addEventListener('click', handleReviewQueueActionClick);
 evaluatorDocumentLibrary?.addEventListener('click', handleReviewQueueActionClick);
+evaluatorWorkbookSummarySheet?.addEventListener('click', handleReviewQueueActionClick);
 adminAccounts?.addEventListener('click', handleAccountsActionClick);
 employeeProfileForm?.addEventListener('submit', handleEmployeeProfileSubmit);
 document.addEventListener('keydown', handleDocumentPreviewKeydown);
@@ -1171,7 +1172,8 @@ function renderRequestForm(item) {
 function renderSummarySheet(item) {
   const summarySheet = item.draftPoints?.workbookMirror || {};
   const kraSections = Array.isArray(summarySheet.kraSections) ? summarySheet.kraSections : [];
-  
+  const profileId = item.id || '';
+
   return `
     <article class="card">
       <div class="card-header">
@@ -1186,31 +1188,63 @@ function renderSummarySheet(item) {
               <th>System Score</th>
               <th>Evaluator Validated</th>
               <th>Status</th>
+              <th>Evaluator Decision</th>
             </tr>
           </thead>
           <tbody>
             ${kraSections.map(kra => `
               <tr class="table-row-kra">
-                <td colspan="5"><strong>${escapeHtml(kra.title)}</strong> (Max: ${kra.maxScore}) - Faculty Total: ${kra.facultyScore}, Validated Total: ${kra.validatedScore}</td>
+                <td colspan="6"><strong>${escapeHtml(kra.title)}</strong> (Max: ${kra.maxScore}) - Faculty Total: ${kra.facultyScore}, Validated Total: ${kra.validatedScore}</td>
               </tr>
-              ${kra.criteria.map(crit => `
-                <tr class="${crit.status === 'needs-review' ? 'table-row-warning' : ''}">
-                  <td>${escapeHtml(crit.title)}</td>
-                  <td>${crit.maxScore}</td>
-                  <td>${crit.facultyScore ?? '0'}</td>
-                  <td>${crit.validatedScore ?? 'Pending'}</td>
-                  <td>
-                    <span class="badge badge-${crit.status === 'needs-review' ? 'danger' : crit.status === 'matched' ? 'success' : 'neutral'}">
-                      ${escapeHtml(crit.status)}
-                    </span>
-                  </td>
-                </tr>
-              `).join('')}
+              ${kra.criteria.map(crit => renderCriterionRow(profileId, crit)).join('')}
             `).join('')}
           </tbody>
         </table>
       </div>
     </article>
+  `;
+}
+
+function renderCriterionRow(profileId, crit) {
+  const decision = crit.reviewDecision || 'PENDING';
+  const rowClass = decision === 'DISAPPROVED' ? 'table-row-disapproved' : crit.status === 'needs-review' ? 'table-row-warning' : '';
+  const isApproved = decision === 'APPROVED';
+  const isDisapproved = decision === 'DISAPPROVED';
+
+  return `
+    <tr class="${rowClass}">
+      <td>${escapeHtml(crit.title)}</td>
+      <td>${crit.maxScore}</td>
+      <td>${crit.facultyScore ?? '0'}</td>
+      <td>${crit.validatedScore ?? 'Pending'}</td>
+      <td>
+        <span class="badge badge-${crit.status === 'needs-review' ? 'danger' : crit.status === 'matched' ? 'success' : 'neutral'}">
+          ${escapeHtml(crit.status)}
+        </span>
+      </td>
+      <td>
+        <div class="criterion-review-actions">
+          <button
+            class="button button-primary button-small"
+            type="button"
+            aria-pressed="${isApproved}"
+            data-upload-action="approve-criterion"
+            data-profile-id="${escapeHtml(profileId)}"
+            data-panel-key="${escapeHtml(crit.key)}"
+            data-criterion-title="${escapeHtml(crit.title)}"
+          >${isApproved ? 'Approved' : 'Approve'}</button>
+          <button
+            class="button button-danger button-small"
+            type="button"
+            aria-pressed="${isDisapproved}"
+            data-upload-action="disapprove-criterion"
+            data-profile-id="${escapeHtml(profileId)}"
+            data-panel-key="${escapeHtml(crit.key)}"
+            data-criterion-title="${escapeHtml(crit.title)}"
+          >${isDisapproved ? 'Disapproved' : 'Disapprove'}</button>
+        </div>
+      </td>
+    </tr>
   `;
 }
 
@@ -1490,6 +1524,20 @@ function handleReviewQueueActionClick(event) {
     return;
   }
 
+  const criterionButton = event.target.closest(
+    'button[data-upload-action="approve-criterion"], button[data-upload-action="disapprove-criterion"]',
+  );
+  if (criterionButton) {
+    const profileId = criterionButton.dataset.profileId || '';
+    const panelKey = criterionButton.dataset.panelKey || '';
+    const criterionTitle = criterionButton.dataset.criterionTitle || 'this criterion';
+    const decision = criterionButton.dataset.uploadAction === 'approve-criterion' ? 'APPROVED' : 'DISAPPROVED';
+    if (profileId && panelKey) {
+      void setCriterionDecision(profileId, panelKey, decision, criterionTitle);
+    }
+    return;
+  }
+
   const deleteButton = event.target.closest('button[data-upload-action="delete"]');
   if (deleteButton) {
     const documentId = deleteButton.dataset.documentId || '';
@@ -1531,6 +1579,24 @@ async function approveDraftScore(profileId, profileName) {
       method: 'POST',
     });
     setNotice(reviewQueueFilterStatus, `Draft score approved for ${profileName}.`);
+    await loadEvaluatorWorkspace();
+  } catch (error) {
+    setNotice(reviewQueueFilterStatus, toErrorMessage(error), true);
+  }
+}
+
+async function setCriterionDecision(profileId, panelKey, decision, criterionTitle) {
+  const verb = decision === 'APPROVED' ? 'Approving' : 'Disapproving';
+  try {
+    setNotice(reviewQueueFilterStatus, `${verb} ${criterionTitle}...`);
+    await apiFetch(`/api/review/${encodeURIComponent(profileId)}/criteria/${encodeURIComponent(panelKey)}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ decision }),
+    });
+    setNotice(
+      reviewQueueFilterStatus,
+      `${criterionTitle} was ${decision === 'APPROVED' ? 'approved' : 'disapproved'}.`,
+    );
     await loadEvaluatorWorkspace();
   } catch (error) {
     setNotice(reviewQueueFilterStatus, toErrorMessage(error), true);

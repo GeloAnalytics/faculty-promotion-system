@@ -13,6 +13,7 @@ import { analyzeDocumentContent, inferBestUploadPanelKey } from '../utils';
 import { extractImageTextWithOcr, isOcrReady, runTesseractOcr, type OcrConfig } from '../ocr';
 import { EmployeeUploadType, UploadPanelDefinition, ProcessedUploadResult, ProfileLinkResult } from '../types';
 import { findBestMatchingProfile, scoreProfileFilename } from './profileMatching';
+import { checkPromotionWindow, PROMOTION_WINDOW_LABEL } from './promotionWindow';
 
 const documentStorageRoot = path.join(repoRoot, 'uploads', 'documents');
 
@@ -127,6 +128,14 @@ export async function processUploadedDocument(args: {
     const detectedPanelKey = inferBestUploadPanelKey(extractedText, panelKey);
     const detectedPanelDefinition = findUploadPanelDefinition(detectedPanelKey);
     const analysis = analyzeDocumentContent(extractedText, detectedPanelKey, 'pdf');
+    const dateCheck = checkPromotionWindow(extractedText);
+
+    if (dateCheck.status === 'out_of_range') {
+      await removePersistedDocumentFile(storage);
+      throw new Error(
+        `This document is dated ${dateCheck.matchedDate}, outside the current promotion period (${PROMOTION_WINDOW_LABEL}). Only documents relevant to this promotion cycle can be uploaded.`,
+      );
+    }
 
     try {
       const savedDocument = await prisma.uploadedDocument.create({
@@ -145,6 +154,7 @@ export async function processUploadedDocument(args: {
             ...(ocrFallback ? { ocr: ocrFallback } : {}),
             ...(ocrError ? { ocrError } : {}),
             analysis,
+            dateCheck,
             linkage,
             storage,
           }),
@@ -161,6 +171,7 @@ export async function processUploadedDocument(args: {
         linkage,
         textPreview: extractedText.slice(0, 1000),
         analysis,
+        dateCheck,
       };
     } catch (error) {
       await removePersistedDocumentFile(storage);
@@ -187,6 +198,14 @@ export async function processUploadedDocument(args: {
     const detectedPanelKey = inferBestUploadPanelKey(extractedText, panelKey);
     const detectedPanelDefinition = findUploadPanelDefinition(detectedPanelKey);
     const analysis = analyzeDocumentContent(extractedText, detectedPanelKey, 'image');
+    const dateCheck = checkPromotionWindow(extractedText);
+
+    if (dateCheck.status === 'out_of_range') {
+      await removePersistedDocumentFile(storage);
+      throw new Error(
+        `This document is dated ${dateCheck.matchedDate}, outside the current promotion period (${PROMOTION_WINDOW_LABEL}). Only documents relevant to this promotion cycle can be uploaded.`,
+      );
+    }
 
     try {
       const savedDocument = await prisma.uploadedDocument.create({
@@ -208,6 +227,7 @@ export async function processUploadedDocument(args: {
             },
             ...(ocrError ? { ocrError } : {}),
             analysis,
+            dateCheck,
             linkage,
             storage,
           }),
@@ -224,6 +244,7 @@ export async function processUploadedDocument(args: {
         linkage,
         textPreview: extractedText.slice(0, 1000),
         analysis,
+        dateCheck,
       };
     } catch (error) {
       await removePersistedDocumentFile(storage);

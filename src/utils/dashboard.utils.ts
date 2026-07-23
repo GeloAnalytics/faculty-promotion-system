@@ -16,6 +16,8 @@ type NameParts = {
   extensionName: string | null;
 };
 
+type CriterionReviewDecision = 'PENDING' | 'APPROVED' | 'DISAPPROVED';
+
 type WorkbookCriterionSummary = {
   key: UploadPanelKey;
   title: string;
@@ -24,6 +26,7 @@ type WorkbookCriterionSummary = {
   validatedScore: number | null;
   status: 'matched' | 'needs-review' | 'faculty-only' | 'validated-only' | 'missing';
   evidenceCount: number;
+  reviewDecision: CriterionReviewDecision;
 };
 
 type WorkbookKraSummary = {
@@ -45,7 +48,8 @@ type ComputedPanelScore = {
   scoreSheetCount: number;
   evidenceCount: number;
   required: boolean;
-  status: 'counted' | 'missing-evidence' | 'optional';
+  status: 'counted' | 'missing-evidence' | 'optional' | 'disapproved';
+  reviewDecision: CriterionReviewDecision;
   note: string;
 };
 
@@ -178,6 +182,7 @@ export function buildDraftPointSummary(
   documents: Array<{ extractionMetadata: unknown }>,
   latestEvaluation?: { assessment: EvaluatorAssessmentSnapshot | null; status: string | null },
   submissionRawInput?: unknown,
+  criterionReviews?: Map<UploadPanelKey, CriterionReviewDecision>,
 ) {
   const rawInput = mergeFacultyRecordInput(profile?.features, submissionRawInput);
   const personalData = readJsonObject(rawInput.personalData);
@@ -313,6 +318,7 @@ export function buildDraftPointSummary(
     panelKeywords,
     panelQualitySignal,
     panelTopicalHits,
+    criterionReviews,
   });
   const hasDoctoralGraduateBonus = canUseDoctoralGraduateBonus(
     normalizeAttainment(highestEducationalAttainment),
@@ -349,7 +355,7 @@ export function buildDraftPointSummary(
   const evidenceAwarePromotionDraft = applyEvidenceValidationToPromotionDraft(promotionDraft, evidenceValidation);
   const evidenceBasedPanelScoreByKey = new Map<UploadPanelKey, number>(
     scoreComputation.panelScores
-      .filter((panel) => panel.status === 'counted')
+      .filter((panel) => panel.status === 'counted' || panel.status === 'disapproved')
       .map((panel) => [panel.key, panel.usedScore]),
   );
 
@@ -397,6 +403,7 @@ export function buildDraftPointSummary(
       assessment: evaluatorAssessment,
       promotionDraft: evidenceAwarePromotionDraft,
       evidenceValidation,
+      criterionReviews,
     }),
   };
 }
@@ -1123,6 +1130,7 @@ function buildWorkbookMirrorSummary(args: {
   assessment: EvaluatorAssessmentSnapshot | null;
   promotionDraft: PromotionDraftSnapshot;
   evidenceValidation: EvidenceValidationSummary;
+  criterionReviews?: Map<UploadPanelKey, CriterionReviewDecision>;
 }): WorkbookSummaryMirror {
   const requestPersonalData = readJsonObject(args.rawInput.personalData);
   const performanceReview = readJsonObject(args.rawInput.performanceReview);
@@ -1145,6 +1153,7 @@ function buildWorkbookMirrorSummary(args: {
         validatedScore,
         status: deriveScoreValidationStatus(facultyScore, validatedScore, args.panelEvidenceCount.get(panel.key) ?? 0),
         evidenceCount: args.panelEvidenceCount.get(panel.key) ?? 0,
+        reviewDecision: args.criterionReviews?.get(panel.key) ?? 'PENDING',
       } satisfies WorkbookCriterionSummary;
     });
 
@@ -1286,6 +1295,7 @@ function buildEvidenceBasedScoreComputation(args: {
   panelKeywords: Map<UploadPanelKey, Set<string>>;
   panelQualitySignal: Map<UploadPanelKey, { total: number; count: number }>;
   panelTopicalHits: Map<UploadPanelKey, Set<string>>;
+  criterionReviews?: Map<UploadPanelKey, CriterionReviewDecision>;
 }): EvidenceBasedScoreComputation {
   const panelScores = uploadPanels.map((panel) => {
     const counts = args.panelUploadTypeCounts.get(panel.key) ?? { scoreSheet: 0, evidence: 0 };
@@ -1293,6 +1303,7 @@ function buildEvidenceBasedScoreComputation(args: {
     const required = panel.appliesTo === 'ALL_FACULTY';
     const hasEvidence = counts.evidence > 0;
     const canCount = hasEvidence;
+    const reviewDecision = args.criterionReviews?.get(panel.key) ?? 'PENDING';
 
     let usedScore = 0;
     let scoreSource: ComputedPanelScore['scoreSource'] = 'none';
@@ -1330,11 +1341,21 @@ function buildEvidenceBasedScoreComputation(args: {
     }
     usedScore = canCount ? Math.min(panel.maxScore, Math.max(0, usedScore)) : 0;
 
-    const status: ComputedPanelScore['status'] = canCount
-      ? 'counted'
-      : !required && counts.evidence === 0
-        ? 'optional'
-        : 'missing-evidence';
+    // A disapproved criterion is excluded from the draft score outright,
+    // overriding whatever OCR/checklist/relevance signal would otherwise
+    // have counted - the evaluator's checklist decision is authoritative.
+    if (reviewDecision === 'DISAPPROVED') {
+      usedScore = 0;
+    }
+
+    const status: ComputedPanelScore['status'] =
+      reviewDecision === 'DISAPPROVED'
+        ? 'disapproved'
+        : canCount
+          ? 'counted'
+          : !required && counts.evidence === 0
+            ? 'optional'
+            : 'missing-evidence';
 
     return {
       key: panel.key,
@@ -1348,6 +1369,7 @@ function buildEvidenceBasedScoreComputation(args: {
       evidenceCount: counts.evidence,
       required,
       status,
+      reviewDecision,
       note: getComputedPanelScoreNote(status, scoreSource, roundScore(usedScore)),
     } satisfies ComputedPanelScore;
   });
@@ -1444,6 +1466,9 @@ function getComputedPanelScoreNote(
   }
   if (status === 'missing-evidence') {
     return 'Supporting evidence is missing for this panel, so the computed score is 0.';
+  }
+  if (status === 'disapproved') {
+    return 'The evaluator disapproved this criterion, so it contributes 0 until re-approved.';
   }
   return 'Optional panel has no submitted evidence and is not required for the base packet.';
 }

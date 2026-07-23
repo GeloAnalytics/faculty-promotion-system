@@ -10,6 +10,13 @@ import {
   buildTrainingAssessmentContext,
   getLatestEvaluatorBackedTrainingItem,
 } from '../utils/dashboardSelection';
+import { UploadPanelKey } from '../types';
+
+function toCriterionReviewMap(criterionReviews: Array<{ panelKey: string; decision: string }>) {
+  return new Map<UploadPanelKey, 'PENDING' | 'APPROVED' | 'DISAPPROVED'>(
+    criterionReviews.map((review) => [review.panelKey as UploadPanelKey, review.decision as 'PENDING' | 'APPROVED' | 'DISAPPROVED']),
+  );
+}
 
 export const getEmployeeDashboard = async (req: Request, res: Response) => {
   const [profiles, documents, trainingExamples] = await Promise.all([
@@ -40,6 +47,9 @@ export const getEmployeeDashboard = async (req: Request, res: Response) => {
             createdAt: true,
             updatedAt: true,
           },
+        },
+        criterionReviews: {
+          select: { panelKey: true, decision: true },
         },
       },
     }),
@@ -86,6 +96,7 @@ export const getEmployeeDashboard = async (req: Request, res: Response) => {
     latestProfile?.documents ?? documents.filter((document) => document.profileId === latestProfile?.id),
     latestTrainingContext,
     latestSubmissionRawInput,
+    latestProfile ? toCriterionReviewMap(latestProfile.criterionReviews) : undefined,
   );
 
   return res.json({
@@ -128,6 +139,7 @@ export const getEmployeeDashboard = async (req: Request, res: Response) => {
           profile.documents,
           trainingContext?.assessmentContext,
           latestProfileSubmissionRawInput,
+          toCriterionReviewMap(profile.criterionReviews),
         ),
       };
     }),
@@ -199,6 +211,15 @@ export const getEvaluatorQueue = async (_req: Request, res: Response) => {
           updatedAt: true,
         },
       },
+      criterionReviews: {
+        select: {
+          panelKey: true,
+          decision: true,
+          notes: true,
+          updatedAt: true,
+          reviewedBy: { select: { id: true, fullName: true } },
+        },
+      },
     },
   });
 
@@ -225,7 +246,9 @@ export const getEvaluatorQueue = async (_req: Request, res: Response) => {
           profile.documents,
           trainingContext?.assessmentContext,
           latestSubmissionRawInput,
+          toCriterionReviewMap(profile.criterionReviews),
         ),
+        criterionReviews: profile.criterionReviews,
         uploadLogs: profile.documents.map((document) => ({
           id: document.id,
           originalName: document.originalName,
