@@ -397,7 +397,7 @@ export const findGuidelinePdfPath = (rootDir: string): string | null => {
 
 // Score patterns match "<label>...<number within ~70 chars>", which also
 // happily grabs the nearest date, page number, or ID in scanned evaluation
-// forms (e.g. "Thesis, Dissertation, and Mentorship Services ... 2021" from
+// forms (e.g. "Research Advising and Mentorship Services ... 2021" from
 // an "A.Y. 2020-2021" header). Anything that reads as a bare calendar year,
 // or is implausibly large for any real KRA score/hour count, is almost
 // certainly not the score field and is rejected rather than propagated as a

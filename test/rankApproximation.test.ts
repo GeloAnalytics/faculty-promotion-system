@@ -171,7 +171,7 @@ test('workbook mirror follows the reference workbook naming and parses request f
 
   assert.equal(draftPoints.workbookMirror.requestForm.nameParts.firstName, 'Mia');
   assert.equal(draftPoints.workbookMirror.requestForm.nameParts.lastName, 'Villarica');
-  assert.equal(draftPoints.workbookMirror.kraSections[1].title, 'KRA 2: Research, Innovation and Creative Work');
+  assert.equal(draftPoints.workbookMirror.kraSections[1].title, 'KRA 2: Research, Innovation and/or Creative Work');
   assert.equal(draftPoints.workbookMirror.summarySheet.scoreBracket, draftPoints.promotionDraft.scoreBracket);
 });
 

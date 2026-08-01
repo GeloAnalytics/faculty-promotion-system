@@ -148,27 +148,27 @@ The validation logic should follow these rules:
 ### KRA I - Instruction
 
 - Teaching Effectiveness
-- Curriculum and Instructional Materials Development
-- Thesis, Dissertation, and Mentorship Services
+- Instructional Materials Development
+- Research Advising and Mentorship Services
 
-### KRA II - Research, Innovation and Creative Work
+### KRA II - Research, Innovation and/or Creative Work
 
-- Research Outputs
+- Research Outputs Published
 - Inventions
 - Creative Works
 
 ### KRA III - Extension Services
 
-- Service to Institution
+- Service to the Institution
 - Service to the Community
-- Extension Involvement or Quality of Extension Service
-- Bonus criteria, where applicable
+- Relevance and Quality of Extension Services
+- Bonus criteria (Administrative Designation), where applicable
 
 ### KRA IV - Professional Development
 
 - Involvement in Professional Organizations
 - Continuing Development
-- Awards and Recognitions
+- Awards and Recognition
 - Academic Experience for new entrants only
 - Industry Experience for new entrants only
 

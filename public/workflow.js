@@ -553,7 +553,7 @@ function renderEmployeeUploads(uploads) {
   const grouped = groupEmployeeUploads(orderedUploads);
   const groupOrder = [
     'KRA I - Instruction',
-    'KRA II - Research, Innovation and Creative Work',
+    'KRA II - Research, Innovation and/or Creative Work',
     'KRA III - Extension Services',
     'KRA IV - Professional Development',
     'Unassigned / Legacy',
@@ -617,7 +617,7 @@ function getUploadGroupSubheading(label, count) {
 function groupEmployeeUploads(uploads) {
   const groups = {
     'KRA I - Instruction': [],
-    'KRA II - Research, Innovation and Creative Work': [],
+    'KRA II - Research, Innovation and/or Creative Work': [],
     'KRA III - Extension Services': [],
     'KRA IV - Professional Development': [],
     'Unassigned / Legacy': [],
@@ -667,7 +667,7 @@ function getUploadSortPriority(upload) {
     return 1;
   }
 
-  if (kraLabel === 'KRA II - Research, Innovation and Creative Work') {
+  if (kraLabel === 'KRA II - Research, Innovation and/or Creative Work') {
     return 2;
   }
 
@@ -1438,7 +1438,7 @@ function getKraLabel(panelKey) {
   }
 
   if (panelKey.startsWith('kra2_')) {
-    return 'KRA II - Research, Innovation and Creative Work';
+    return 'KRA II - Research, Innovation and/or Creative Work';
   }
 
   if (panelKey.startsWith('kra3_')) {
