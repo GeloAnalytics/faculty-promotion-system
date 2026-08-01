@@ -19,6 +19,7 @@ const documentPreviewFrame = byId('document-preview-frame');
 const documentPreviewTitle = byId('document-preview-title');
 const documentPreviewMeta = byId('document-preview-meta');
 const evaluatorInsights = byId('evaluator-insights');
+const evaluatorFacultySummary = byId('evaluator-faculty-summary');
 const evaluatorDocumentLibrary = byId('evaluator-document-library');
 const evaluatorDocumentLibraryStatus = byId('evaluator-document-library-status');
 const evaluatorWorkbookRequestForm = byId('evaluator-workbook-request-form');
@@ -50,6 +51,8 @@ evaluatorWorkbookSummarySheet?.addEventListener('click', handleReviewQueueAction
 adminAccounts?.addEventListener('click', handleAccountsActionClick);
 employeeProfileForm?.addEventListener('submit', handleEmployeeProfileSubmit);
 document.addEventListener('keydown', handleDocumentPreviewKeydown);
+document.addEventListener('click', handlePrintActionClick);
+window.addEventListener('afterprint', clearPrintMode);
 documentPreviewModal?.addEventListener('click', (event) => {
   const target = event.target;
   if (target instanceof HTMLElement && target.dataset.previewAction === 'retry') {
@@ -159,6 +162,7 @@ async function loadEvaluatorWorkspace() {
   reviewerQueueItems = Array.isArray(data.items) ? data.items : [];
 
   renderEvaluatorInsights(reviewerQueueItems);
+  renderFacultySummaryTable(reviewerQueueItems);
   renderEvaluatorDocumentLibrary(reviewerQueueItems);
   renderReviewQueue(reviewerQueueItems);
   renderEvaluatorWorkbooks(reviewerQueueItems);
@@ -945,6 +949,103 @@ function renderInsightBarRow(label, value, total, toneClass) {
   `;
 }
 
+function handlePrintActionClick(event) {
+  const button = event.target.closest('button[data-print-action="print"]');
+  if (!button) {
+    return;
+  }
+
+  const targetId = button.dataset.printTarget || '';
+  const target = targetId ? document.getElementById(targetId) : null;
+  if (!target) {
+    return;
+  }
+
+  document.querySelectorAll('.print-active').forEach((el) => el.classList.remove('print-active'));
+  target.classList.add('print-active');
+  document.body.classList.add('print-mode');
+  window.print();
+}
+
+function clearPrintMode() {
+  document.body.classList.remove('print-mode');
+  document.querySelectorAll('.print-active').forEach((el) => el.classList.remove('print-active'));
+}
+
+function renderFacultySummaryTable(items) {
+  if (!evaluatorFacultySummary) {
+    return;
+  }
+
+  if (!items.length) {
+    evaluatorFacultySummary.innerHTML = '<div class="notice">No faculty records available yet.</div>';
+    return;
+  }
+
+  const rows = [...items].sort((left, right) => String(left.name || '').localeCompare(String(right.name || '')));
+  const generatedOn = formatDate(new Date().toISOString());
+
+  evaluatorFacultySummary.innerHTML = `
+    <div id="evaluator-faculty-summary-print-area">
+      <p class="print-only print-heading">Faculty Rank Summary - generated ${escapeHtml(generatedOn)}</p>
+      <div class="table-scroll">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Faculty</th>
+              <th>Faculty ID</th>
+              <th>Current Rank</th>
+              <th>Projected Rank</th>
+              <th>Weighted Score</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rows.map(renderFacultySummaryRow).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+}
+
+function renderFacultySummaryRow(item) {
+  const promotionDraft = item.draftPoints?.promotionDraft || {};
+  const statusInfo = formatPromotionStatus(promotionDraft.status);
+
+  return `
+    <tr>
+      <td>${escapeHtml(item.name || 'Unnamed faculty member')}</td>
+      <td>${escapeHtml(item.employeeId || 'N/A')}</td>
+      <td>${escapeHtml(promotionDraft.currentRank || 'Not set')}</td>
+      <td>${escapeHtml(promotionDraft.suggestedRank || 'Pending')}</td>
+      <td>${escapeHtml(formatOptionalNumber(promotionDraft.weightedScore, 'Pending'))}</td>
+      <td><span class="badge badge-${statusInfo.tone}">${escapeHtml(statusInfo.label)}</span></td>
+    </tr>
+  `;
+}
+
+function formatPromotionStatus(status) {
+  switch (status) {
+    case 'ready':
+      return { label: 'Ready for promotion', tone: 'success' };
+    case 'preliminary':
+      return { label: 'Preliminary estimate', tone: 'neutral' };
+    case 'pending':
+      return { label: 'Pending (incomplete evidence)', tone: 'warning' };
+    case 'needs-exact-rank':
+      return { label: 'Needs exact rank', tone: 'warning' };
+    case 'pending-doctoral-attainment':
+      return { label: 'Pending doctoral attainment', tone: 'warning' };
+    case 'pending-professor-accreditation':
+      return { label: 'Pending professor accreditation', tone: 'warning' };
+    case 'pending-cup-certification':
+      return { label: 'Pending CUP certification', tone: 'warning' };
+    default:
+      return { label: 'Not set', tone: 'neutral' };
+  }
+}
+
 function renderReviewQueue(items) {
   if (!reviewQueue) {
     return;
@@ -1173,12 +1274,15 @@ function renderSummarySheet(item) {
   const summarySheet = item.draftPoints?.workbookMirror || {};
   const kraSections = Array.isArray(summarySheet.kraSections) ? summarySheet.kraSections : [];
   const profileId = item.id || '';
+  const printTargetId = `summary-sheet-${profileId || 'unknown'}`;
 
   return `
-    <article class="card">
+    <article class="card" id="${escapeHtml(printTargetId)}">
       <div class="card-header">
         <h3>${escapeHtml(item.name || 'Unnamed faculty member')} - Summary Sheet</h3>
+        <button class="button button-secondary button-small" type="button" data-print-action="print" data-print-target="${escapeHtml(printTargetId)}">Print / Save as PDF</button>
       </div>
+      <p class="print-only print-heading">${escapeHtml(item.name || 'Unnamed faculty member')} - Summary Sheet</p>
       <div class="table-scroll">
         <table class="table">
           <thead>

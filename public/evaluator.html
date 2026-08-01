@@ -34,6 +34,7 @@
 
         <nav class="section-nav" id="section-nav">
           <a class="nav-chip" href="#evaluator-insights-panel">Analytics & Overview</a>
+          <a class="nav-chip" href="#evaluator-faculty-summary-panel">Faculty Summary</a>
           <a class="nav-chip" href="#evaluator-workbook-request-form-panel">Request Form</a>
           <a class="nav-chip" href="#evaluator-workbook-summary-sheet-panel">Summary Sheet</a>
           <a class="nav-chip" href="#evaluator-document-browser-panel">Document Browser</a>
@@ -49,6 +50,19 @@
           </div>
           <div id="evaluator-insights" class="evaluator-insights">
             <div class="notice">Loading evaluation insights...</div>
+          </div>
+        </section>
+
+        <section class="panel panel-wide" id="evaluator-faculty-summary-panel">
+          <div class="panel-heading panel-heading-row">
+            <div>
+              <p class="section-kicker">Faculty Summary</p>
+              <h2>Every faculty member's current rank and system-projected rank</h2>
+            </div>
+            <button class="button button-secondary" type="button" data-print-action="print" data-print-target="evaluator-faculty-summary-print-area">Print / Save as PDF</button>
+          </div>
+          <div id="evaluator-faculty-summary" class="database-viewer">
+            <div class="notice">Loading faculty summary...</div>
           </div>
         </section>
 

@@ -34,6 +34,7 @@
 
         <nav class="section-nav" id="section-nav">
           <a class="nav-chip" href="#admin-overview-panel">System Overview</a>
+          <a class="nav-chip" href="#evaluator-faculty-summary-panel">Faculty Summary</a>
           <a class="nav-chip" href="#admin-accounts-panel">Accounts</a>
           <a class="nav-chip" href="#admin-documents-panel">Documents</a>
         </nav>
@@ -48,6 +49,19 @@
           <div id="admin-overview-status" class="uploaded-files-filter-status">Loading system overview...</div>
           <div id="admin-overview" class="database-viewer">
             <div class="notice">Loading system overview...</div>
+          </div>
+        </section>
+
+        <section class="panel panel-wide" id="evaluator-faculty-summary-panel">
+          <div class="panel-heading panel-heading-row">
+            <div>
+              <p class="section-kicker">Faculty Summary</p>
+              <h2>Every faculty member's current rank and system-projected rank</h2>
+            </div>
+            <button class="button button-secondary" type="button" data-print-action="print" data-print-target="evaluator-faculty-summary-print-area">Print / Save as PDF</button>
+          </div>
+          <div id="evaluator-faculty-summary" class="database-viewer">
+            <div class="notice">Loading faculty summary...</div>
           </div>
         </section>
 

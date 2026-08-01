@@ -3527,3 +3527,62 @@ body[data-portal="evaluator"] #scoring-panel .stack-form {
 .criterion-review-actions .button-small[aria-pressed="true"] {
   box-shadow: inset 0 0 0 2px currentColor;
 }
+
+/* ── Faculty Summary panel + printable Summary Sheet ── */
+.panel-heading-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.print-only {
+  display: none;
+}
+
+/* Print only the element carrying .print-active (added by handlePrintActionClick),
+   regardless of where it sits in the DOM, so a single faculty's Summary Sheet or
+   the aggregate Faculty Summary table can each be printed/saved as PDF on their
+   own without the rest of the dashboard (nav, other cards, action buttons). */
+@media print {
+  body.print-mode * {
+    visibility: hidden;
+  }
+
+  body.print-mode .print-active,
+  body.print-mode .print-active * {
+    visibility: visible;
+  }
+
+  body.print-mode .print-active {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+  }
+
+  body.print-mode .print-active button,
+  body.print-mode .print-active .criterion-review-actions {
+    display: none !important;
+  }
+
+  body.print-mode .print-active .print-only {
+    display: block;
+    font-weight: 700;
+    font-size: 1.1rem;
+    margin-bottom: 12px;
+  }
+
+  body.print-mode .print-active .table-scroll {
+    overflow: visible;
+  }
+}
