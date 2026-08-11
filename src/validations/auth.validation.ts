@@ -29,3 +29,13 @@ export const loginSchema = z.object({
   email: z.string().trim().email(),
   password: z.string().min(8),
 });
+
+export const changePasswordSchema = z
+  .object({
+    currentPassword: z.string().min(8),
+    newPassword: z.string().min(8),
+  })
+  .refine((value) => value.newPassword !== value.currentPassword, {
+    message: 'New password must be different from the current password',
+    path: ['newPassword'],
+  });

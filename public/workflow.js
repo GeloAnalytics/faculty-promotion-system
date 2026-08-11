@@ -1149,7 +1149,7 @@ function renderAccountRow(account) {
         ${
           isSelf
             ? '<span class="account-meta">No self-actions</span>'
-            : `${
+            : `<button class="button button-secondary" type="button" data-account-action="reset-password" data-account-id="${escapeHtml(account.id)}" data-account-name="${escapeHtml(account.fullName)}">Reset Password</button>${
                 account.accountActive
                   ? `<button class="button button-secondary" type="button" data-account-action="deactivate" data-account-id="${escapeHtml(account.id)}" data-account-name="${escapeHtml(account.fullName)}">Deactivate</button>`
                   : `<button class="button button-secondary" type="button" data-account-action="reactivate" data-account-id="${escapeHtml(account.id)}" data-account-name="${escapeHtml(account.fullName)}">Reactivate</button>`
@@ -1173,6 +1173,11 @@ function handleAccountsActionClick(event) {
     return;
   }
 
+  if (action === 'reset-password') {
+    void resetPasswordAction(accountId, accountName);
+    return;
+  }
+
   if (action === 'deactivate') {
     void deactivateAccountAction(accountId, accountName);
     return;
@@ -1185,6 +1190,24 @@ function handleAccountsActionClick(event) {
 
   if (action === 'delete') {
     void deleteAccountAction(accountId, accountName);
+  }
+}
+
+async function resetPasswordAction(accountId, accountName) {
+  const confirmed = window.confirm(
+    `Reset ${accountName}'s password? Their current password stops working immediately, and a new temporary password will be generated for you to share with them securely.`,
+  );
+  if (!confirmed) {
+    return;
+  }
+
+  try {
+    setNotice(adminAccountsStatus, `Resetting password for ${accountName}...`);
+    const data = await apiFetch(`/api/accounts/${encodeURIComponent(accountId)}/reset-password`, { method: 'POST' });
+    setNotice(adminAccountsStatus, `Temporary password generated for ${accountName}. Share it with them securely - it will not be shown again.`, false, true);
+    window.prompt(`Temporary password for ${accountName} (copy now - it will not be shown again):`, data.temporaryPassword);
+  } catch (error) {
+    setNotice(adminAccountsStatus, toErrorMessage(error), true);
   }
 }
 

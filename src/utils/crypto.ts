@@ -15,3 +15,7 @@ export function verifyPassword(password: string, salt: string, expectedHash: str
 
   return crypto.timingSafeEqual(actualBuffer, expectedBuffer);
 }
+
+export function generateTemporaryPassword(): string {
+  return crypto.randomBytes(9).toString('base64url');
+}

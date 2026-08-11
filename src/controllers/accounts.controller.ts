@@ -1,6 +1,8 @@
 import { Request, Response } from 'express';
+import crypto from 'node:crypto';
 import { prisma } from '../config/db';
 import { AuditLogAction, UserRole } from '@prisma/client';
+import { hashPassword, generateTemporaryPassword } from '../utils/crypto';
 
 export const listAccounts = async (_req: Request, res: Response) => {
   const users = await prisma.user.findMany({
@@ -158,5 +160,38 @@ export const deleteAccount = async (req: Request, res: Response) => {
     deleted: true,
     accountId: userId,
     message: `${target.fullName} (${target.email}) was deleted. Their uploaded documents, profiles, and predictions remain but are no longer linked to an account.`,
+  });
+};
+
+export const resetPassword = async (req: Request, res: Response) => {
+  const { userId } = req.params;
+
+  const target = await prisma.user.findUnique({ where: { id: userId } });
+  if (!target) {
+    return res.status(404).json({ error: 'Account not found' });
+  }
+
+  const temporaryPassword = generateTemporaryPassword();
+  const passwordSalt = crypto.randomBytes(16).toString('hex');
+  const passwordHash = hashPassword(temporaryPassword, passwordSalt);
+
+  await prisma.user.update({
+    where: { id: userId },
+    data: { passwordHash, passwordSalt, mustChangePassword: true },
+  });
+
+  await prisma.auditLog.create({
+    data: {
+      action: AuditLogAction.PASSWORD_RESET,
+      userId: req.user!.id,
+      targetId: userId,
+      details: { targetEmail: target.email, targetRole: target.role },
+    },
+  });
+
+  return res.json({
+    accountId: userId,
+    temporaryPassword,
+    message: `A temporary password was generated for ${target.fullName}. Share it with them securely - it will not be shown again, and they'll be asked to set a new password the moment they sign in with it.`,
   });
 };

@@ -11,6 +11,7 @@ interface SessionTokenPayload {
   fullName: string;
   employeeId: string | null;
   role: SessionUser['role'];
+  mustChangePassword: boolean;
 }
 
 export const attachSessionUser = (req: Request, res: Response, next: NextFunction) => {
@@ -31,6 +32,7 @@ export const attachSessionUser = (req: Request, res: Response, next: NextFunctio
       fullName: decoded.fullName,
       employeeId: decoded.employeeId ?? null,
       role: decoded.role,
+      mustChangePassword: decoded.mustChangePassword ?? false,
     };
   } catch (error) {
     // Ignore invalid token, user remains unauthenticated

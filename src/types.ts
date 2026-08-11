@@ -218,6 +218,7 @@ export interface SessionUser {
   fullName: string;
   employeeId: string | null;
   role: AppUserRole;
+  mustChangePassword: boolean;
 }
 
 export interface AuthResponse {

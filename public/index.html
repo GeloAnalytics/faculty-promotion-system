@@ -54,6 +54,31 @@
           </form>
           <div id="auth-result" class="notice">Choose sign in or create account to continue.</div>
         </section>
+        <section class="panel panel-wide" id="force-password-panel" style="display: none">
+          <div class="panel-heading">
+            <div>
+              <p class="section-kicker">Account Security</p>
+              <h2>Set a new password</h2>
+            </div>
+          </div>
+          <div class="notice">Your password was reset by an administrator. Enter the temporary password you were given, then choose a new one to continue.</div>
+          <form id="force-password-form" class="stack-form">
+            <label class="field">
+              <span>Temporary password</span>
+              <input type="password" id="force-current-password" placeholder="The temporary password you were given" required minlength="8" />
+            </label>
+            <label class="field">
+              <span>New password</span>
+              <input type="password" id="force-new-password" placeholder="Minimum 8 characters" required minlength="8" />
+            </label>
+            <label class="field">
+              <span>Confirm new password</span>
+              <input type="password" id="force-new-password-confirm" placeholder="Re-enter new password" required minlength="8" />
+            </label>
+            <button class="button button-primary" id="force-password-submit" type="submit">Set new password &amp; continue</button>
+          </form>
+          <div id="force-password-result" class="notice"></div>
+        </section>
       </main>
     </div>
 

@@ -49,46 +49,49 @@ enum AuditLogAction {
   ACCOUNT_DEACTIVATED
   ACCOUNT_REACTIVATED
   ACCOUNT_DELETED
+  PASSWORD_RESET
+  PASSWORD_CHANGED
 }
 
 model User {
-  id            String            @id @default(cuid())
-  email         String            @unique
-  employeeId    String?           @unique
-  passwordHash  String
-  passwordSalt  String
-  fullName      String
-  role          UserRole          @default(EMPLOYEE)
-  accountActive Boolean           @default(true)
-  createdAt     DateTime          @default(now())
-  updatedAt     DateTime          @updatedAt
-  profiles      FacultyProfile[]
-  predictions   Prediction[]
-  documents        UploadedDocument[]
-  trainingItems    TrainingExample[]
-  auditLogs        AuditLog[]
-  criterionReviews CriterionReview[]
+  id                 String             @id @default(cuid())
+  email              String             @unique
+  employeeId         String?            @unique
+  passwordHash       String
+  passwordSalt       String
+  fullName           String
+  role               UserRole           @default(EMPLOYEE)
+  accountActive      Boolean            @default(true)
+  mustChangePassword Boolean            @default(false)
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+  profiles           FacultyProfile[]
+  predictions        Prediction[]
+  documents          UploadedDocument[]
+  trainingItems      TrainingExample[]
+  auditLogs          AuditLog[]
+  criterionReviews   CriterionReview[]
 
   @@map("users")
 }
 
 model FacultyProfile {
-  id              String             @id @default(cuid())
-  employeeId      String?
-  name            String
-  semester        String?
-  features        Json
-  teachingQuality String?
-  promotion       Boolean?
-  createdByUserId String?
-  createdBy       User?              @relation(fields: [createdByUserId], references: [id], onDelete: SetNull)
-  reviewStatus    ReviewStatus       @default(DRAFT)
-  createdAt       DateTime           @default(now())
-  updatedAt       DateTime           @updatedAt
-  predictions       Prediction[]
-  documents         UploadedDocument[]
-  trainingItems     TrainingExample[]
-  criterionReviews  CriterionReview[]
+  id               String             @id @default(cuid())
+  employeeId       String?
+  name             String
+  semester         String?
+  features         Json
+  teachingQuality  String?
+  promotion        Boolean?
+  createdByUserId  String?
+  createdBy        User?              @relation(fields: [createdByUserId], references: [id], onDelete: SetNull)
+  reviewStatus     ReviewStatus       @default(DRAFT)
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+  predictions      Prediction[]
+  documents        UploadedDocument[]
+  trainingItems    TrainingExample[]
+  criterionReviews CriterionReview[]
 
   @@map("faculty_profiles")
 }
@@ -124,9 +127,9 @@ model Prediction {
 }
 
 model UploadedDocument {
-  id                 String         @id @default(cuid())
+  id                 String          @id @default(cuid())
   ownerUserId        String?
-  ownerUser          User?          @relation(fields: [ownerUserId], references: [id], onDelete: SetNull)
+  ownerUser          User?           @relation(fields: [ownerUserId], references: [id], onDelete: SetNull)
   profileId          String?
   profile            FacultyProfile? @relation(fields: [profileId], references: [id], onDelete: SetNull)
   kind               DocumentKind
@@ -134,7 +137,7 @@ model UploadedDocument {
   mimeType           String
   extractedText      String?
   extractionMetadata Json?
-  createdAt          DateTime       @default(now())
+  createdAt          DateTime        @default(now())
 
   @@map("uploaded_documents")
 }
@@ -170,4 +173,3 @@ model AuditLog {
 
   @@map("audit_logs")
 }
-

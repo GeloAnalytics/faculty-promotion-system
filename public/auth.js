@@ -12,7 +12,16 @@ const employeeIdField = document.getElementById('employee-id-field');
 const authRoleSelect = document.getElementById('auth-role');
 const authSubmit = document.getElementById('auth-submit');
 
+const authPanel = document.getElementById('auth-panel');
+const forcePasswordPanel = document.getElementById('force-password-panel');
+const forcePasswordForm = document.getElementById('force-password-form');
+const forcePasswordResult = document.getElementById('force-password-result');
+const forceCurrentPasswordField = document.getElementById('force-current-password');
+const forceNewPasswordField = document.getElementById('force-new-password');
+const forceNewPasswordConfirmField = document.getElementById('force-new-password-confirm');
+
 let authMode = 'login';
+let pendingHomePath = null;
 
 showLoginButton?.addEventListener('click', () => setAuthMode('login'));
 showRegisterButton?.addEventListener('click', () => setAuthMode('register'));
@@ -43,12 +52,60 @@ authForm?.addEventListener('submit', async (event) => {
       body: JSON.stringify(body),
     });
 
+    if (data.user?.mustChangePassword) {
+      pendingHomePath = data.homePath || getHomePathForRole(data.user?.role);
+      showForcePasswordPanel(valueOf('auth-password'));
+      return;
+    }
+
     setNotice(authResult, `${authMode === 'login' ? 'Signed in' : 'Account created'} for ${data.user.fullName}.`, false, true);
     window.location.assign(data.homePath || getHomePathForRole(data.user?.role));
   } catch (error) {
     setNotice(authResult, toErrorMessage(error), true);
   }
 });
+
+forcePasswordForm?.addEventListener('submit', async (event) => {
+  event.preventDefault();
+
+  const currentPassword = forceCurrentPasswordField?.value || '';
+  const newPassword = forceNewPasswordField?.value || '';
+  const confirmPassword = forceNewPasswordConfirmField?.value || '';
+
+  if (newPassword !== confirmPassword) {
+    setNotice(forcePasswordResult, 'New password and confirmation do not match.', true);
+    return;
+  }
+
+  setNotice(forcePasswordResult, 'Updating password...');
+
+  try {
+    const data = await apiFetch(buildApiUrl('/api/auth/change-password'), {
+      method: 'POST',
+      body: JSON.stringify({ currentPassword, newPassword }),
+    });
+
+    setNotice(forcePasswordResult, 'Password updated. Redirecting...', false, true);
+    window.location.assign(data.homePath || pendingHomePath || getHomePathForRole(data.user?.role));
+  } catch (error) {
+    setNotice(forcePasswordResult, toErrorMessage(error), true);
+  }
+});
+
+function showForcePasswordPanel(currentPassword) {
+  if (authPanel) {
+    authPanel.style.display = 'none';
+  }
+  if (forcePasswordPanel) {
+    forcePasswordPanel.style.display = '';
+  }
+  if (forceCurrentPasswordField) {
+    forceCurrentPasswordField.value = currentPassword || '';
+  }
+  if (forceNewPasswordField) {
+    forceNewPasswordField.focus();
+  }
+}
 
 bootstrap();
 

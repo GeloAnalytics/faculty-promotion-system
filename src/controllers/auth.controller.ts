@@ -3,7 +3,7 @@ import crypto from 'node:crypto';
 import jwt from 'jsonwebtoken';
 import { prisma } from '../config/db';
 import { env, isProduction } from '../config/env';
-import { registerSchema, loginSchema } from '../validations/auth.validation';
+import { registerSchema, loginSchema, changePasswordSchema } from '../validations/auth.validation';
 import { hashPassword, verifyPassword } from '../utils/crypto';
 import { UserRole } from '@prisma/client';
 import { SessionUser } from '../types';
@@ -14,6 +14,7 @@ function toSessionUser(user: {
   fullName: string;
   employeeId: string | null;
   role: UserRole;
+  mustChangePassword: boolean;
 }): SessionUser {
   return {
     id: user.id,
@@ -21,6 +22,7 @@ function toSessionUser(user: {
     fullName: user.fullName,
     employeeId: user.employeeId,
     role: user.role,
+    mustChangePassword: user.mustChangePassword,
   };
 }
 
@@ -39,6 +41,7 @@ function generateToken(user: SessionUser): string {
       fullName: user.fullName,
       employeeId: user.employeeId,
       role: user.role,
+      mustChangePassword: user.mustChangePassword,
     },
     env.AUTH_SECRET,
     { expiresIn: '7d' }
@@ -129,10 +132,42 @@ export const me = async (req: Request, res: Response) => {
   // Sliding-window: re-issue token/cookie
   const token = generateToken(req.user!);
   setCookieFallback(res, token);
-  
+
   res.json({
     user: req.user,
     token, // Send new token for frontend to update
     homePath: getHomePathForRole(req.user!.role),
   });
+};
+
+export const changePassword = async (req: Request, res: Response) => {
+  const payload = changePasswordSchema.parse(req.body);
+  const user = await prisma.user.findUnique({ where: { id: req.user!.id } });
+
+  if (!user || !verifyPassword(payload.currentPassword, user.passwordSalt, user.passwordHash)) {
+    return res.status(401).json({ error: 'Current password is incorrect' });
+  }
+
+  const passwordSalt = crypto.randomBytes(16).toString('hex');
+  const passwordHash = hashPassword(payload.newPassword, passwordSalt);
+
+  const updatedUser = await prisma.user.update({
+    where: { id: user.id },
+    data: { passwordHash, passwordSalt, mustChangePassword: false },
+  });
+
+  await prisma.auditLog.create({
+    data: {
+      action: 'PASSWORD_CHANGED',
+      userId: user.id,
+      targetId: user.id,
+      details: { email: user.email },
+    },
+  });
+
+  const sessionUser = toSessionUser(updatedUser);
+  const token = generateToken(sessionUser);
+  setCookieFallback(res, token);
+
+  return res.json({ user: sessionUser, token, homePath: getHomePathForRole(sessionUser.role) });
 };
