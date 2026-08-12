@@ -1,16 +1,16 @@
-# Graph Report - faculty-promotion-system  (2026-08-12)
+# Graph Report - faculty-promotion-system  (2026-07-23)
 
 ## Corpus Check
-- 112 files · ~114,444 words
+- 107 files · ~111,601 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 960 nodes · 1683 edges · 98 communities (40 shown, 58 thin omitted)
-- Extraction: 99% EXTRACTED · 1% INFERRED · 0% AMBIGUOUS · INFERRED: 25 edges (avg confidence: 0.59)
+- 927 nodes · 1610 edges · 98 communities (41 shown, 57 thin omitted)
+- Extraction: 99% EXTRACTED · 1% INFERRED · 0% AMBIGUOUS · INFERRED: 22 edges (avg confidence: 0.6)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `24fd7eb0`
+- Built from commit: `24bf9f15`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -36,7 +36,7 @@
 - Frontend Node TS Config
 - renderEmployeeProfileForm
 - Evaluator Upload Grouping
-- evaluator.utils.ts
+- Auth Controller & Tokens
 - Upload Panel Definitions
 - Frontend App TS Config
 - Upload Document Handling
@@ -54,7 +54,6 @@
 - Hero Illustration Asset
 - Vite Logo Asset
 - Vue Logo Asset
-- Prisma Config
 - KRA I - Instruction (PDF)
 - graphify reference: extra exports and benchmark
 - graphify reference: query, path, explain
@@ -110,16 +109,16 @@
 - evidenceRules.ts
 
 ## God Nodes (most connected - your core abstractions)
-1. `escapeHtml()` - 27 edges
+1. `escapeHtml()` - 25 edges
 2. `buildDraftPointSummary()` - 24 edges
 3. `Faculty Promotion System` - 22 edges
-4. `apiFetch()` - 17 edges
-5. `compilerOptions` - 16 edges
-6. `loadEvaluatorWorkspace()` - 16 edges
-7. `resolveOfficialRankOutcome()` - 16 edges
-8. `compilerOptions` - 16 edges
-9. `setNotice()` - 15 edges
-10. `processUploadedDocument()` - 15 edges
+4. `compilerOptions` - 16 edges
+5. `apiFetch()` - 16 edges
+6. `resolveOfficialRankOutcome()` - 16 edges
+7. `compilerOptions` - 16 edges
+8. `loadEvaluatorWorkspace()` - 15 edges
+9. `processUploadedDocument()` - 15 edges
+10. `setNotice()` - 14 edges
 
 ## Surprising Connections (you probably didn't know these)
 - `Employee Portal UI` --conceptually_related_to--> `Employee Side`  [INFERRED]
@@ -140,23 +139,23 @@
 - **graphify Extraction & Build Pipeline (Steps 3-4)** — claude_skills_graphify_skill_step3_extraction, claude_skills_graphify_skill_part_a_ast, claude_skills_graphify_skill_part_b_semantic, claude_skills_graphify_skill_part_c_merge, claude_skills_graphify_skill_step4_build_graph [EXTRACTED 1.00]
 - **Shared Portal UI Pattern (Preview Modal + workflow.js)** — public_employee_employee_portal, public_evaluator_evaluator_portal, public_workflow_module [INFERRED 0.85]
 
-## Communities (98 total, 58 thin omitted)
+## Communities (98 total, 57 thin omitted)
 
 ### Community 0 - "Dashboard Routing & Profiles"
 Cohesion: 0.06
-Nodes (77): normalizeAcademicRankOption(), reviewCycleMetricDefinitions, reviewCycleMetricKeys, reviewCycleYearLabels, getDashboardProfile(), getEmployeeDashboard(), getEvaluatorQueue(), toCriterionReviewMap() (+69 more)
+Nodes (75): normalizeAcademicRankOption(), reviewCycleMetricDefinitions, reviewCycleMetricKeys, reviewCycleYearLabels, getEmployeeDashboard(), getEvaluatorQueue(), toCriterionReviewMap(), applyEvidenceValidationToPromotionDraft() (+67 more)
 
 ### Community 1 - "Auth Portal Frontend (app.js)"
 Cohesion: 0.12
 Nodes (15): Sheet: Form1_A, Sheet: Form1_B&C, Sheet: Form2_A, Sheet: Form2-B, Sheet: Form2_C, Sheet: Form 3-A&B, Sheet: Form 3-C&D, Sheet: Form 4-A&B (+7 more)
 
 ### Community 2 - "Supabase & Document Controller"
-Cohesion: 0.06
-Nodes (63): app, CONTENT_SECURITY_POLICY, publicDir, repoRoot, env, envSchema, INSECURE_AUTH_SECRETS, guidelinePdfPath (+55 more)
+Cohesion: 0.07
+Nodes (53): prisma, isOcrReadyFlag, ocrConfig, ocrScriptPath, publicDir, repoRoot, tqeCsvPath, tqeReferenceRecords (+45 more)
 
 ### Community 3 - "Backend Dependencies"
-Cohesion: 0.05
-Nodes (37): description, devDependencies, prisma, supertest, tsx, @types/cors, @types/express, @types/jsonwebtoken (+29 more)
+Cohesion: 0.06
+Nodes (31): description, devDependencies, prisma, tsx, @types/cors, @types/express, @types/jsonwebtoken, @types/multer (+23 more)
 
 ### Community 4 - "Graphify Skill Docs"
 Cohesion: 0.07
@@ -167,16 +166,16 @@ Cohesion: 0.05
 Nodes (44): app.js (Auth Portal Script), config.js (Portal Config Script), Document Preview Modal (Employee), Employee Portal UI, Document Preview Modal (Evaluator), Evaluator Portal UI, Access Portal (Sign In / Register), workflow.js (Portal Behavior Script) (+36 more)
 
 ### Community 6 - "Workflow Portal Script"
-Cohesion: 0.05
-Nodes (43): adminAccountItems, adminAccounts, adminAccountsStatus, adminOverview, adminOverviewStatus, apiBaseUrl, buildApiUrl(), closeDocumentPreview() (+35 more)
+Cohesion: 0.06
+Nodes (41): adminAccountItems, adminAccounts, adminAccountsStatus, adminOverview, adminOverviewStatus, apiBaseUrl, buildApiUrl(), closeDocumentPreview() (+33 more)
 
 ### Community 7 - "Vue Session & Dashboards"
 Cohesion: 0.11
 Nodes (25): apiFetch(), mergeHeaders(), readErrorMessage(), AppUserRole, clearSession(), fetchSession(), getHomePathForRole(), rememberSession() (+17 more)
 
 ### Community 8 - "Dashboard Config & OCR Paths"
-Cohesion: 0.09
-Nodes (29): tqeReferenceSummary, academicRankAliases, academicRankOptions, attainmentAliases, collegeDepartmentAliases, collegeDepartmentOptions, educationalAttainmentOptions, normalizeCollegeDepartmentOption() (+21 more)
+Cohesion: 0.25
+Nodes (11): calculateBaseProbability(), clamp(), compareModels(), findClosestTqeBenchmarks(), inferPromotionOutcome(), normalizeScore(), roundTo(), scoreModel() (+3 more)
 
 ### Community 9 - "Frontend Dependencies"
 Cohesion: 0.07
@@ -187,28 +186,28 @@ Cohesion: 0.22
 Nodes (14): buildDate(), checkPromotionWindow(), DAY_MONTH_YEAR, DocumentDateCheck, DocumentDateCheckStatus, extractCandidateDates(), formatDate(), isWithinPromotionWindow() (+6 more)
 
 ### Community 11 - "Core TypeScript Types"
-Cohesion: 0.08
-Nodes (25): AppUserRole, AuthResponse, CycleMetrics, CycleMetricSummary, CycleMetricYearEntry, EmployeeUploadType, Express, FacultyIngestionPayload (+17 more)
+Cohesion: 0.07
+Nodes (28): AppUserRole, AuthResponse, CycleMetrics, CycleMetricSummary, CycleMetricYearEntry, DocumentExtractionResult, EmployeeUploadType, EmployeeUploadWorkflowItem (+20 more)
 
 ### Community 12 - "API Fetch & Session Helpers"
-Cohesion: 0.28
-Nodes (9): formatCriterionLabel(), formatKraShortLabel(), formatNumber(), formatScoreWithMax(), renderEmployeeNotifications(), renderEmployeeSummary(), renderScoreboardCriterion(), renderScoreboardKraSection() (+1 more)
+Cohesion: 0.25
+Nodes (9): formatCriterionLabel(), formatKraShortLabel(), formatNumber(), formatScoreWithMax(), getComputedStatusLabel(), renderComputedPanelScore(), renderScoreboardCriterion(), renderScoreboardKraSection() (+1 more)
 
 ### Community 13 - "Backend TS Config"
 Cohesion: 0.08
 Nodes (24): dist, DOM, ES2022, node_modules, src/**/*, compilerOptions, declaration, declarationMap (+16 more)
 
 ### Community 14 - "Faculty Rank Constants"
-Cohesion: 0.25
-Nodes (12): approveDraftScore(), createTrainingExample(), getTrainingExamples(), labelTrainingExample(), router, TrainingExampleSubmission, toPrismaJson(), createEvaluatorAssessment() (+4 more)
+Cohesion: 0.10
+Nodes (31): buildIdentityFeatureEnvelope(), compareModels(), featureSelection(), generatePredictions(), ingestFaculty(), updateFaculty(), approveDraftScore(), labelTrainingExample() (+23 more)
 
 ### Community 16 - "Workflow Formatting Helpers"
-Cohesion: 0.11
-Nodes (27): escapeHtml(), formatDate(), formatOptionalNumber(), formatPromotionStatus(), getPreviewActionLabel(), getUploadGroupSubheading(), getUploadTypeLabel(), prettyRole() (+19 more)
+Cohesion: 0.14
+Nodes (22): escapeHtml(), formatOptionalNumber(), getPreviewActionLabel(), getUploadGroupSubheading(), getUploadTypeLabel(), renderAdminOverview(), renderCriterionRow(), renderEmployeeNotifications() (+14 more)
 
 ### Community 17 - "Faculty & TQE Types"
-Cohesion: 0.09
-Nodes (33): DocumentAnalysisResult, DocumentExtractionResult, FeatureKey, GuidelineReference, ModelComparisonResult, NumericSummary, Recommendation, TqeRecord (+25 more)
+Cohesion: 0.12
+Nodes (20): DocumentAnalysisResult, featureKeys, FeatureSelectionResult, Recommendation, TqeBenchmarkMatch, TqeRecord, TqeReferenceSummary, analyzeDocumentContent() (+12 more)
 
 ### Community 18 - "Frontend Node TS Config"
 Cohesion: 0.10
@@ -219,36 +218,36 @@ Cohesion: 0.40
 Nodes (5): byId(), populateSelectOptions(), renderEmployeeProfileForm(), setInputValue(), setSelectValue()
 
 ### Community 20 - "Evaluator Upload Grouping"
-Cohesion: 0.24
-Nodes (12): collectEvaluatorDocuments(), getEmployeeUploadGroupLabel(), getKraLabel(), getUploadSortPriority(), groupDocumentsByProfile(), groupEmployeeUploads(), groupUploadsByKra(), renderEmployeeUploads() (+4 more)
+Cohesion: 0.16
+Nodes (17): collectEvaluatorDocuments(), formatDate(), getEmployeeUploadGroupLabel(), getKraLabel(), getUploadSortPriority(), groupDocumentsByProfile(), groupEmployeeUploads(), groupUploadsByKra() (+9 more)
 
-### Community 21 - "evaluator.utils.ts"
-Cohesion: 0.39
-Nodes (8): UploadPanelDefinition, EvaluatorAssessment, parseEvaluatorAssessment(), readJsonObject(), readNumberRecord(), readOptionalNumber(), roundScore(), sanitizeCriterionScores()
+### Community 22 - "Auth Controller & Tokens"
+Cohesion: 0.25
+Nodes (14): clearCookieFallback(), generateToken(), getHomePathForRole(), login(), logout(), me(), register(), setCookieFallback() (+6 more)
 
 ### Community 23 - "Upload Panel Definitions"
-Cohesion: 0.18
-Nodes (13): UploadPanelKey, uploadPanelKeywordMap, uploadPanelLabelMap, uploadPanels, evidenceRules, RequirementRule, RequirementType, EvidencePacketRequestForm (+5 more)
+Cohesion: 0.17
+Nodes (14): UploadPanelDefinition, UploadPanelKey, uploadPanelKeywordMap, uploadPanelLabelMap, uploadPanels, evidenceRules, RequirementRule, RequirementType (+6 more)
 
 ### Community 24 - "Frontend App TS Config"
 Cohesion: 0.13
 Nodes (14): compilerOptions, erasableSyntaxOnly, noFallthroughCasesInSwitch, noUnusedLocals, noUnusedParameters, tsBuildInfoFile, types, extends (+6 more)
 
 ### Community 28 - "Upload Document Handling"
-Cohesion: 0.27
-Nodes (22): apiFetch(), approveDraftScore(), bootstrap(), deactivateAccountAction(), deleteAccountAction(), deleteUploadDocument(), ensureDocumentPreviewShell(), handleAccountsActionClick() (+14 more)
+Cohesion: 0.28
+Nodes (21): apiFetch(), approveDraftScore(), bootstrap(), deactivateAccountAction(), deleteAccountAction(), deleteUploadDocument(), handleAccountsActionClick(), handleEmployeeProfileSubmit() (+13 more)
 
 ### Community 30 - "Admin & Review Routes"
-Cohesion: 0.07
-Nodes (48): prisma, assertNotLastManager(), deactivateAccount(), deleteAccount(), listAccounts(), reactivateAccount(), resetPassword(), getDatabaseOverview() (+40 more)
+Cohesion: 0.05
+Nodes (55): env, envSchema, INSECURE_AUTH_SECRETS, guidelinePdfPath, ensureDocumentsBucket(), academicRankAliases, academicRankOptions, attainmentAliases (+47 more)
 
 ### Community 32 - "UI Helper Utilities"
-Cohesion: 0.07
-Nodes (32): apiBaseUrl, apiFetch(), authForm, authPanel, authResult, authRoleSelect, authSubmit, bootstrap() (+24 more)
+Cohesion: 0.09
+Nodes (25): apiBaseUrl, apiFetch(), authForm, authResult, authRoleSelect, authSubmit, bootstrap(), buildApiUrl() (+17 more)
 
 ### Community 33 - "Panel Score Grouping"
-Cohesion: 0.22
-Nodes (11): buildUploadTypeCounts(), getComputedStatusLabel(), getPanelComputedScore(), getPanelUploadCount(), groupPanelsByKra(), hasPanelUpload(), renderComputedPanelScore(), renderEmployeeUploadCard() (+3 more)
+Cohesion: 0.28
+Nodes (9): buildUploadTypeCounts(), getPanelComputedScore(), getPanelUploadCount(), groupPanelsByKra(), hasPanelUpload(), renderEmployeeUploadCard(), renderEmployeeUploadGroup(), renderEmployeeWorkflow() (+1 more)
 
 ### Community 36 - "Icon Sprite Sheet"
 Cohesion: 0.43
@@ -283,24 +282,24 @@ Cohesion: 0.50
 Nodes (3): For --cluster-only, For --update (incremental re-extraction), graphify reference: incremental update and cluster-only
 
 ## Knowledge Gaps
-- **336 isolated node(s):** `name`, `private`, `version`, `type`, `dev` (+331 more)
+- **321 isolated node(s):** `name`, `private`, `version`, `type`, `dev` (+316 more)
   These have ≤1 connection - possible missing edges or undocumented components.
-- **58 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **57 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `prisma` connect `Admin & Review Routes` to `Dashboard Routing & Profiles`, `Supabase & Document Controller`, `Faculty Rank Constants`?**
-  _High betweenness centrality (0.007) - this node is a cross-community bridge._
-- **Why does `uploadPanels` connect `Upload Panel Definitions` to `Dashboard Routing & Profiles`, `Supabase & Document Controller`, `Dashboard Config & OCR Paths`, `Faculty & TQE Types`, `evaluator.utils.ts`, `Admin & Review Routes`?**
+- **Why does `prisma` connect `Supabase & Document Controller` to `Dashboard Routing & Profiles`, `Faculty Rank Constants`, `Admin & Review Routes`, `Auth Controller & Tokens`?**
+  _High betweenness centrality (0.006) - this node is a cross-community bridge._
+- **Why does `uploadPanels` connect `Upload Panel Definitions` to `Dashboard Routing & Profiles`, `Supabase & Document Controller`, `Faculty Rank Constants`, `Faculty & TQE Types`, `Admin & Review Routes`?**
   _High betweenness centrality (0.006) - this node is a cross-community bridge._
 - **Why does `dependencies` connect `Evaluator Criteria Rendering` to `Backend Dependencies`?**
   _High betweenness centrality (0.003) - this node is a cross-community bridge._
 - **What connects `name`, `private`, `version` to the rest of the system?**
-  _336 weakly-connected nodes found - possible documentation gaps or missing edges._
+  _321 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `Dashboard Routing & Profiles` be split into smaller, more focused modules?**
-  _Cohesion score 0.05554035567715458 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.05789009697325889 - nodes in this community are weakly interconnected._
 - **Should `Auth Portal Frontend (app.js)` be split into smaller, more focused modules?**
   _Cohesion score 0.125 - nodes in this community are weakly interconnected._
 - **Should `Supabase & Document Controller` be split into smaller, more focused modules?**
-  _Cohesion score 0.06037000973709834 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.0744047619047619 - nodes in this community are weakly interconnected._
