@@ -72,11 +72,21 @@
             </label>
             <label class="field">
               <span>Sex</span>
-              <input type="text" id="profile-sex" placeholder="e.g. Female" />
+              <select id="profile-sex">
+                <option value="">Select Sex</option>
+                <option value="Female">Female</option>
+                <option value="Male">Male</option>
+              </select>
             </label>
             <label class="field">
               <span>Civil Status</span>
-              <input type="text" id="profile-civil-status" placeholder="e.g. Single" />
+              <select id="profile-civil-status">
+                <option value="">Select Civil Status</option>
+                <option value="Single">Single</option>
+                <option value="Married">Married</option>
+                <option value="Widowed">Widowed</option>
+                <option value="Separated">Separated</option>
+              </select>
             </label>
             <button class="button button-primary" id="employee-profile-submit" type="submit">Save Profile Details</button>
           </form>

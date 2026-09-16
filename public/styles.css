@@ -3586,3 +3586,83 @@ body[data-portal="evaluator"] #scoring-panel .stack-form {
     overflow: visible;
   }
 }
+
+/* ═══════════════════════════════════════════════
+   Per-Panel Upload Progress Bar (Bug #1/#3 fix)
+   ═══════════════════════════════════════════════ */
+.upload-progress-panel {
+  display: grid;
+  gap: 6px;
+  margin-top: 8px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: rgba(13, 107, 87, 0.06);
+  border: 1px solid rgba(13, 107, 87, 0.14);
+  animation: fadeInUp 0.2s ease;
+}
+
+.upload-progress-track-panel {
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(13, 107, 87, 0.1);
+  overflow: hidden;
+}
+
+.upload-progress-fill-panel {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--accent) 0%, #10b981 100%);
+  transition: width 0.45s cubic-bezier(0.22, 1, 0.36, 1);
+  min-width: 0;
+}
+
+.upload-progress-label-panel {
+  font-size: 0.78rem;
+  color: var(--accent-strong);
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ═══════════════════════════════════════════════
+   Upload Size Warning (Bug #4 fix)
+   ═══════════════════════════════════════════════ */
+.upload-size-warning {
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: rgba(245, 158, 11, 0.1);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  color: #92400e;
+  font-size: 0.8rem;
+  font-weight: 500;
+  line-height: 1.4;
+  margin-top: 4px;
+}
+
+.upload-size-warning[hidden] {
+  display: none;
+}
+
+/* ═══════════════════════════════════════════════
+   Document Type Dropdown (Bug #2 fix)
+   ═══════════════════════════════════════════════ */
+.upload-document-type-select {
+  width: 100%;
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 0.85rem;
+  font-family: inherit;
+  appearance: auto;
+  cursor: pointer;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.upload-document-type-select:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(13, 107, 87, 0.12);
+}

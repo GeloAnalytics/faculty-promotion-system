@@ -1,3 +1,4 @@
+import { DocumentDateCheck } from './utils/promotionWindow';
 export declare const featureKeys: readonly ["age", "yearsInService", "highestEducationalAttainmentLevel", "teachingEffectiveness", "researchOutputs", "extensionServices", "administrativeExperience", "professionalDevelopmentHours", "ipcrAverage", "promotionHistoryCount", "documentCompleteness", "documentQualityScore"];
 export type FeatureKey = (typeof featureKeys)[number];
 export type FeatureVector = Record<FeatureKey, number>;
@@ -159,6 +160,7 @@ export interface SessionUser {
     fullName: string;
     employeeId: string | null;
     role: AppUserRole;
+    mustChangePassword: boolean;
 }
 export interface AuthResponse {
     user: SessionUser;
@@ -207,6 +209,7 @@ export type ProcessedUploadResult = {
     linkage: ProfileLinkResult;
     textPreview: string;
     analysis: DocumentAnalysisResult;
+    dateCheck: DocumentDateCheck;
 };
 declare global {
     namespace Express {

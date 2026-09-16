@@ -40,6 +40,8 @@ let currentDocumentPreviewUrl = null;
 let documentPreviewRequestToken = 0;
 let documentPreviewLoadTimer = null;
 let lastDocumentPreviewRequest = null;
+// Storage config loaded once on startup — used for direct-to-Supabase uploads
+let storageConfig = { directUploadEnabled: false, supabaseUrl: null, supabaseAnonKey: null, bucket: 'documents' };
 
 document.querySelectorAll("[data-action='logout']").forEach((button) => {
   button.addEventListener('click', logoutAndReturnHome);
@@ -135,12 +137,14 @@ async function refreshSession() {
 async function loadEmployeeWorkspace() {
   setNotice(employeeUploadStatus, 'Loading your OCR-backed summary and KRA upload panels...');
   setNotice(employeeProfileStatus, 'Loading your profile details...');
-  const [dashboard, workflow, facultyOptions] = await Promise.all([
+  const [dashboard, workflow, facultyOptions, storageCfg] = await Promise.all([
     apiFetch('/api/employee/dashboard'),
     apiFetch('/api/config/upload-panels'),
     apiFetch('/api/config/faculty-options').catch(() => ({ academicRanks: [], educationalAttainments: [] })),
+    apiFetch('/api/config/storage').catch(() => ({ directUploadEnabled: false })),
   ]);
 
+  storageConfig = { ...storageConfig, ...storageCfg };
   employeeDashboard = dashboard;
   uploadPanelCatalog = Array.isArray(workflow.panels) ? workflow.panels : [];
 
@@ -461,9 +465,20 @@ function renderEmployeeWorkflow(workflowItems, uploads, scoreComputation = null)
       .join('')}
   `;
 
-  employeeUploadWorkflow.querySelectorAll('.workflow-upload-form').forEach((form) => {
-    form.addEventListener('submit', handleUploadSubmit);
-  });
+  // BUG FIX #5/6/7: Use event delegation on the stable container element instead of
+  // attaching listeners to individual forms. When the DOM is re-rendered after an
+  // upload the individual form nodes are destroyed, orphaning any per-form listeners.
+  // A single delegated listener on the container always reads panelKey from whichever
+  // form was actually submitted, regardless of re-renders.
+  if (!employeeUploadWorkflow._uploadDelegated) {
+    employeeUploadWorkflow._uploadDelegated = true;
+    employeeUploadWorkflow.addEventListener('submit', (event) => {
+      const form = event.target?.closest('.workflow-upload-form');
+      if (form) {
+        handleUploadSubmit(event, form);
+      }
+    });
+  }
 }
 
 function renderEmployeeUploadGroup(kraTitle, items, uploads, scoreComputation) {
@@ -488,12 +503,31 @@ function renderEmployeeUploadGroup(kraTitle, items, uploads, scoreComputation) {
   `;
 }
 
+// BUG #2 FIX: Document type options per upload card
+const DOCUMENT_TYPE_OPTIONS = [
+  '',
+  'Certificate',
+  'Published Article / Journal',
+  'Award / Recognition',
+  'Appointment / Designation',
+  'Training / Seminar Proof',
+  'Evaluation Form (SET/SEF)',
+  'Accreditation Document',
+  'Research / Patent',
+  'Extension Project Record',
+  'Membership / ID',
+  'Transcript / Diploma',
+  'Other',
+];
+
 function renderEmployeeUploadCard(panel, uploads, scoreComputation) {
   const accept = Array.isArray(panel.acceptedFormats) ? panel.acceptedFormats.map((ext) => `.${ext}`).join(',') : '';
   const evidenceCount = getPanelUploadCount(panel.key, uploads, 'evidence');
   const panelComplete = evidenceCount > 0;
-  const computedScorePanel = scoreComputation?.kraSections?.flatMap(k => k.panels)?.find(p => p.key === panel.key) || null;
   const computedScore = getPanelComputedScore(scoreComputation, panel.key);
+  const docTypeOptions = DOCUMENT_TYPE_OPTIONS.map((opt) =>
+    `<option value="${escapeHtml(opt)}">${opt ? escapeHtml(opt) : 'Select document type (optional)'}</option>`
+  ).join('');
 
   return `
     <article class="card workflow-card upload-card${panelComplete ? ' upload-card-complete' : ''}" data-panel-key="${escapeHtml(panel.key)}">
@@ -521,13 +555,14 @@ function renderEmployeeUploadCard(panel, uploads, scoreComputation) {
           accept,
           multiple: true,
           count: evidenceCount,
+          docTypeOptions,
         })}
       </div>
     </article>
   `;
 }
 
-function renderUploadVariantForm({ panelKey, uploadType, title, helper, buttonLabel, accept, multiple, count }) {
+function renderUploadVariantForm({ panelKey, uploadType, title, helper, buttonLabel, accept, multiple, count, docTypeOptions }) {
   return `
     <form class="workflow-upload-form upload-variant-form" data-panel-key="${escapeHtml(panelKey)}" data-upload-type="${escapeHtml(uploadType)}">
       <div class="upload-variant-header">
@@ -539,10 +574,24 @@ function renderUploadVariantForm({ panelKey, uploadType, title, helper, buttonLa
           ${count > 0 ? `${count} uploaded` : 'Pending'}
         </span>
       </div>
+      ${docTypeOptions ? `
+      <label class="field">
+        <span>Document Type <span class="upload-variant-note" style="font-weight:400">(optional — helps categorise the file)</span></span>
+        <select name="documentType" class="upload-document-type-select">${docTypeOptions}</select>
+      </label>` : ''}
       <label class="field">
         <span>${multiple ? 'Select files' : 'Select file'}</span>
         <input type="file" name="document" ${multiple ? 'multiple' : ''} required accept="${escapeHtml(accept)}" />
       </label>
+      <!-- BUG #4 FIX: Per-file size warning rendered by JS on file change -->
+      <div class="upload-size-warning" hidden></div>
+      <!-- BUG #1/#3 FIX: Per-panel upload progress bar -->
+      <div class="upload-progress-panel" hidden>
+        <div class="upload-progress-track upload-progress-track-panel">
+          <div class="upload-progress-fill upload-progress-fill-panel" style="width:0%"></div>
+        </div>
+        <span class="upload-progress-label-panel">Uploading...</span>
+      </div>
       <button class="button button-primary" type="submit">${escapeHtml(buttonLabel)}</button>
     </form>
   `;
@@ -1446,51 +1495,135 @@ function getComputedStatusLabel(status) {
   return 'Not required for the base packet.';
 }
 
-async function handleUploadSubmit(event) {
+// BUG #4 FIX: File size threshold for user warning (4 MB = safe for Vercel body limit)
+const SAFE_FILE_SIZE_BYTES = 4 * 1024 * 1024;
+
+// BUG #5/6/7 FIX: Accepts the actual submitted form as a second argument (event delegation)
+async function handleUploadSubmit(event, form) {
   event.preventDefault();
 
-  const form = event.currentTarget;
-  const uploadType = form.dataset.uploadType || 'legacy';
-  const panelKey = form.dataset.panelKey || '';
-  const fileInput = form.querySelector('input[type="file"]');
+  // Always resolve the form from the event — never trust event.currentTarget with delegation
+  const targetForm = form || event.target?.closest('.workflow-upload-form');
+  if (!targetForm) return;
+
+  const uploadType = targetForm.dataset.uploadType || 'legacy';
+  // BUG FIX: panelKey is always read from the submitted form's own data attribute
+  const panelKey = targetForm.dataset.panelKey || '';
+  const fileInput = targetForm.querySelector('input[type="file"]');
+  const documentTypeSelect = targetForm.querySelector('.upload-document-type-select');
+  const documentType = documentTypeSelect?.value || '';
   const files = Array.from(fileInput?.files || []);
+  const sizeWarning = targetForm.querySelector('.upload-size-warning');
+  const progressPanel = targetForm.querySelector('.upload-progress-panel');
+  const progressFill = targetForm.querySelector('.upload-progress-fill-panel');
+  const progressLabel = targetForm.querySelector('.upload-progress-label-panel');
 
   if (!files.length) {
     setNotice(employeeUploadStatus, 'Choose at least one file first.', true);
     return;
   }
 
-  const formData = new FormData();
-  formData.append('uploadType', uploadType);
-  if (panelKey) {
-    formData.append('panelKey', panelKey);
-  }
-  formData.append('kind', 'REQUIREMENT');
-  for (const file of files) {
-    formData.append('document', file);
+  // BUG #4 FIX: Warn about oversized files before attempting upload
+  const oversizedFiles = files.filter((f) => f.size > SAFE_FILE_SIZE_BYTES);
+  if (sizeWarning) {
+    if (oversizedFiles.length && !storageConfig.directUploadEnabled) {
+      sizeWarning.hidden = false;
+      sizeWarning.textContent = `⚠ ${oversizedFiles.map((f) => f.name).join(', ')} exceed${oversizedFiles.length === 1 ? 's' : ''} 4 MB. Upload may fail on the current plan — direct upload is not yet configured.`;
+    } else {
+      sizeWarning.hidden = true;
+    }
   }
 
-  setSubmitButtonState(form, true);
-  const panelLabel = form.closest('.upload-card')?.querySelector('h4')?.textContent?.trim() || 'this panel';
+  const panelLabel = targetForm.closest('.upload-card')?.querySelector('h4')?.textContent?.trim() || 'this panel';
+  setSubmitButtonState(targetForm, true);
   setNotice(
     employeeUploadStatus,
     uploadType === 'score-sheet'
       ? `Uploading ${panelLabel} score sheet...`
-      : `Uploading ${panelLabel} evidence bundle...`,
+      : `Uploading ${panelLabel} evidence...`,
   );
 
-  try {
-    await apiFetch('/api/documents/extract', {
-      method: 'POST',
-      body: formData,
-    });
+  // BUG #1/#3 FIX: Show per-panel progress bar
+  if (progressPanel) progressPanel.hidden = false;
+  if (progressFill) progressFill.style.width = '5%';
+  if (progressLabel) progressLabel.textContent = `Uploading ${files.length} file${files.length === 1 ? '' : 's'}...`;
 
-    setNotice(employeeUploadStatus, 'Upload complete. OCR is processing the document now.');
-    await loadEmployeeWorkspace();
+  try {
+    if (storageConfig.directUploadEnabled) {
+      // BUG #1 FIX: Direct-to-Supabase upload — no Vercel body size limit
+      await uploadFilesDirectToSupabase({ files, panelKey, uploadType, documentType, progressFill, progressLabel });
+    } else {
+      // Fallback: server-side upload (limited to Vercel's 4.5 MB body cap)
+      const formData = new FormData();
+      formData.append('uploadType', uploadType);
+      if (panelKey) formData.append('panelKey', panelKey);
+      if (documentType) formData.append('documentType', documentType);
+      formData.append('kind', 'REQUIREMENT');
+      for (const file of files) formData.append('document', file);
+      if (progressFill) progressFill.style.width = '50%';
+      await apiFetch('/api/documents/extract', { method: 'POST', body: formData });
+      if (progressFill) progressFill.style.width = '100%';
+    }
+
+    setNotice(employeeUploadStatus, `✓ ${panelLabel} evidence uploaded. OCR is processing now.`);
+    // BUG #3 FIX: Refresh workspace without blocking other panels' uploads
+    loadEmployeeWorkspace().catch((err) => setNotice(employeeUploadStatus, toErrorMessage(err), true));
   } catch (error) {
     setNotice(employeeUploadStatus, toErrorMessage(error), true);
+    if (progressPanel) progressPanel.hidden = true;
   } finally {
-    setSubmitButtonState(form, false);
+    setSubmitButtonState(targetForm, false);
+  }
+}
+
+/**
+ * Direct-to-Supabase upload flow:
+ * 1. Request a signed upload URL from the backend (tiny JSON request — no file payload)
+ * 2. PUT the file directly to Supabase Storage from the browser
+ * 3. POST the storage path to /api/documents/register so the server can run OCR
+ *
+ * BUG #1 FIX: This completely bypasses Vercel's 4.5 MB serverless body limit
+ * because the file bytes never go through the serverless function.
+ */
+async function uploadFilesDirectToSupabase({ files, panelKey, uploadType, documentType, progressFill, progressLabel }) {
+  const total = files.length;
+  for (let i = 0; i < total; i++) {
+    const file = files[i];
+    if (progressLabel) progressLabel.textContent = `Uploading file ${i + 1} of ${total}: ${file.name}...`;
+    if (progressFill) progressFill.style.width = `${Math.round(((i) / total) * 60) + 5}%`;
+
+    // Step 1: Get a signed URL from the backend
+    const { signedUrl, storagePath } = await apiFetch('/api/documents/signed-upload-url', {
+      method: 'POST',
+      body: JSON.stringify({ fileName: file.name, mimeType: file.type }),
+    });
+
+    // Step 2: Upload directly to Supabase from the browser
+    const uploadResponse = await fetch(signedUrl, {
+      method: 'PUT',
+      headers: { 'Content-Type': file.type || 'application/octet-stream' },
+      body: file,
+    });
+    if (!uploadResponse.ok) {
+      throw new Error(`Storage upload failed for ${file.name}: ${uploadResponse.statusText}`);
+    }
+    if (progressFill) progressFill.style.width = `${Math.round(((i + 0.7) / total) * 60) + 5}%`;
+
+    // Step 3: Register with the backend for OCR + database record
+    if (progressLabel) progressLabel.textContent = `Processing OCR for ${file.name}...`;
+    await apiFetch('/api/documents/register', {
+      method: 'POST',
+      body: JSON.stringify({
+        storagePath,
+        originalName: file.name,
+        mimeType: file.type || 'application/octet-stream',
+        kind: 'REQUIREMENT',
+        panelKey,
+        uploadType,
+        documentType: documentType || undefined,
+      }),
+    });
+    if (progressFill) progressFill.style.width = `${Math.round(((i + 1) / total) * 100)}%`;
   }
 }
 

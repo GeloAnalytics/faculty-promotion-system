@@ -25,7 +25,8 @@ const CONTENT_SECURITY_POLICY = [
   "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
   "font-src 'self' https://fonts.gstatic.com data:",
   "img-src 'self' data: blob:",
-  "connect-src 'self'",
+  // Allow fetch() to the API itself and to Supabase storage (for direct browser uploads)
+  "connect-src 'self' https://*.supabase.co https://*.supabase.in",
   "frame-src 'self' blob:",
   "object-src 'none'",
   "base-uri 'self'",

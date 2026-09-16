@@ -333,13 +333,40 @@ const findGuidelinePdfPath = (rootDir) => {
     return node_path_1.default.join(rootDir, candidates[0]);
 };
 exports.findGuidelinePdfPath = findGuidelinePdfPath;
+// Score patterns match "<label>...<number within ~70 chars>", which also
+// happily grabs the nearest date, page number, or ID in scanned evaluation
+// forms (e.g. "Research Advising and Mentorship Services ... 2021" from
+// an "A.Y. 2020-2021" header). Anything that reads as a bare calendar year,
+// or is implausibly large for any real KRA score/hour count, is almost
+// certainly not the score field and is rejected rather than propagated as a
+// detected score.
+const MAX_PLAUSIBLE_EXTRACTED_SCORE = 999;
+const CALENDAR_YEAR_PATTERN = /^(19|20)\d{2}$/;
+// Catches the day-of-month in "Date: June 11, 2020" or "11/2020" immediately
+// after a matched number - a bare calendar year is rejected above, but the day
+// right before it slips through unless we also check what follows the match.
+const TRAILING_DATE_PATTERN = /^\s*[,/-]?\s*(19|20)\d{2}\b/;
 function extractScore(text, regex) {
     const match = text.match(regex);
-    if (!match) {
+    if (!match || match.index === undefined) {
         return undefined;
     }
     const value = match.find((entry) => entry && /^\d+(\.\d+)?$/.test(entry));
-    return value ? Number.parseFloat(value) : undefined;
+    if (!value) {
+        return undefined;
+    }
+    if (CALENDAR_YEAR_PATTERN.test(value)) {
+        return undefined;
+    }
+    const matchEnd = match.index + match[0].length;
+    if (TRAILING_DATE_PATTERN.test(text.slice(matchEnd, matchEnd + 8))) {
+        return undefined;
+    }
+    const parsed = Number.parseFloat(value);
+    if (!Number.isFinite(parsed) || parsed > MAX_PLAUSIBLE_EXTRACTED_SCORE) {
+        return undefined;
+    }
+    return parsed;
 }
 function buildDocumentSummary(panelKey, detectedFields, detectedCategories, textLength) {
     const fieldCount = detectedFields.length;
@@ -348,7 +375,7 @@ function buildDocumentSummary(panelKey, detectedFields, detectedCategories, text
 }
 function extractCriterionScores(text) {
     return uploadPanels_2.uploadPanels.reduce((scores, panel) => {
-        const patterns = buildCriterionScorePatterns(panel.title, panel.kraTitle, panel.description);
+        const patterns = buildCriterionScorePatterns(panel.title, panel.kraTitle);
         for (const pattern of patterns) {
             const value = extractScore(text, pattern);
             if (value !== undefined) {
@@ -359,25 +386,25 @@ function extractCriterionScores(text) {
         return scores;
     }, {});
 }
-function buildCriterionScorePatterns(title, kraTitle, description) {
-    const tokens = [title, kraTitle, description]
-        .flatMap((value) => value.split(/[\s,/-]+/g))
-        .map((value) => value.trim())
-        .filter(Boolean);
+function buildCriterionScorePatterns(title, kraTitle) {
+    // Deliberately anchored to the full panel title / KRA heading only - not
+    // individual words from them. An earlier version also matched on the first
+    // few tokens of title/kraTitle/description individually, but those tokens
+    // are often generic words ("and", "development", "services") that show up
+    // incidentally anywhere in a document. In production this matched a thesis
+    // approval sheet's internal control number ("Control No. gsinfo-(MP)-26-00S")
+    // as the "detected score" for an unrelated KRA panel, because a generic
+    // word from that panel's description happened to appear within 70 chars of
+    // the number "26" - fabricating a plausible-looking but meaningless score
+    // that then outranked the more honest evidence-checklist estimate. The full
+    // multi-word title/kraTitle phrases are official form section headers and
+    // don't have that problem.
     const escapedTitle = escapeRegex(title);
     const escapedKra = escapeRegex(kraTitle);
-    const tokenPattern = tokens
-        .slice(0, 6)
-        .map((token) => escapeRegex(token))
-        .join('|');
-    const patterns = [
+    return [
         new RegExp(`${escapedTitle}[\\s\\S]{0,70}?(\\d+(?:\\.\\d+)?)`, 'i'),
         new RegExp(`${escapedKra}[\\s\\S]{0,70}?(\\d+(?:\\.\\d+)?)`, 'i'),
     ];
-    if (tokenPattern) {
-        patterns.push(new RegExp(`(?:${tokenPattern})[\\s\\S]{0,70}?(\\d+(?:\\.\\d+)?)`, 'i'));
-    }
-    return patterns;
 }
 function escapeRegex(value) {
     return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');

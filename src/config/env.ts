@@ -27,9 +27,12 @@ const envSchema = z
     OCR_TIMEOUT_MS: z.coerce.number().int().positive().default(30000),
     SUPABASE_URL: z.string().default(''),
     SUPABASE_SERVICE_ROLE_KEY: z.string().default(''),
+    // Public anon key — safe to expose to the browser (used for direct storage uploads via signed URLs)
+    SUPABASE_ANON_KEY: z.string().default(''),
   });
 
 export const env = envSchema.parse(process.env);
 export const isProduction = env.NODE_ENV === 'production';
-export const MAX_UPLOAD_SIZE_MB = 50;
+export const MAX_UPLOAD_SIZE_MB = 200;
 export const MAX_UPLOAD_SIZE_BYTES = MAX_UPLOAD_SIZE_MB * 1024 * 1024;
+

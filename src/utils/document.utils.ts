@@ -125,9 +125,9 @@ export async function processUploadedDocument(args: {
       }
     }
 
-    const detectedPanelKey = inferBestUploadPanelKey(extractedText, panelKey);
-    const detectedPanelDefinition = findUploadPanelDefinition(detectedPanelKey);
-    const analysis = analyzeDocumentContent(extractedText, detectedPanelKey, 'pdf');
+    const targetPanelKey = panelKey || inferBestUploadPanelKey(extractedText, 'kra1_teaching_effectiveness');
+    const targetPanelDefinition = findUploadPanelDefinition(targetPanelKey);
+    const analysis = analyzeDocumentContent(extractedText, targetPanelKey, 'pdf');
     const dateCheck = checkPromotionWindow(extractedText);
 
     if (dateCheck.status === 'out_of_range') {
@@ -148,8 +148,8 @@ export async function processUploadedDocument(args: {
           extractedText,
           extractionMetadata: toPrismaJson({
             uploadType,
-            panelKey: detectedPanelKey,
-            panelTitle: detectedPanelDefinition.title,
+            panelKey: targetPanelKey,
+            panelTitle: targetPanelDefinition.title,
             storedForTraining: true,
             ...(ocrFallback ? { ocr: ocrFallback } : {}),
             ...(ocrError ? { ocrError } : {}),
@@ -166,7 +166,7 @@ export async function processUploadedDocument(args: {
         fileType: 'pdf',
         documentId: savedDocument.id,
         uploadType,
-        panelKey: detectedPanelKey,
+        panelKey: targetPanelKey,
         profileId,
         linkage,
         textPreview: extractedText.slice(0, 1000),
@@ -195,9 +195,9 @@ export async function processUploadedDocument(args: {
       ocrResult = await runTesseractOcr(file.buffer, fileName);
     }
     const extractedText = ocrResult.text.trim();
-    const detectedPanelKey = inferBestUploadPanelKey(extractedText, panelKey);
-    const detectedPanelDefinition = findUploadPanelDefinition(detectedPanelKey);
-    const analysis = analyzeDocumentContent(extractedText, detectedPanelKey, 'image');
+    const targetPanelKey = panelKey || inferBestUploadPanelKey(extractedText, 'kra1_teaching_effectiveness');
+    const targetPanelDefinition = findUploadPanelDefinition(targetPanelKey);
+    const analysis = analyzeDocumentContent(extractedText, targetPanelKey, 'image');
     const dateCheck = checkPromotionWindow(extractedText);
 
     if (dateCheck.status === 'out_of_range') {
@@ -218,8 +218,8 @@ export async function processUploadedDocument(args: {
           extractedText,
           extractionMetadata: toPrismaJson({
             uploadType,
-            panelKey: detectedPanelKey,
-            panelTitle: detectedPanelDefinition.title,
+            panelKey: targetPanelKey,
+            panelTitle: targetPanelDefinition.title,
             storedForTraining: true,
             ocr: {
               provider: ocrResult.provider,
@@ -239,7 +239,7 @@ export async function processUploadedDocument(args: {
         fileType: 'image',
         documentId: savedDocument.id,
         uploadType,
-        panelKey: detectedPanelKey,
+        panelKey: targetPanelKey,
         profileId,
         linkage,
         textPreview: extractedText.slice(0, 1000),

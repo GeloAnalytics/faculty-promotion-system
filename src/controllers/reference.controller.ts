@@ -7,6 +7,8 @@ import { academicRankOptions, educationalAttainmentOptions, collegeDepartmentOpt
 import { uploadPanels } from '../uploadPanels';
 import { tqeReferenceSummary, guidelinePdfPath } from '../config/globals';
 import { getEmployeeUploadWorkflowSummary } from '../uploadWorkflow';
+import { env } from '../config/env';
+import { DOCUMENTS_BUCKET } from '../config/supabase';
 
 export const getTqeSummary = (_req: Request, res: Response) => {
   res.json({
@@ -36,6 +38,20 @@ export const getFacultyOptions = (_req: Request, res: Response) => {
     academicRanks: academicRankOptions,
     educationalAttainments: educationalAttainmentOptions,
     collegeDepartments: collegeDepartmentOptions,
+  });
+};
+
+/**
+ * GET /api/config/storage
+ * Returns the public Supabase credentials the browser needs for direct storage uploads.
+ * Only the anon key is returned — never the service role key.
+ */
+export const getStorageConfig = (_req: Request, res: Response) => {
+  res.json({
+    supabaseUrl: env.SUPABASE_URL || null,
+    supabaseAnonKey: env.SUPABASE_ANON_KEY || null,
+    bucket: DOCUMENTS_BUCKET,
+    directUploadEnabled: !!(env.SUPABASE_URL && env.SUPABASE_ANON_KEY),
   });
 };
 
