@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { uploadPanels } from '../src/uploadPanels';
-import { validateEvidencePacket } from '../src/utils/evidenceValidation';
+import { getEvidenceChecklistCompleteness, validateEvidencePacket } from '../src/utils/evidenceValidation';
+import { evidenceRules } from '../src/utils/evidenceRules';
 
 test('validateEvidencePacket marks a complete faculty packet as complete', () => {
   const requiredPanelKeys = uploadPanels.filter((panel) => panel.appliesTo === 'ALL_FACULTY').map((panel) => panel.key);
@@ -95,4 +96,49 @@ test('validateEvidencePacket only requires documentary evidence, not a score she
   assert.match(result.note, /Missing documentary evidence panel/i);
   // The panel with evidence but no score sheet must not be reported as missing.
   assert.equal(result.missingPanelKeys.includes(noScoreSheetPanel), false);
+});
+
+test('every upload panel has an Annex A documentary-evidence rule', () => {
+  const missingRuleKeys = uploadPanels
+    .map((panel) => panel.key)
+    .filter((panelKey) => !evidenceRules[panelKey]);
+
+  assert.deepEqual(missingRuleKeys, []);
+});
+
+test('Annex A checklist rules recognize representative KRA evidence packets', () => {
+  assert.equal(
+    getEvidenceChecklistCompleteness('kra1_teaching_effectiveness', [
+      'student evaluation',
+      'supervisor evaluation',
+      'transmutation',
+    ]),
+    1,
+  );
+
+  assert.equal(
+    getEvidenceChecklistCompleteness('kra2_research_outputs', [
+      'journal article',
+      'scopus',
+    ]),
+    1,
+  );
+
+  assert.equal(
+    getEvidenceChecklistCompleteness('kra3_service_to_institution', [
+      'approval document',
+      'moa',
+      'implementation report',
+    ]),
+    1,
+  );
+
+  assert.equal(
+    getEvidenceChecklistCompleteness('kra4_continuing_development', [
+      'program',
+      'certificate of participation',
+      'approval to attend',
+    ]),
+    1,
+  );
 });

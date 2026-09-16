@@ -11,6 +11,7 @@ import {
   processUploadedDocument,
   describeUploadProcessingError,
   toPrismaJson,
+  getKraStoragePath,
 } from '../utils/document.utils';
 import { getSupabase, DOCUMENTS_BUCKET } from '../config/supabase';
 import { ocrConfig } from '../config/globals';
@@ -27,16 +28,22 @@ import { env } from '../config/env';
  * POST /api/documents/signed-upload-url
  * Returns a short-lived Supabase signed URL so the browser can upload
  * directly to storage — bypassing the 4.5 MB Vercel serverless body limit.
+ * Storage key is routed into KRA-specific folders (e.g. kra1/kra1_teaching_effectiveness/<uuid>.pdf).
  */
 export const getSignedUploadUrl = async (req: Request, res: Response) => {
-  const { fileName, mimeType } = req.body as { fileName?: unknown; mimeType?: unknown };
+  const { fileName, mimeType, panelKey } = req.body as {
+    fileName?: unknown;
+    mimeType?: unknown;
+    panelKey?: unknown;
+  };
 
   if (typeof fileName !== 'string' || !fileName.trim()) {
     return res.status(400).json({ error: 'fileName is required' });
   }
 
-  const extension = path.extname(String(fileName)).toLowerCase() || '';
-  const storageKey = `${crypto.randomUUID()}${extension}`;
+  const rawPanelKey = typeof panelKey === 'string' ? panelKey : undefined;
+  const rawMimeType = typeof mimeType === 'string' ? mimeType : undefined;
+  const storageKey = getKraStoragePath(rawPanelKey, String(fileName), rawMimeType);
 
   const { data, error } = await getSupabase()
     .storage.from(DOCUMENTS_BUCKET)

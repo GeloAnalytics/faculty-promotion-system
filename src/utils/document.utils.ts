@@ -73,7 +73,7 @@ export async function processUploadedDocument(args: {
 
   const linkage = await resolveUploadProfileLink(ownerUserId, fileName, requestedProfileId, ownerIdentity);
   const profileId = linkage.profileId;
-  const storage = await persistUploadedDocumentFile(file);
+  const storage = await persistUploadedDocumentFile(file, panelKey);
 
   if (mimeType === 'application/pdf' || fileName.toLowerCase().endsWith('.pdf')) {
     const data = await pdf(file.buffer);
@@ -458,6 +458,25 @@ export function toPrismaJson(value: unknown): Prisma.InputJsonValue {
   return JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
 }
 
+export function getKraStoragePath(panelKey?: string, originalName?: string, mimeType?: string): string {
+  const extension = deriveStorageExtension(originalName || '', mimeType || '');
+  const uniqueId = crypto.randomUUID();
+  const cleanPanelKey = typeof panelKey === 'string' && panelKey.trim() ? parseUploadPanelKey(panelKey) : 'general';
+
+  let kraFolder = 'general';
+  if (cleanPanelKey.startsWith('kra1_')) {
+    kraFolder = 'kra1';
+  } else if (cleanPanelKey.startsWith('kra2_')) {
+    kraFolder = 'kra2';
+  } else if (cleanPanelKey.startsWith('kra3_')) {
+    kraFolder = 'kra3';
+  } else if (cleanPanelKey.startsWith('kra4_')) {
+    kraFolder = 'kra4';
+  }
+
+  return `${kraFolder}/${cleanPanelKey}/${uniqueId}${extension}`;
+}
+
 function readJsonObject(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     return {};
@@ -466,10 +485,8 @@ function readJsonObject(value: unknown): Record<string, unknown> {
   return value as Record<string, unknown>;
 }
 
-async function persistUploadedDocumentFile(file: Express.Multer.File) {
-  const storageKey = crypto.randomUUID();
-  const extension = deriveStorageExtension(file.originalname, file.mimetype);
-  const filePath = `${storageKey}${extension}`;
+async function persistUploadedDocumentFile(file: Express.Multer.File, panelKey?: string) {
+  const filePath = getKraStoragePath(panelKey, file.originalname, file.mimetype);
 
   const { error } = await getSupabase().storage
     .from(DOCUMENTS_BUCKET)

@@ -1495,8 +1495,9 @@ function getComputedStatusLabel(status) {
   return 'Not required for the base packet.';
 }
 
-// BUG #4 FIX: File size threshold for user warning (4 MB = safe for Vercel body limit)
-const SAFE_FILE_SIZE_BYTES = 4 * 1024 * 1024;
+// File size thresholds
+const VERCEL_SERVER_LIMIT_BYTES = 4.5 * 1024 * 1024; // 4.5 MB serverless body cap
+const MAX_DIRECT_UPLOAD_SIZE_BYTES = 50 * 1024 * 1024; // 50 MB direct Supabase limit
 
 // BUG #5/6/7 FIX: Accepts the actual submitted form as a second argument (event delegation)
 async function handleUploadSubmit(event, form) {
@@ -1523,14 +1524,28 @@ async function handleUploadSubmit(event, form) {
     return;
   }
 
-  // BUG #4 FIX: Warn about oversized files before attempting upload
-  const oversizedFiles = files.filter((f) => f.size > SAFE_FILE_SIZE_BYTES);
-  if (sizeWarning) {
-    if (oversizedFiles.length && !storageConfig.directUploadEnabled) {
-      sizeWarning.hidden = false;
-      sizeWarning.textContent = `⚠ ${oversizedFiles.map((f) => f.name).join(', ')} exceed${oversizedFiles.length === 1 ? 's' : ''} 4 MB. Upload may fail on the current plan — direct upload is not yet configured.`;
-    } else {
+  // File size validation
+  if (storageConfig.directUploadEnabled) {
+    const overLimitFiles = files.filter((f) => f.size > MAX_DIRECT_UPLOAD_SIZE_BYTES);
+    if (overLimitFiles.length) {
+      if (sizeWarning) {
+        sizeWarning.hidden = false;
+        sizeWarning.textContent = `⚠ ${overLimitFiles.map((f) => f.name).join(', ')} exceed${overLimitFiles.length === 1 ? 's' : ''} 50 MB. Files must be 50 MB or less to upload directly via Supabase.`;
+      }
+      setNotice(employeeUploadStatus, `File(s) exceed 50 MB direct upload limit.`, true);
+      return;
+    } else if (sizeWarning) {
       sizeWarning.hidden = true;
+    }
+  } else {
+    const oversizedFiles = files.filter((f) => f.size > VERCEL_SERVER_LIMIT_BYTES);
+    if (sizeWarning) {
+      if (oversizedFiles.length) {
+        sizeWarning.hidden = false;
+        sizeWarning.textContent = `⚠ ${oversizedFiles.map((f) => f.name).join(', ')} exceed${oversizedFiles.length === 1 ? 's' : ''} 4.5 MB. Server upload will fail on Vercel — configure direct Supabase upload to allow up to 50 MB.`;
+      } else {
+        sizeWarning.hidden = true;
+      }
     }
   }
 
@@ -1540,17 +1555,17 @@ async function handleUploadSubmit(event, form) {
     employeeUploadStatus,
     uploadType === 'score-sheet'
       ? `Uploading ${panelLabel} score sheet...`
-      : `Uploading ${panelLabel} evidence...`,
+      : `Uploading ${panelLabel} evidence (${files.length} file${files.length === 1 ? '' : 's'})...`,
   );
 
-  // BUG #1/#3 FIX: Show per-panel progress bar
+  // Show per-panel progress bar
   if (progressPanel) progressPanel.hidden = false;
   if (progressFill) progressFill.style.width = '5%';
   if (progressLabel) progressLabel.textContent = `Uploading ${files.length} file${files.length === 1 ? '' : 's'}...`;
 
   try {
     if (storageConfig.directUploadEnabled) {
-      // BUG #1 FIX: Direct-to-Supabase upload — no Vercel body size limit
+      // Direct-to-Supabase upload (up to 50 MB) — bypasses Vercel body size limit
       await uploadFilesDirectToSupabase({ files, panelKey, uploadType, documentType, progressFill, progressLabel });
     } else {
       // Fallback: server-side upload (limited to Vercel's 4.5 MB body cap)
@@ -1565,8 +1580,7 @@ async function handleUploadSubmit(event, form) {
       if (progressFill) progressFill.style.width = '100%';
     }
 
-    setNotice(employeeUploadStatus, `✓ ${panelLabel} evidence uploaded. OCR is processing now.`);
-    // BUG #3 FIX: Refresh workspace without blocking other panels' uploads
+    setNotice(employeeUploadStatus, `✓ ${panelLabel} evidence (${files.length} file${files.length === 1 ? '' : 's'}) uploaded. OCR is processing now.`);
     loadEmployeeWorkspace().catch((err) => setNotice(employeeUploadStatus, toErrorMessage(err), true));
   } catch (error) {
     setNotice(employeeUploadStatus, toErrorMessage(error), true);
@@ -1578,12 +1592,12 @@ async function handleUploadSubmit(event, form) {
 
 /**
  * Direct-to-Supabase upload flow:
- * 1. Request a signed upload URL from the backend (tiny JSON request — no file payload)
- * 2. PUT the file directly to Supabase Storage from the browser
+ * 1. Request a signed upload URL from the backend with KRA panelKey routing
+ * 2. PUT the file directly to Supabase Storage from the browser (up to 50 MB)
  * 3. POST the storage path to /api/documents/register so the server can run OCR
  *
- * BUG #1 FIX: This completely bypasses Vercel's 4.5 MB serverless body limit
- * because the file bytes never go through the serverless function.
+ * Completely bypasses Vercel's 4.5 MB serverless body limit because file bytes
+ * are transferred directly from client to Supabase storage bucket.
  */
 async function uploadFilesDirectToSupabase({ files, panelKey, uploadType, documentType, progressFill, progressLabel }) {
   const total = files.length;
@@ -1592,10 +1606,10 @@ async function uploadFilesDirectToSupabase({ files, panelKey, uploadType, docume
     if (progressLabel) progressLabel.textContent = `Uploading file ${i + 1} of ${total}: ${file.name}...`;
     if (progressFill) progressFill.style.width = `${Math.round(((i) / total) * 60) + 5}%`;
 
-    // Step 1: Get a signed URL from the backend
+    // Step 1: Get a signed URL from backend, passing panelKey for KRA storage pathing
     const { signedUrl, storagePath } = await apiFetch('/api/documents/signed-upload-url', {
       method: 'POST',
-      body: JSON.stringify({ fileName: file.name, mimeType: file.type }),
+      body: JSON.stringify({ fileName: file.name, mimeType: file.type, panelKey }),
     });
 
     // Step 2: Upload directly to Supabase from the browser

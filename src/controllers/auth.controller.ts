@@ -48,7 +48,16 @@ function generateToken(user: SessionUser): string {
   );
 }
 
-function setCookieFallback(res: Response, token: string) {
+function shouldUseSecureCookie(req: Request): boolean {
+  if (!isProduction) {
+    return false;
+  }
+
+  const forwardedProto = req.get('x-forwarded-proto')?.split(',')[0]?.trim().toLowerCase();
+  return req.secure || forwardedProto === 'https';
+}
+
+function setCookieFallback(req: Request, res: Response, token: string) {
   const parts = [
     `fps_session=${token}`,
     'Path=/',
@@ -57,16 +66,16 @@ function setCookieFallback(res: Response, token: string) {
     `Max-Age=${7 * 24 * 60 * 60}`,
   ];
 
-  if (isProduction) {
+  if (shouldUseSecureCookie(req)) {
     parts.push('Secure');
   }
 
   res.setHeader('Set-Cookie', parts.join('; '));
 }
 
-function clearCookieFallback(res: Response) {
+function clearCookieFallback(req: Request, res: Response) {
   const parts = ['fps_session=', 'Path=/', 'HttpOnly', 'SameSite=Lax', 'Max-Age=0'];
-  if (isProduction) {
+  if (shouldUseSecureCookie(req)) {
     parts.push('Secure');
   }
   res.setHeader('Set-Cookie', parts.join('; '));
@@ -103,7 +112,7 @@ export const register = async (req: Request, res: Response) => {
 
   const sessionUser = toSessionUser(user);
   const token = generateToken(sessionUser);
-  setCookieFallback(res, token); // Fallback for transition
+  setCookieFallback(req, res, token); // Fallback for transition
 
   return res.status(201).json({ user: sessionUser, token, homePath: getHomePathForRole(sessionUser.role) });
 };
@@ -118,20 +127,20 @@ export const login = async (req: Request, res: Response) => {
 
   const sessionUser = toSessionUser(user);
   const token = generateToken(sessionUser);
-  setCookieFallback(res, token);
+  setCookieFallback(req, res, token);
 
   return res.json({ user: sessionUser, token, homePath: getHomePathForRole(sessionUser.role) });
 };
 
-export const logout = async (_req: Request, res: Response) => {
-  clearCookieFallback(res);
+export const logout = async (req: Request, res: Response) => {
+  clearCookieFallback(req, res);
   res.status(204).send();
 };
 
 export const me = async (req: Request, res: Response) => {
   // Sliding-window: re-issue token/cookie
   const token = generateToken(req.user!);
-  setCookieFallback(res, token);
+  setCookieFallback(req, res, token);
 
   res.json({
     user: req.user,
@@ -167,7 +176,7 @@ export const changePassword = async (req: Request, res: Response) => {
 
   const sessionUser = toSessionUser(updatedUser);
   const token = generateToken(sessionUser);
-  setCookieFallback(res, token);
+  setCookieFallback(req, res, token);
 
   return res.json({ user: sessionUser, token, homePath: getHomePathForRole(sessionUser.role) });
 };

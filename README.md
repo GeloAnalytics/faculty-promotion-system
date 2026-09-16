@@ -345,12 +345,11 @@ Do not claim that the system makes final promotion decisions. Final evaluation r
 
 ## Consolidated Release Notes
 
-### 2026-09-16
-
+- **Organized Storage Folder Structure by KRA**: Updated file persistence to automatically route evidence documents into dedicated KRA folders (`kra1/<panel_key>/<uuid>.<ext>`, `kra2/`, `kra3/`, `kra4/`, or `general/`) in Supabase Storage.
+- **50 MB Direct-to-Supabase Storage & Size Validation**: Implemented direct browser-to-Supabase upload flow via signed PUT URLs (`/api/documents/signed-upload-url` and `/api/documents/register`), enabling files up to 50 MB to bypass Vercel's 4.5 MB serverless payload limit with real-time per-file progress tracking and client-side validation.
 - **Fixed KRA Upload Routing (Bugs #5, #6, #7)**: Replaced per-form submit event listeners with single event delegation listener on `#employee-upload-workflow`. Solved issue where uploading to one KRA after skipping another misrouted uploads to the skipped KRA due to stale DOM nodes.
-- **Enabled Multi-Panel Simultaneous Uploads (Bug #3)**: Backgrounded post-upload workspace refreshing (`loadEmployeeWorkspace`), allowing users to upload across multiple KRA cards at the same time without UI blocking.
+- **Enabled Multi-Panel & Batch File Uploads**: Added multi-file selection support per upload panel and backgrounded post-upload workspace refreshing (`loadEmployeeWorkspace`), allowing users to upload multiple files across KRA cards simultaneously without UI blocking.
 - **Added Document Type Dropdown (Bug #2)**: Added optional 12-category Document Type select menu on upload cards (Certificate, Published Article, Award, Training Proof, Evaluation Form, etc.), stored in `extractionMetadata`.
-- **Direct-to-Supabase Storage & Size Warnings (Bugs #1 & #4)**: Implemented direct-to-Supabase browser upload flow via signed PUT URLs (`/api/documents/signed-upload-url` and `/api/documents/register`), completely bypassing Vercel's 4.5 MB serverless upload payload limit. Added client-side file size warning banners when direct upload is unconfigured.
 - **Production Vercel Deployment**: Configured `SUPABASE_ANON_KEY` in Vercel environment variables and verified production health on `https://faculty-promotion-system-main.vercel.app`.
 
 ### 2026-08-12

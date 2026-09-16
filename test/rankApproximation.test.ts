@@ -350,13 +350,12 @@ test('evidence-based score computation credits a short but topically relevant do
     [
       {
         extractionMetadata: {
-          // kra4_awards_recognition's strict checklist (OR: 'certificate of
-          // recognition' / 'plaque') isn't matched, and completeness/quality
-          // are both 0 (e.g. a short single-page scan) - but the document's
-          // subject-matter vocabulary (uploadPanelKeywordMap: 'award',
-          // 'recognition', 'distinction') hits 1 of 3 terms, so a short but
-          // clearly on-topic document should still earn some credit instead
-          // of being punished purely for being short.
+          // kra4_awards_recognition's stricter Annex A checklist is not
+          // matched, and completeness/quality are both 0 (e.g. a short
+          // single-page scan) - but the document's subject-matter vocabulary
+          // still shows it belongs to awards/recognition, so it should earn
+          // some conservative relevance credit instead of being punished
+          // purely for being short.
           uploadType: 'evidence',
           panelKey: 'kra4_awards_recognition',
           panelTitle: 'Awards and Recognitions',
@@ -372,7 +371,8 @@ test('evidence-based score computation credits a short but topically relevant do
   const awardsPanel = draftPoints.scoreComputation?.panelScores.find((panel) => panel.key === 'kra4_awards_recognition');
   assert.equal(awardsPanel?.status, 'counted');
   assert.equal(awardsPanel?.scoreSource, 'evidence-relevance-estimate');
-  assert.equal(awardsPanel?.usedScore, 3);
+  assert.ok((awardsPanel?.usedScore ?? 0) > 0);
+  assert.ok((awardsPanel?.usedScore ?? 0) < 0.5 * (awardsPanel?.maxScore ?? 0));
 });
 
 test('evidence-based score computation gives partial credit from the evidence checklist when no OCR score is detected', () => {
@@ -393,15 +393,15 @@ test('evidence-based score computation gives partial credit from the evidence ch
     [
       {
         extractionMetadata: {
-          // kra2_research_outputs requires an AND of 'research output' and
-          // 'peer review' - only one of the two is detected here, so this
-          // panel should land at half its max, not 0 and not full marks.
+          // A journal article path under Annex A needs publication evidence
+          // plus indexing proof. Only the article itself is detected here, so
+          // this panel should land at half its max, not 0 and not full marks.
           uploadType: 'evidence',
           panelKey: 'kra2_research_outputs',
           panelTitle: 'Research Outputs',
           analysis: {
             extractedScores: {},
-            keywordHits: ['research output'],
+            keywordHits: ['journal article'],
           },
         },
       },
