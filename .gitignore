@@ -10,3 +10,4 @@ ml/reports/
 __pycache__/
 *.pyc
 *.traineddata
+.vercel

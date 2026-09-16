@@ -5,7 +5,8 @@
   "main": "dist/server.js",
   "scripts": {
     "dev": "tsx watch src/server.ts",
-    "build": "tsc",
+    "build": "prisma generate && tsc",
+    "vercel-build": "prisma generate && tsc",
     "start": "node dist/server.js",
     "test": "tsx --test test/cookie.utils.test.ts test/crypto.utils.test.ts test/auth.validation.test.ts test/dashboardSelection.test.ts test/documentAccess.test.ts test/evidenceValidation.test.ts test/profileMatching.test.ts test/promotionWindow.test.ts test/rankApproximation.test.ts",
     "test:integration": "node --env-file=.env node_modules/tsx/dist/cli.mjs --test test/auth.integration.test.ts",
