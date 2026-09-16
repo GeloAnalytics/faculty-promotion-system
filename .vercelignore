@@ -1,0 +1,16 @@
+test/
+frontend/
+scripts/
+data/
+ml/
+.git/
+.gemini/
+*.pdf
+*.png
+*.jpg
+*.log
+*.csv
+scratch/
+README.md
+walkthrough.md
+implementation_plan.md
