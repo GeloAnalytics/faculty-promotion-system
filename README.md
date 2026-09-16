@@ -237,6 +237,7 @@ GET    /api/admin/database-overview           (admin)
 GET    /api/config/upload-panels
 GET    /api/config/upload-workflow
 GET    /api/config/faculty-options
+GET    /api/config/storage
 GET    /api/reference/tqe-summary
 GET    /api/reference/guidelines
 
@@ -247,6 +248,8 @@ POST   /api/faculty/models/compare                (stub, always 503 - see note b
 POST   /api/faculty/predictions/generate          (stub, always 503 - see note below)
 
 POST   /api/documents/extract
+POST   /api/documents/signed-upload-url
+POST   /api/documents/register
 GET    /api/documents/:documentId/view
 POST   /api/documents/:documentId/replace
 DELETE /api/documents/:documentId
@@ -288,9 +291,10 @@ OCR_FILE_FIELD_NAME="file"
 OCR_TIMEOUT_MS=30000
 SUPABASE_URL="https://your-project.supabase.co"
 SUPABASE_SERVICE_ROLE_KEY="your-service-role-key"
+SUPABASE_ANON_KEY="your-anon-public-key"
 ```
 
-> **Note:** `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are required in production for document uploads and preview. They are optional for local development and tests — the system will throw a clear error if storage operations are attempted without them.
+> **Note:** `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are required for server-side document storage and OCR analysis. `SUPABASE_ANON_KEY` enables direct-to-Supabase browser uploads via signed URLs, completely bypassing Vercel's 4.5 MB serverless body size limit.
 >
 > `OCR_PROVIDER` selects the *primary* provider (`windows`, `http`, `ocrspace`, `tesseract`, or `disabled`); regardless of this setting, the self-hosted `tesseract.js`/`pdf-to-img` fallback automatically activates whenever the configured primary provider fails or exceeds its size/timeout limits (except when the primary provider is already `windows`, which can't process PDFs at all and always defers).
 
@@ -340,6 +344,14 @@ A safe project framing is:
 Do not claim that the system makes final promotion decisions. Final evaluation remains with the institution's promotion committee.
 
 ## Consolidated Release Notes
+
+### 2026-09-16
+
+- **Fixed KRA Upload Routing (Bugs #5, #6, #7)**: Replaced per-form submit event listeners with single event delegation listener on `#employee-upload-workflow`. Solved issue where uploading to one KRA after skipping another misrouted uploads to the skipped KRA due to stale DOM nodes.
+- **Enabled Multi-Panel Simultaneous Uploads (Bug #3)**: Backgrounded post-upload workspace refreshing (`loadEmployeeWorkspace`), allowing users to upload across multiple KRA cards at the same time without UI blocking.
+- **Added Document Type Dropdown (Bug #2)**: Added optional 12-category Document Type select menu on upload cards (Certificate, Published Article, Award, Training Proof, Evaluation Form, etc.), stored in `extractionMetadata`.
+- **Direct-to-Supabase Storage & Size Warnings (Bugs #1 & #4)**: Implemented direct-to-Supabase browser upload flow via signed PUT URLs (`/api/documents/signed-upload-url` and `/api/documents/register`), completely bypassing Vercel's 4.5 MB serverless upload payload limit. Added client-side file size warning banners when direct upload is unconfigured.
+- **Production Vercel Deployment**: Configured `SUPABASE_ANON_KEY` in Vercel environment variables and verified production health on `https://faculty-promotion-system-main.vercel.app`.
 
 ### 2026-08-12
 
