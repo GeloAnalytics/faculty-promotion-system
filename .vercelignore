@@ -5,11 +5,9 @@ data/
 ml/
 .git/
 .gemini/
-*.pdf
 *.png
 *.jpg
 *.log
-*.csv
 scratch/
 README.md
 walkthrough.md

@@ -141,8 +141,13 @@ export const registerUploadedDocument = async (req: Request, res: Response) => {
 
     if (isPdf) {
       fileType = 'pdf';
-      const data = await pdf(fileBuffer);
-      extractedText = data.text;
+      try {
+        const data = await pdf(fileBuffer);
+        extractedText = data.text || '';
+      } catch (err) {
+        ocrError = err instanceof Error ? err.message : 'PDF text extraction failed';
+        extractedText = '';
+      }
 
       const MIN_MEANINGFUL_PDF_TEXT_LENGTH = 20;
       const canAttemptPdfOcrFallback = ocrConfig.provider !== 'windows' && isOcrReady(ocrConfig);
@@ -190,13 +195,6 @@ export const registerUploadedDocument = async (req: Request, res: Response) => {
     const computedAnalysis = analyzeDocumentContent(extractedText, targetPanelKey, fileType);
     const dateCheck = checkPromotionWindow(extractedText);
 
-    if (dateCheck.status === 'out_of_range') {
-      // Remove the uploaded file from storage since it's rejected
-      await getSupabase().storage.from(DOCUMENTS_BUCKET).remove([storagePath]);
-      return res.status(422).json({
-        error: `This document is dated ${dateCheck.matchedDate}, outside the current promotion period (${PROMOTION_WINDOW_LABEL}). Only documents relevant to this promotion cycle can be uploaded.`,
-      });
-    }
 
     const savedDocument = await prisma.uploadedDocument.create({
       data: {

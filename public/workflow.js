@@ -222,8 +222,8 @@ function renderEmployeeProfileForm(facultyOptions, personalData) {
     return;
   }
 
-  populateSelectOptions(profileAcademicRank, facultyOptions?.academicRanks || []);
-  populateSelectOptions(profileAttainment, facultyOptions?.educationalAttainments || []);
+  populateSelectOptions(profileAcademicRank, facultyOptions?.academicRanks || [], { includeBlank: 'Select Academic Rank' });
+  populateSelectOptions(profileAttainment, facultyOptions?.educationalAttainments || [], { includeBlank: 'Select Attainment' });
   populateSelectOptions(profileDepartment, facultyOptions?.collegeDepartments || [], { includeBlank: 'Select college' });
 
   if (personalData) {
@@ -232,8 +232,8 @@ function renderEmployeeProfileForm(facultyOptions, personalData) {
     setSelectValue(profileDepartment, personalData.department);
     setInputValue('profile-years-in-service', personalData.yearsInService);
     setInputValue('profile-age', personalData.age);
-    setInputValue('profile-sex', personalData.sex);
-    setInputValue('profile-civil-status', personalData.civilStatus);
+    setSelectValue(byId('profile-sex'), personalData.sex);
+    setSelectValue(byId('profile-civil-status'), personalData.civilStatus);
     setNotice(employeeProfileStatus, 'Update your details any time - only OCR-scanned uploads determine your KRA scores.');
   } else {
     setNotice(employeeProfileStatus, 'Set your academic rank and attainment once - your KRA scores will still come entirely from OCR-scanned uploads.');
@@ -1566,13 +1566,14 @@ async function handleUploadSubmit(event, form) {
   try {
     if (storageConfig.directUploadEnabled) {
       // Direct-to-Supabase upload (up to 50 MB) — bypasses Vercel body size limit
-      await uploadFilesDirectToSupabase({ files, panelKey, uploadType, documentType, progressFill, progressLabel });
+      await uploadFilesDirectToSupabase({ files, panelKey, uploadType, documentType, progressFill, progressLabel, profileId: employeeDashboard?.latestProfile?.id });
     } else {
       // Fallback: server-side upload (limited to Vercel's 4.5 MB body cap)
       const formData = new FormData();
       formData.append('uploadType', uploadType);
       if (panelKey) formData.append('panelKey', panelKey);
       if (documentType) formData.append('documentType', documentType);
+      if (employeeDashboard?.latestProfile?.id) formData.append('profileId', employeeDashboard.latestProfile.id);
       formData.append('kind', 'REQUIREMENT');
       for (const file of files) formData.append('document', file);
       if (progressFill) progressFill.style.width = '50%';
@@ -1599,7 +1600,7 @@ async function handleUploadSubmit(event, form) {
  * Completely bypasses Vercel's 4.5 MB serverless body limit because file bytes
  * are transferred directly from client to Supabase storage bucket.
  */
-async function uploadFilesDirectToSupabase({ files, panelKey, uploadType, documentType, progressFill, progressLabel }) {
+async function uploadFilesDirectToSupabase({ files, panelKey, uploadType, documentType, progressFill, progressLabel, profileId }) {
   const total = files.length;
   for (let i = 0; i < total; i++) {
     const file = files[i];
@@ -1607,19 +1608,25 @@ async function uploadFilesDirectToSupabase({ files, panelKey, uploadType, docume
     if (progressFill) progressFill.style.width = `${Math.round(((i) / total) * 60) + 5}%`;
 
     // Step 1: Get a signed URL from backend, passing panelKey for KRA storage pathing
-    const { signedUrl, storagePath } = await apiFetch('/api/documents/signed-upload-url', {
+    const { signedUrl, storagePath, token } = await apiFetch('/api/documents/signed-upload-url', {
       method: 'POST',
       body: JSON.stringify({ fileName: file.name, mimeType: file.type, panelKey }),
     });
 
     // Step 2: Upload directly to Supabase from the browser
+    // The signed upload URL requires the token in an Authorization header.
+    const uploadHeaders = { 'Content-Type': file.type || 'application/octet-stream' };
+    if (token) {
+      uploadHeaders['Authorization'] = `Bearer ${token}`;
+    }
     const uploadResponse = await fetch(signedUrl, {
       method: 'PUT',
-      headers: { 'Content-Type': file.type || 'application/octet-stream' },
+      headers: uploadHeaders,
       body: file,
     });
     if (!uploadResponse.ok) {
-      throw new Error(`Storage upload failed for ${file.name}: ${uploadResponse.statusText}`);
+      const errText = await uploadResponse.text().catch(() => '');
+      throw new Error(`Storage upload failed for ${file.name}: ${uploadResponse.statusText}${errText ? ` — ${errText}` : ''}`);
     }
     if (progressFill) progressFill.style.width = `${Math.round(((i + 0.7) / total) * 60) + 5}%`;
 
@@ -1635,6 +1642,7 @@ async function uploadFilesDirectToSupabase({ files, panelKey, uploadType, docume
         panelKey,
         uploadType,
         documentType: documentType || undefined,
+        profileId: profileId || undefined,
       }),
     });
     if (progressFill) progressFill.style.width = `${Math.round(((i + 1) / total) * 100)}%`;

@@ -167,64 +167,71 @@ async function runOcrSpace(
     throw new Error('OCR.space is not fully configured');
   }
 
-  const formData = new FormData();
-  const blob = new Blob([new Uint8Array(fileBuffer)]);
-  formData.append('file', blob, originalName);
-  formData.append('isOverlayRequired', 'false');
-  formData.append('OCREngine', '2');
-  if (fileTypeHint) {
-    // OCR.space normally infers the file type from the upload's file name
-    // extension, but a scanned/image-only PDF forwarded from the PDF upload
-    // path benefits from an explicit hint rather than relying on that
-    // inference alone.
-    formData.append('filetype', fileTypeHint);
-  }
+  const makeRequest = async (engine: '1' | '2') => {
+    const formData = new FormData();
+    const blob = new Blob([new Uint8Array(fileBuffer)]);
+    formData.append('file', blob, originalName);
+    formData.append('isOverlayRequired', 'false');
+    formData.append('OCREngine', engine);
+    if (fileTypeHint) {
+      formData.append('filetype', fileTypeHint);
+    }
 
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), config.timeoutMs);
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), config.timeoutMs);
+
+    try {
+      const response = await fetch(config.apiUrl!, {
+        method: 'POST',
+        headers: { apikey: config.apiKey! },
+        body: formData,
+        signal: controller.signal,
+      });
+
+      if (!response.ok) {
+        const errorBody = await response.text().catch(() => '');
+        throw new Error(`OCR.space request failed with status ${response.status}${errorBody ? `: ${errorBody}` : ''}`);
+      }
+
+      const payload = (await response.json()) as {
+        IsErroredOnProcessing?: boolean;
+        ErrorMessage?: string[] | string;
+        ParsedResults?: Array<{ ParsedText?: string }>;
+      };
+
+      if (payload.IsErroredOnProcessing) {
+        const message = Array.isArray(payload.ErrorMessage)
+          ? payload.ErrorMessage.join('; ')
+          : payload.ErrorMessage || 'OCR.space processing failed';
+        throw new Error(message);
+      }
+
+      const text = (payload.ParsedResults ?? [])
+        .map((result) => result.ParsedText ?? '')
+        .join('\n')
+        .trim();
+
+      return {
+        provider: 'ocrspace' as const,
+        text,
+        lineCount: countLines(text),
+      };
+    } finally {
+      clearTimeout(timeout);
+    }
+  };
 
   try {
-    const response = await fetch(config.apiUrl, {
-      method: 'POST',
-      headers: {
-        apikey: config.apiKey,
-      },
-      body: formData,
-      signal: controller.signal,
-    });
-
-    if (!response.ok) {
-      const errorBody = await response.text().catch(() => '');
-      throw new Error(`OCR.space request failed with status ${response.status}${errorBody ? `: ${errorBody}` : ''}`);
+    return await makeRequest('2');
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    if (/Engine 1|Engine 2/i.test(msg) || /too small|format/i.test(msg)) {
+      return await makeRequest('1');
     }
-
-    const payload = (await response.json()) as {
-      IsErroredOnProcessing?: boolean;
-      ErrorMessage?: string[] | string;
-      ParsedResults?: Array<{ ParsedText?: string }>;
-    };
-
-    if (payload.IsErroredOnProcessing) {
-      const message = Array.isArray(payload.ErrorMessage)
-        ? payload.ErrorMessage.join('; ')
-        : payload.ErrorMessage || 'OCR.space processing failed';
-      throw new Error(message);
-    }
-
-    const text = (payload.ParsedResults ?? [])
-      .map((result) => result.ParsedText ?? '')
-      .join('\n')
-      .trim();
-
-    return {
-      provider: 'http',
-      text,
-      lineCount: countLines(text),
-    };
-  } finally {
-    clearTimeout(timeout);
+    throw error;
   }
 }
+
 
 export async function runTesseractOcr(
   fileBuffer: Buffer,

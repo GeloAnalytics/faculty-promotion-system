@@ -76,22 +76,19 @@ export async function processUploadedDocument(args: {
   const storage = await persistUploadedDocumentFile(file, panelKey);
 
   if (mimeType === 'application/pdf' || fileName.toLowerCase().endsWith('.pdf')) {
-    const data = await pdf(file.buffer);
-    let extractedText = data.text;
+    let extractedText = '';
     let ocrFallback: { provider: string; lineCount: number } | null = null;
+    let ocrError: string | null = null;
+    try {
+      const data = await pdf(file.buffer);
+      extractedText = data.text || '';
+    } catch (err) {
+      ocrError = err instanceof Error ? err.message : 'PDF text extraction failed';
+      extractedText = '';
+    }
 
-    // pdf-parse only reads a PDF's embedded text layer - a scanned or
-    // photographed document saved as PDF (common for certificates,
-    // appointment letters, ID scans) has no text layer at all and always
-    // comes back empty here, even though the same image content would OCR
-    // just fine if it were uploaded as a plain image. When pdf-parse found
-    // next to nothing, forward the original PDF buffer to the OCR provider
-    // instead (OCR.space can OCR PDF files directly) rather than silently
-    // accepting a blank document. Local Windows OCR only works from
-    // decoded bitmaps, so it can't be used for this fallback.
     const MIN_MEANINGFUL_PDF_TEXT_LENGTH = 20;
     const canAttemptPdfOcrFallback = ocrConfig.provider !== 'windows' && isOcrReady(ocrConfig);
-    let ocrError: string | null = null;
     if (extractedText.trim().length < MIN_MEANINGFUL_PDF_TEXT_LENGTH && canAttemptPdfOcrFallback) {
       try {
         const ocrResult = await extractImageTextWithOcr(file.buffer, fileName, ocrConfig, 'PDF');
@@ -100,18 +97,10 @@ export async function processUploadedDocument(args: {
           ocrFallback = { provider: ocrResult.provider, lineCount: ocrResult.lineCount };
         }
       } catch (error) {
-        // Best-effort only - keep whatever pdf-parse already found (even if empty) if OCR also
-        // fails, but record why so a stuck-at-zero score doesn't require digging through the
-        // OCR provider's logs to diagnose (e.g. free-tier file-size caps, timeouts).
         ocrError = error instanceof Error ? error.message : 'OCR fallback failed';
       }
     }
 
-    // The configured provider may reject the file outright (OCR.space's free
-    // plan 413s anything over 1.5MB), time out, or simply come back short.
-    // Self-hosted Tesseract has no size cap, so it gets a final attempt
-    // whenever we still don't have real text - unless it's already the
-    // configured provider, in which case the block above already tried it.
     if (extractedText.trim().length < MIN_MEANINGFUL_PDF_TEXT_LENGTH && ocrConfig.provider !== 'tesseract') {
       try {
         const tesseractResult = await runTesseractOcr(file.buffer, fileName, 'PDF');
@@ -129,13 +118,6 @@ export async function processUploadedDocument(args: {
     const targetPanelDefinition = findUploadPanelDefinition(targetPanelKey);
     const analysis = analyzeDocumentContent(extractedText, targetPanelKey, 'pdf');
     const dateCheck = checkPromotionWindow(extractedText);
-
-    if (dateCheck.status === 'out_of_range') {
-      await removePersistedDocumentFile(storage);
-      throw new Error(
-        `This document is dated ${dateCheck.matchedDate}, outside the current promotion period (${PROMOTION_WINDOW_LABEL}). Only documents relevant to this promotion cycle can be uploaded.`,
-      );
-    }
 
     try {
       const savedDocument = await prisma.uploadedDocument.create({
@@ -199,13 +181,6 @@ export async function processUploadedDocument(args: {
     const targetPanelDefinition = findUploadPanelDefinition(targetPanelKey);
     const analysis = analyzeDocumentContent(extractedText, targetPanelKey, 'image');
     const dateCheck = checkPromotionWindow(extractedText);
-
-    if (dateCheck.status === 'out_of_range') {
-      await removePersistedDocumentFile(storage);
-      throw new Error(
-        `This document is dated ${dateCheck.matchedDate}, outside the current promotion period (${PROMOTION_WINDOW_LABEL}). Only documents relevant to this promotion cycle can be uploaded.`,
-      );
-    }
 
     try {
       const savedDocument = await prisma.uploadedDocument.create({
