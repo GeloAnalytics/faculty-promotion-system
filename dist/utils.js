@@ -399,8 +399,8 @@ function buildCriterionScorePatterns(title, kraTitle) {
     // that then outranked the more honest evidence-checklist estimate. The full
     // multi-word title/kraTitle phrases are official form section headers and
     // don't have that problem.
-    const escapedTitle = escapeRegex(title);
-    const escapedKra = escapeRegex(kraTitle);
+    const escapedTitle = escapeRegex(title).replace(/\\\s+/g, '\\s+');
+    const escapedKra = escapeRegex(kraTitle).replace(/\\\s+/g, '\\s+');
     return [
         new RegExp(`${escapedTitle}[\\s\\S]{0,70}?(\\d+(?:\\.\\d+)?)`, 'i'),
         new RegExp(`${escapedKra}[\\s\\S]{0,70}?(\\d+(?:\\.\\d+)?)`, 'i'),

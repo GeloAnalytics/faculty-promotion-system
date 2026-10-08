@@ -10,7 +10,7 @@ import { repoRoot } from '../config/globals';
 import { fixedReviewPeriodLabel } from '../constants/reviewCycle';
 import { uploadPanels } from '../uploadPanels';
 import { analyzeDocumentContent, inferBestUploadPanelKey } from '../utils';
-import { extractImageTextWithOcr, isOcrReady, runTesseractOcr, type OcrConfig } from '../ocr';
+import { extractImageTextWithOcr, isOcrReady, runTesseractOcr, type OcrConfig, type OcrResult } from '../ocr';
 import { EmployeeUploadType, UploadPanelDefinition, ProcessedUploadResult, ProfileLinkResult } from '../types';
 import { findBestMatchingProfile, scoreProfileFilename } from './profileMatching';
 import { checkPromotionWindow, PROMOTION_WINDOW_LABEL } from './promotionWindow';
@@ -64,6 +64,11 @@ export async function processUploadedDocument(args: {
   const { file, ownerUserId, requestedProfileId, kind, panelKey, panelTitle, uploadType, ocrConfig, ownerIdentity } = args;
   const mimeType = file.mimetype.toLowerCase();
   const fileName = file.originalname;
+
+  if (!file.buffer || file.buffer.length === 0) {
+    throw new Error('The uploaded file is empty');
+  }
+
   const isCsv = /\.csv$/i.test(fileName);
   const isSpreadsheet = /\.(xlsx|xls)$/i.test(fileName);
 
@@ -73,51 +78,50 @@ export async function processUploadedDocument(args: {
 
   const linkage = await resolveUploadProfileLink(ownerUserId, fileName, requestedProfileId, ownerIdentity);
   const profileId = linkage.profileId;
-  const storage = await persistUploadedDocumentFile(file, panelKey);
+  const targetPanelKey = panelKey || 'kra1_teaching_effectiveness';
+  const targetPanelDefinition = findUploadPanelDefinition(targetPanelKey);
+  const storage = await persistUploadedDocumentFile(file, targetPanelKey);
 
   if (mimeType === 'application/pdf' || fileName.toLowerCase().endsWith('.pdf')) {
     let extractedText = '';
-    let ocrFallback: { provider: string; lineCount: number } | null = null;
-    let ocrError: string | null = null;
     try {
       const data = await pdf(file.buffer);
-      extractedText = data.text || '';
-    } catch (err) {
-      ocrError = err instanceof Error ? err.message : 'PDF text extraction failed';
+      extractedText = (data.text || '').trim();
+    } catch {
       extractedText = '';
     }
 
-    const MIN_MEANINGFUL_PDF_TEXT_LENGTH = 20;
-    const canAttemptPdfOcrFallback = ocrConfig.provider !== 'windows' && isOcrReady(ocrConfig);
-    if (extractedText.trim().length < MIN_MEANINGFUL_PDF_TEXT_LENGTH && canAttemptPdfOcrFallback) {
+    let ocrFallback: { provider: string; lineCount: number } | null = null;
+    let ocrError: string | null = null;
+
+    if (isPdfTextInsufficient(extractedText)) {
       try {
         const ocrResult = await extractImageTextWithOcr(file.buffer, fileName, ocrConfig, 'PDF');
-        if (ocrResult.text.trim().length > extractedText.trim().length) {
+        if (ocrResult.text.trim().length > extractedText.length) {
           extractedText = ocrResult.text.trim();
           ocrFallback = { provider: ocrResult.provider, lineCount: ocrResult.lineCount };
+          ocrError = null;
         }
       } catch (error) {
         ocrError = error instanceof Error ? error.message : 'OCR fallback failed';
       }
     }
 
-    if (extractedText.trim().length < MIN_MEANINGFUL_PDF_TEXT_LENGTH && ocrConfig.provider !== 'tesseract') {
-      try {
-        const tesseractResult = await runTesseractOcr(file.buffer, fileName, 'PDF');
-        if (tesseractResult.text.trim().length > extractedText.trim().length) {
-          extractedText = tesseractResult.text.trim();
-          ocrFallback = { provider: tesseractResult.provider, lineCount: tesseractResult.lineCount };
-          ocrError = null;
-        }
-      } catch (error) {
-        ocrError = ocrError ?? (error instanceof Error ? error.message : 'Tesseract OCR fallback failed');
-      }
-    }
-
-    const targetPanelKey = panelKey || inferBestUploadPanelKey(extractedText, 'kra1_teaching_effectiveness');
-    const targetPanelDefinition = findUploadPanelDefinition(targetPanelKey);
+    const detectedPanelKey = inferBestUploadPanelKey(extractedText, targetPanelKey);
     const analysis = analyzeDocumentContent(extractedText, targetPanelKey, 'pdf');
     const dateCheck = checkPromotionWindow(extractedText);
+
+    const isEducationalOrBackgroundPanel =
+      targetPanelKey.startsWith('kra4_') ||
+      targetPanelKey === 'kra3_administrative_designation' ||
+      detectedPanelKey.startsWith('kra4_');
+
+    if (dateCheck.status === 'out_of_range' && !isEducationalOrBackgroundPanel) {
+      await removePersistedDocumentFile(storage);
+      throw new Error(
+        `This document is dated ${dateCheck.matchedDate}, outside the current promotion period (${PROMOTION_WINDOW_LABEL}). Only documents relevant to this promotion cycle can be uploaded.`,
+      );
+    }
 
     try {
       const savedDocument = await prisma.uploadedDocument.create({
@@ -132,6 +136,7 @@ export async function processUploadedDocument(args: {
             uploadType,
             panelKey: targetPanelKey,
             panelTitle: targetPanelDefinition.title,
+            detectedPanelKey,
             storedForTraining: true,
             ...(ocrFallback ? { ocr: ocrFallback } : {}),
             ...(ocrError ? { ocrError } : {}),
@@ -162,25 +167,38 @@ export async function processUploadedDocument(args: {
   }
 
   if (mimeType.startsWith('image/') || /\.(png|jpg|jpeg|bmp|tif|tiff)$/i.test(fileName)) {
-    let ocrResult;
+    let ocrResult: OcrResult;
     let ocrError: string | null = null;
     try {
       ocrResult = await extractImageTextWithOcr(file.buffer, fileName, ocrConfig);
     } catch (error) {
-      // Same rationale as the PDF path above: the configured provider can
-      // reject the file (e.g. OCR.space's free-plan size cap) or time out,
-      // so fall back to the uncapped self-hosted engine before giving up.
-      if (ocrConfig.provider === 'tesseract') {
-        throw error;
-      }
       ocrError = error instanceof Error ? error.message : 'OCR failed';
-      ocrResult = await runTesseractOcr(file.buffer, fileName);
+      try {
+        ocrResult = await runTesseractOcr(file.buffer, fileName);
+      } catch {
+        ocrResult = {
+          provider: 'tesseract',
+          text: '',
+          lineCount: 0,
+        };
+      }
     }
     const extractedText = ocrResult.text.trim();
-    const targetPanelKey = panelKey || inferBestUploadPanelKey(extractedText, 'kra1_teaching_effectiveness');
-    const targetPanelDefinition = findUploadPanelDefinition(targetPanelKey);
+    const detectedPanelKey = inferBestUploadPanelKey(extractedText, targetPanelKey);
     const analysis = analyzeDocumentContent(extractedText, targetPanelKey, 'image');
     const dateCheck = checkPromotionWindow(extractedText);
+
+    const isEducationalOrBackgroundPanel =
+      targetPanelKey.startsWith('kra4_') ||
+      targetPanelKey === 'kra3_administrative_designation' ||
+      detectedPanelKey.startsWith('kra4_');
+
+    if (dateCheck.status === 'out_of_range' && !isEducationalOrBackgroundPanel) {
+      await removePersistedDocumentFile(storage);
+      throw new Error(
+        `This document is dated ${dateCheck.matchedDate}, outside the current promotion period (${PROMOTION_WINDOW_LABEL}). Only documents relevant to this promotion cycle can be uploaded.`,
+      );
+    }
 
     try {
       const savedDocument = await prisma.uploadedDocument.create({
@@ -195,6 +213,7 @@ export async function processUploadedDocument(args: {
             uploadType,
             panelKey: targetPanelKey,
             panelTitle: targetPanelDefinition.title,
+            detectedPanelKey,
             storedForTraining: true,
             ocr: {
               provider: ocrResult.provider,
@@ -301,13 +320,6 @@ export async function resolveUploadProfileLink(
     };
   }
 
-  // Filename matching exists to disambiguate multiple profiles under one
-  // account - it was never meant to gate a single profile out. With the
-  // auto-created-on-first-upload model there is normally exactly one profile
-  // per employee, and the uploaded file's name (e.g. a real scanned document
-  // bearing the faculty member's own name) has no reason to match "Demo
-  // Employee" or similar account identity text. Default to the most recent
-  // profile rather than stranding the upload with profileId: null.
   if (profiles.length === 1) {
     return {
       profileId: profiles[0].id,
@@ -317,10 +329,6 @@ export async function resolveUploadProfileLink(
     };
   }
 
-  // A brand-new employee has no profile at all yet - the current upload-driven
-  // workflow never runs a separate "create my profile" step, so the first
-  // upload is what brings the profile into existence (OCR-only design: no
-  // manually-typed intake form gates getting started).
   if (!profiles.length && ownerIdentity) {
     const autoCreatedProfile = await prisma.facultyProfile.create({
       data: {
@@ -338,6 +346,15 @@ export async function resolveUploadProfileLink(
       matchedBy: 'auto-created',
       matchedName: autoCreatedProfile.name,
       matchedEmployeeId: autoCreatedProfile.employeeId ?? null,
+    };
+  }
+
+  if (profiles.length > 1) {
+    return {
+      profileId: profiles[0].id,
+      matchedBy: 'most-recent-profile',
+      matchedName: profiles[0].name,
+      matchedEmployeeId: profiles[0].employeeId ?? null,
     };
   }
 
@@ -463,21 +480,37 @@ function readJsonObject(value: unknown): Record<string, unknown> {
 async function persistUploadedDocumentFile(file: Express.Multer.File, panelKey?: string) {
   const filePath = getKraStoragePath(panelKey, file.originalname, file.mimetype);
 
-  const { error } = await getSupabase().storage
-    .from(DOCUMENTS_BUCKET)
-    .upload(filePath, file.buffer, {
-      contentType: file.mimetype,
-      upsert: true,
-    });
+  try {
+    const supabase = getSupabase();
+    if (supabase) {
+      const { error } = await supabase.storage
+        .from(DOCUMENTS_BUCKET)
+        .upload(filePath, file.buffer, {
+          contentType: file.mimetype,
+          upsert: true,
+        });
 
-  if (error) {
-    throw new Error(`Supabase upload failed: ${error.message}`);
+      if (!error) {
+        return {
+          provider: 'supabase',
+          bucket: DOCUMENTS_BUCKET,
+          path: filePath,
+        };
+      }
+    }
+  } catch {
+    // Proceed to local file storage fallback
   }
 
+  // Fallback to local storage
+  await fs.mkdir(documentStorageRoot, { recursive: true });
+  const localFilePath = path.join(documentStorageRoot, filePath);
+  await fs.writeFile(localFilePath, file.buffer);
+  const relativePath = path.relative(repoRoot, localFilePath);
+
   return {
-    provider: 'supabase',
-    bucket: DOCUMENTS_BUCKET,
-    path: filePath,
+    provider: 'local',
+    relativePath,
   };
 }
 
@@ -510,4 +543,19 @@ function deriveStorageExtension(originalName: string, mimeType: string) {
   }
 
   return '';
+}
+
+function isPdfTextInsufficient(text: string): boolean {
+  const trimmed = text.trim();
+  if (trimmed.length < 100) {
+    return true;
+  }
+  const lower = trimmed.toLowerCase();
+  const watermarks = ['camscanner', 'scanned with', 'scanned by', 'adobe scan', 'photoperfect', 'page 1 of', 'page 1'];
+  const hasWatermark = watermarks.some((term) => lower.includes(term));
+  const alphaCharCount = lower.replace(/[^a-z0-9]/g, '').length;
+  if (hasWatermark && alphaCharCount < 100) {
+    return true;
+  }
+  return false;
 }

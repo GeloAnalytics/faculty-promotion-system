@@ -1524,6 +1524,7 @@ async function handleUploadSubmit(event, form) {
     return;
   }
 
+<<<<<<< Updated upstream
   // File size validation
   if (storageConfig.directUploadEnabled) {
     const overLimitFiles = files.filter((f) => f.size > MAX_DIRECT_UPLOAD_SIZE_BYTES);
@@ -1547,6 +1548,43 @@ async function handleUploadSubmit(event, form) {
         sizeWarning.hidden = true;
       }
     }
+=======
+  if (uploadType === 'score-sheet' && files.length > 1) {
+    setNotice(employeeUploadStatus, 'Score sheet uploads accept one file only.', true);
+    return;
+  }
+
+  if (files.length > 10) {
+    setNotice(employeeUploadStatus, 'You can upload a maximum of 10 files per batch.', true);
+    return;
+  }
+
+  const allowedExtensions = ['.pdf', '.png', '.jpg', '.jpeg', '.bmp', '.tif', '.tiff'];
+  for (const file of files) {
+    const ext = '.' + file.name.split('.').pop()?.toLowerCase();
+    if (!allowedExtensions.includes(ext)) {
+      setNotice(employeeUploadStatus, `File "${file.name}" has an unsupported format. Accepted: PDF, PNG, JPG, BMP, TIFF.`, true);
+      return;
+    }
+    if (file.size === 0) {
+      setNotice(employeeUploadStatus, `File "${file.name}" is empty (0 bytes).`, true);
+      return;
+    }
+    if (file.size > 50 * 1024 * 1024) {
+      setNotice(employeeUploadStatus, `File "${file.name}" exceeds the 50 MB limit.`, true);
+      return;
+    }
+  }
+
+  const formData = new FormData();
+  formData.append('uploadType', uploadType);
+  if (panelKey) {
+    formData.append('panelKey', panelKey);
+  }
+  formData.append('kind', 'REQUIREMENT');
+  for (const file of files) {
+    formData.append('document', file);
+>>>>>>> Stashed changes
   }
 
   const panelLabel = targetForm.closest('.upload-card')?.querySelector('h4')?.textContent?.trim() || 'this panel';
@@ -1916,6 +1954,21 @@ async function replaceUploadDocument({ documentId, fileName, panelKey, uploadTyp
     async () => {
       const file = input.files?.[0];
       if (!file) {
+        return;
+      }
+
+      const allowedExtensions = ['.pdf', '.png', '.jpg', '.jpeg', '.bmp', '.tif', '.tiff'];
+      const ext = '.' + file.name.split('.').pop()?.toLowerCase();
+      if (!allowedExtensions.includes(ext)) {
+        setNotice(employeeUploadStatus || reviewQueueFilterStatus, `File "${file.name}" has an unsupported format. Accepted: PDF, PNG, JPG, BMP, TIFF.`, true);
+        return;
+      }
+      if (file.size === 0) {
+        setNotice(employeeUploadStatus || reviewQueueFilterStatus, `File "${file.name}" is empty (0 bytes).`, true);
+        return;
+      }
+      if (file.size > 50 * 1024 * 1024) {
+        setNotice(employeeUploadStatus || reviewQueueFilterStatus, `File "${file.name}" exceeds the 50 MB limit.`, true);
         return;
       }
 

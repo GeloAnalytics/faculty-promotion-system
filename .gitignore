@@ -1,6 +1,7 @@
 node_modules/
 dist/
-.env
+.env*
+!.env.example
 .prisma/
 *.log
 .local-pg/
@@ -11,3 +12,4 @@ __pycache__/
 *.pyc
 *.traineddata
 .vercel
+faculty-promotion-system-main/

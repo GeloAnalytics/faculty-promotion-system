@@ -39,9 +39,14 @@ $bitmap = AwaitOperation ($decoder.GetSoftwareBitmapAsync()) ([Windows.Graphics.
 $engine = [Windows.Media.Ocr.OcrEngine]::TryCreateFromUserProfileLanguages()
 $ocrResult = AwaitOperation ($engine.RecognizeAsync($bitmap)) ([Windows.Media.Ocr.OcrResult])
 
+$lines = @($ocrResult.Lines | ForEach-Object { $_.Text })
+$text = [string]::Join("`n", $lines)
+$bytes = [System.Text.Encoding]::UTF8.GetBytes($text)
+$base64 = [Convert]::ToBase64String($bytes)
+
 $output = [PSCustomObject]@{
-  text = $ocrResult.Text
-  lineCount = $ocrResult.Lines.Count
+  textBase64 = $base64
+  lineCount = $lines.Count
 }
 
-$output | ConvertTo-Json -Depth 4
+$output | ConvertTo-Json -Compress

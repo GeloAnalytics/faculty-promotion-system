@@ -36,6 +36,10 @@ const MONTH_ALTERNATION = Object.keys(MONTH_NAMES).sort((a, b) => b.length - a.l
 const MONTH_DAY_YEAR = new RegExp(`\\b(${MONTH_ALTERNATION})\\.?\\s+(\\d{1,2})(?:st|nd|rd|th)?,?\\s+(\\d{4})\\b`, 'gi');
 // "15 August 2023" / "15th of August, 2023" / "15th day of August 2023"
 const DAY_MONTH_YEAR = new RegExp(`\\b(\\d{1,2})(?:st|nd|rd|th)?\\s+(?:day\\s+of\\s+|of\\s+)?(${MONTH_ALTERNATION})\\.?,?\\s+(\\d{4})\\b`, 'gi');
+// "August 2023" / "Aug 2024"
+const MONTH_YEAR = new RegExp(`\\b(${MONTH_ALTERNATION})\\.?\\s*,?\\s*(\\d{4})\\b`, 'gi');
+// "2023-2026", "2023–2026", "2023-24"
+const YEAR_SPAN = /\b(20\d{2})\s*[-–]\s*(20\d{2}|\d{2})\b/g;
 // "2023-08-15" (ISO)
 const ISO_DATE = /\b(\d{4})-(\d{1,2})-(\d{1,2})\b/g;
 // "08/15/2023" or "15/08/2023" - ambiguous, resolved by trying month-first then day-first
@@ -62,6 +66,7 @@ function normalizeAcademicYearEnd(startYear: number, endYearRaw: number): number
 
 export function extractCandidateDates(text: string): Date[] {
   const dates: Date[] = [];
+  const seenMonthYear = new Set<string>();
   let match: RegExpExecArray | null;
 
   MONTH_DAY_YEAR.lastIndex = 0;
@@ -70,7 +75,10 @@ export function extractCandidateDates(text: string): Date[] {
     const day = Number.parseInt(match[2], 10);
     const year = Number.parseInt(match[3], 10);
     const date = buildDate(year, monthIndex, day);
-    if (date) dates.push(date);
+    if (date) {
+      dates.push(date);
+      seenMonthYear.add(`${year}-${monthIndex}`);
+    }
   }
 
   DAY_MONTH_YEAR.lastIndex = 0;
@@ -79,6 +87,29 @@ export function extractCandidateDates(text: string): Date[] {
     const monthIndex = MONTH_NAMES[match[2].toLowerCase()];
     const year = Number.parseInt(match[3], 10);
     const date = buildDate(year, monthIndex, day);
+    if (date) {
+      dates.push(date);
+      seenMonthYear.add(`${year}-${monthIndex}`);
+    }
+  }
+
+  MONTH_YEAR.lastIndex = 0;
+  while ((match = MONTH_YEAR.exec(text))) {
+    const monthIndex = MONTH_NAMES[match[1].toLowerCase()];
+    const year = Number.parseInt(match[2], 10);
+    if (!seenMonthYear.has(`${year}-${monthIndex}`)) {
+      const date = buildDate(year, monthIndex, 1);
+      if (date) {
+        dates.push(date);
+        seenMonthYear.add(`${year}-${monthIndex}`);
+      }
+    }
+  }
+
+  YEAR_SPAN.lastIndex = 0;
+  while ((match = YEAR_SPAN.exec(text))) {
+    const startYear = Number.parseInt(match[1], 10);
+    const date = buildDate(startYear, 7, 1);
     if (date) dates.push(date);
   }
 

@@ -3,6 +3,8 @@ import app from './app';
 import { prisma } from './config/db';
 import { ensureDocumentsBucket } from './config/supabase';
 
+import { terminateOcrWorkers } from './ocr';
+
 let server: ReturnType<typeof app.listen>;
 
 async function bootstrap() {
@@ -21,6 +23,7 @@ void bootstrap();
 
 async function shutdown(signal: string) {
   console.log(`Received ${signal}. Closing server...`);
+  await terminateOcrWorkers().catch(() => {});
   if (!server) {
     await prisma.$disconnect();
     process.exit(0);

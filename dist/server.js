@@ -7,6 +7,7 @@ const env_1 = require("./config/env");
 const app_1 = __importDefault(require("./app"));
 const db_1 = require("./config/db");
 const supabase_1 = require("./config/supabase");
+const ocr_1 = require("./ocr");
 let server;
 async function bootstrap() {
     try {
@@ -22,6 +23,7 @@ async function bootstrap() {
 void bootstrap();
 async function shutdown(signal) {
     console.log(`Received ${signal}. Closing server...`);
+    await (0, ocr_1.terminateOcrWorkers)().catch(() => { });
     if (!server) {
         await db_1.prisma.$disconnect();
         process.exit(0);

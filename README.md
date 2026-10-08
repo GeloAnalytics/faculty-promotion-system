@@ -283,7 +283,8 @@ NODE_ENV="development"
 AUTH_SECRET="change-this-to-a-long-random-production-secret"
 CORS_ORIGIN="http://localhost:3000"
 TRUST_PROXY=1
-OCR_PROVIDER="windows"
+OCR_PROVIDER="windows" # or "google-vision", "tesseract", "http"
+GOOGLE_VISION_API_KEY=""
 OCR_API_URL="https://api.ocr.space/parse/image"
 OCR_API_KEY=""
 OCR_API_KEY_HEADER="Authorization"
@@ -294,9 +295,18 @@ SUPABASE_SERVICE_ROLE_KEY="your-service-role-key"
 SUPABASE_ANON_KEY="your-anon-public-key"
 ```
 
+<<<<<<< Updated upstream
 > **Note:** `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are required for server-side document storage and OCR analysis. `SUPABASE_ANON_KEY` enables direct-to-Supabase browser uploads via signed URLs, completely bypassing Vercel's 4.5 MB serverless body size limit.
+=======
+> **Note:** `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are required in production for document uploads and preview.
+>>>>>>> Stashed changes
 >
-> `OCR_PROVIDER` selects the *primary* provider (`windows`, `http`, `ocrspace`, `tesseract`, or `disabled`); regardless of this setting, the self-hosted `tesseract.js`/`pdf-to-img` fallback automatically activates whenever the configured primary provider fails or exceeds its size/timeout limits (except when the primary provider is already `windows`, which can't process PDFs at all and always defers).
+> `OCR_PROVIDER` selects the *primary* provider:
+> - `google-vision`: Google Cloud Vision API (`DOCUMENT_TEXT_DETECTION`). 1,000 pages/month free forever, industry-leading accuracy. Set `GOOGLE_VISION_API_KEY`.
+> - `windows`: Built-in Windows Native OCR (`Windows.Media.Ocr`). 100% free, unlimited file sizes & pages, zero external network dependency.
+> - `tesseract`: Built-in local Tesseract engine using offline trained models.
+> - `http`: Generic custom HTTP OCR endpoint.
+> - Regardless of your choice, the system features automatic multi-tier fallback: if Google Vision or your primary API is unavailable or runs out of quota, it seamlessly falls back to Windows Native OCR and local Tesseract without failing the user's upload.
 
 ## Local Development
 
