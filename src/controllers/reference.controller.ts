@@ -51,7 +51,8 @@ export const getStorageConfig = (_req: Request, res: Response) => {
     supabaseUrl: env.SUPABASE_URL || null,
     supabaseAnonKey: env.SUPABASE_ANON_KEY || null,
     bucket: DOCUMENTS_BUCKET,
-    directUploadEnabled: !!(env.SUPABASE_URL && env.SUPABASE_ANON_KEY),
+    // Uploads use backend-issued signed URLs, so a browser anon key is not required.
+    directUploadEnabled: !!(env.SUPABASE_URL && env.SUPABASE_SERVICE_ROLE_KEY),
   });
 };
 

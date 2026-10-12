@@ -295,11 +295,7 @@ SUPABASE_SERVICE_ROLE_KEY="your-service-role-key"
 SUPABASE_ANON_KEY="your-anon-public-key"
 ```
 
-<<<<<<< Updated upstream
-> **Note:** `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are required for server-side document storage and OCR analysis. `SUPABASE_ANON_KEY` enables direct-to-Supabase browser uploads via signed URLs, completely bypassing Vercel's 4.5 MB serverless body size limit.
-=======
-> **Note:** `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are required in production for document uploads and preview.
->>>>>>> Stashed changes
+> **Note:** `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are required for server-side document storage, OCR analysis, and backend-issued signed uploads. `SUPABASE_ANON_KEY` is optional because the browser uploads only to short-lived signed URLs.
 >
 > `OCR_PROVIDER` selects the *primary* provider:
 > - `google-vision`: Google Cloud Vision API (`DOCUMENT_TEXT_DETECTION`). 1,000 pages/month free forever, industry-leading accuracy. Set `GOOGLE_VISION_API_KEY`.

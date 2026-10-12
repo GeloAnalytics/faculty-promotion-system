@@ -882,7 +882,7 @@ function renderUploadRow(item) {
         <p class="card-copy">${escapeHtml(summary)}</p>
         <div class="uploaded-file-actions">
           <button class="button button-secondary preview-upload-button" data-document-id="${escapeHtml(item.id)}" data-file-name="${escapeHtml(item.originalName)}" data-mime-type="${escapeHtml(item.mimeType || '')}" data-upload-action="preview" type="button">${escapeHtml(previewLabel)}</button>
-          <button class="button button-secondary replace-upload-button" data-document-id="${escapeHtml(item.id)}" data-file-name="${escapeHtml(item.originalName)}" data-upload-type="${escapeHtml(metadata.uploadType || 'legacy')}" data-panel-key="${escapeHtml(metadata.panelKey || '')}" data-upload-action="replace" type="button">Replace</button>
+          <button class="button button-secondary replace-upload-button" data-document-id="${escapeHtml(item.id)}" data-file-name="${escapeHtml(item.originalName)}" data-upload-type="${escapeHtml(metadata.uploadType || 'legacy')}" data-panel-key="${escapeHtml(metadata.panelKey || '')}" data-profile-id="${escapeHtml(item.profileId || '')}" data-upload-action="replace" type="button">Replace</button>
           <button class="button button-secondary delete-upload-button" data-document-id="${escapeHtml(item.id)}" data-file-name="${escapeHtml(item.originalName)}" data-upload-action="delete" type="button">Delete</button>
         </div>
       </div>
@@ -1524,31 +1524,6 @@ async function handleUploadSubmit(event, form) {
     return;
   }
 
-<<<<<<< Updated upstream
-  // File size validation
-  if (storageConfig.directUploadEnabled) {
-    const overLimitFiles = files.filter((f) => f.size > MAX_DIRECT_UPLOAD_SIZE_BYTES);
-    if (overLimitFiles.length) {
-      if (sizeWarning) {
-        sizeWarning.hidden = false;
-        sizeWarning.textContent = `⚠ ${overLimitFiles.map((f) => f.name).join(', ')} exceed${overLimitFiles.length === 1 ? 's' : ''} 50 MB. Files must be 50 MB or less to upload directly via Supabase.`;
-      }
-      setNotice(employeeUploadStatus, `File(s) exceed 50 MB direct upload limit.`, true);
-      return;
-    } else if (sizeWarning) {
-      sizeWarning.hidden = true;
-    }
-  } else {
-    const oversizedFiles = files.filter((f) => f.size > VERCEL_SERVER_LIMIT_BYTES);
-    if (sizeWarning) {
-      if (oversizedFiles.length) {
-        sizeWarning.hidden = false;
-        sizeWarning.textContent = `⚠ ${oversizedFiles.map((f) => f.name).join(', ')} exceed${oversizedFiles.length === 1 ? 's' : ''} 4.5 MB. Server upload will fail on Vercel — configure direct Supabase upload to allow up to 50 MB.`;
-      } else {
-        sizeWarning.hidden = true;
-      }
-    }
-=======
   if (uploadType === 'score-sheet' && files.length > 1) {
     setNotice(employeeUploadStatus, 'Score sheet uploads accept one file only.', true);
     return;
@@ -1570,21 +1545,22 @@ async function handleUploadSubmit(event, form) {
       setNotice(employeeUploadStatus, `File "${file.name}" is empty (0 bytes).`, true);
       return;
     }
-    if (file.size > 50 * 1024 * 1024) {
-      setNotice(employeeUploadStatus, `File "${file.name}" exceeds the 50 MB limit.`, true);
-      return;
-    }
   }
 
-  const formData = new FormData();
-  formData.append('uploadType', uploadType);
-  if (panelKey) {
-    formData.append('panelKey', panelKey);
+  const uploadLimit = storageConfig.directUploadEnabled ? MAX_DIRECT_UPLOAD_SIZE_BYTES : VERCEL_SERVER_LIMIT_BYTES;
+  const oversizedFiles = files.filter((file) => file.size > uploadLimit);
+  if (oversizedFiles.length) {
+    const limitLabel = storageConfig.directUploadEnabled ? '50 MB' : '4.5 MB';
+    if (sizeWarning) {
+      sizeWarning.hidden = false;
+      sizeWarning.textContent = `⚠ ${oversizedFiles.map((file) => file.name).join(', ')} exceed${oversizedFiles.length === 1 ? 's' : ''} the ${limitLabel} upload limit.`;
+    }
+    setNotice(employeeUploadStatus, `File(s) exceed the ${limitLabel} upload limit.`, true);
+    return;
   }
-  formData.append('kind', 'REQUIREMENT');
-  for (const file of files) {
-    formData.append('document', file);
->>>>>>> Stashed changes
+
+  if (sizeWarning) {
+    sizeWarning.hidden = true;
   }
 
   const panelLabel = targetForm.closest('.upload-card')?.querySelector('h4')?.textContent?.trim() || 'this panel';
@@ -1804,6 +1780,7 @@ function handleUploadListActionClick(event) {
   const mimeType = button.dataset.mimeType || '';
   const panelKey = button.dataset.panelKey || '';
   const uploadType = button.dataset.uploadType || 'legacy';
+  const profileId = button.dataset.profileId || '';
 
   if (!documentId) {
     return;
@@ -1829,6 +1806,7 @@ function handleUploadListActionClick(event) {
       fileName,
       panelKey,
       uploadType,
+      profileId,
     });
   }
 }
@@ -1944,7 +1922,7 @@ async function deleteUploadDocument(documentId, fileName) {
   }
 }
 
-async function replaceUploadDocument({ documentId, fileName, panelKey, uploadType }) {
+async function replaceUploadDocument({ documentId, fileName, panelKey, uploadType, profileId }) {
   const input = document.createElement('input');
   input.type = 'file';
   input.accept = REPLACEMENT_UPLOAD_ACCEPT;
@@ -1972,20 +1950,34 @@ async function replaceUploadDocument({ documentId, fileName, panelKey, uploadTyp
         return;
       }
 
-      const formData = new FormData();
-      formData.append('document', file);
-      formData.append('kind', 'REQUIREMENT');
-      formData.append('uploadType', uploadType || 'legacy');
-      if (panelKey) {
-        formData.append('panelKey', panelKey);
-      }
-
       try {
         setNotice(employeeUploadStatus || reviewQueueFilterStatus, `Replacing ${fileName}...`);
-        await apiFetch(`/api/documents/${encodeURIComponent(documentId)}/replace`, {
-          method: 'POST',
-          body: formData,
-        });
+        if (file.size > VERCEL_SERVER_LIMIT_BYTES) {
+          if (!storageConfig.directUploadEnabled) {
+            throw new Error('Files over 4.5 MB require direct Supabase uploads, which are not configured.');
+          }
+          await uploadFilesDirectToSupabase({
+            files: [file],
+            panelKey,
+            uploadType,
+            progressFill: null,
+            progressLabel: null,
+            profileId,
+          });
+          await apiFetch(`/api/documents/${encodeURIComponent(documentId)}`, { method: 'DELETE' });
+        } else {
+          const formData = new FormData();
+          formData.append('document', file);
+          formData.append('kind', 'REQUIREMENT');
+          formData.append('uploadType', uploadType || 'legacy');
+          if (panelKey) {
+            formData.append('panelKey', panelKey);
+          }
+          await apiFetch(`/api/documents/${encodeURIComponent(documentId)}/replace`, {
+            method: 'POST',
+            body: formData,
+          });
+        }
         setNotice(employeeUploadStatus || reviewQueueFilterStatus, `${fileName} was replaced.`);
         await loadEmployeeWorkspace();
       } catch (error) {
@@ -2162,12 +2154,17 @@ function toErrorMessage(error) {
 
 async function logoutAndReturnHome() {
   try {
-    await fetch(buildApiUrl('/api/auth/logout'), {
+    const response = await fetch(buildApiUrl('/api/auth/logout'), {
       method: 'POST',
       credentials: 'include',
     });
-  } finally {
+    if (!response.ok) {
+      throw new Error(await readFetchErrorMessage(response));
+    }
     window.location.assign('/');
+  } catch (error) {
+    console.error('Logout failed:', error);
+    window.alert(`Unable to log out: ${toErrorMessage(error)}`);
   }
 }
 
