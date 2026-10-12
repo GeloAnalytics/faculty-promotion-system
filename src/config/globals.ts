@@ -15,10 +15,13 @@ export const ocrConfig: OcrConfig = {
   provider: env.OCR_PROVIDER as OcrProvider,
   scriptPath: ocrScriptPath,
   apiUrl: env.OCR_API_URL,
-  apiKey: env.GOOGLE_VISION_API_KEY || env.OCR_API_KEY,
+  apiKey: env.OCR_API_KEY || env.GOOGLE_VISION_API_KEY,
+  googleVisionApiKey: env.GOOGLE_VISION_API_KEY,
   apiKeyHeader: env.OCR_API_KEY_HEADER,
   fileFieldName: env.OCR_FILE_FIELD_NAME,
   timeoutMs: env.OCR_TIMEOUT_MS,
+  maxUploadBytes: env.OCR_MAX_UPLOAD_BYTES,
+  maxPages: env.OCR_MAX_PAGES,
 };
 
 export const isOcrReadyFlag = isOcrReady(ocrConfig);

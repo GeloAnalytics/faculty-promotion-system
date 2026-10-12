@@ -11,6 +11,7 @@ import reviewRoutes from './review.route';
 import accountsRoutes from './accounts.route';
 import { env } from '../config/env';
 import { tqeReferenceRecords, guidelinePdfPath, isOcrReadyFlag, ocrConfig } from '../config/globals';
+import { resolveEffectiveOcrProvider } from '../ocr';
 import path from 'node:path';
 
 const router = Router();
@@ -34,6 +35,7 @@ router.get('/health', (_req: Request, res: Response) => {
       guidelinePdfFileName: guidelinePdfPath ? path.basename(guidelinePdfPath) : null,
       imageOcrReady: isOcrReadyFlag,
       imageOcrProvider: ocrConfig.provider,
+      imageOcrEffectiveProvider: resolveEffectiveOcrProvider(ocrConfig),
     },
     model: {
       status: 'inactive',
