@@ -10,7 +10,7 @@ import { repoRoot } from '../config/globals';
 import { fixedReviewPeriodLabel } from '../constants/reviewCycle';
 import { uploadPanels } from '../uploadPanels';
 import { analyzeDocumentContent, inferBestUploadPanelKey } from '../utils';
-import { extractImageTextWithOcr, isOcrReady, runTesseractOcr, type OcrConfig, type OcrResult } from '../ocr';
+import { extractImageTextWithOcr, type OcrConfig, type OcrResult } from '../ocr';
 import { EmployeeUploadType, UploadPanelDefinition, ProcessedUploadResult, ProfileLinkResult } from '../types';
 import { findBestMatchingProfile, scoreProfileFilename } from './profileMatching';
 import { checkPromotionWindow, PROMOTION_WINDOW_LABEL } from './promotionWindow';
@@ -84,9 +84,11 @@ export async function processUploadedDocument(args: {
 
   if (mimeType === 'application/pdf' || fileName.toLowerCase().endsWith('.pdf')) {
     let extractedText = '';
+    let pageCount = 1;
     try {
       const data = await pdf(file.buffer);
       extractedText = (data.text || '').trim();
+      pageCount = data.numpages || 1;
     } catch {
       extractedText = '';
     }
@@ -94,7 +96,7 @@ export async function processUploadedDocument(args: {
     let ocrFallback: { provider: string; lineCount: number } | null = null;
     let ocrError: string | null = null;
 
-    if (isPdfTextInsufficient(extractedText)) {
+    if (isPdfTextInsufficient(extractedText, pageCount)) {
       try {
         const ocrResult = await extractImageTextWithOcr(file.buffer, fileName, ocrConfig, 'PDF');
         if (ocrResult.text.trim().length > extractedText.length) {
@@ -170,18 +172,15 @@ export async function processUploadedDocument(args: {
     let ocrResult: OcrResult;
     let ocrError: string | null = null;
     try {
+      // Already falls back from the cloud provider to local OCR per page.
       ocrResult = await extractImageTextWithOcr(file.buffer, fileName, ocrConfig);
     } catch (error) {
       ocrError = error instanceof Error ? error.message : 'OCR failed';
-      try {
-        ocrResult = await runTesseractOcr(file.buffer, fileName);
-      } catch {
-        ocrResult = {
-          provider: 'tesseract',
-          text: '',
-          lineCount: 0,
-        };
-      }
+      ocrResult = {
+        provider: 'tesseract',
+        text: '',
+        lineCount: 0,
+      };
     }
     const extractedText = ocrResult.text.trim();
     const detectedPanelKey = inferBestUploadPanelKey(extractedText, targetPanelKey);
@@ -545,7 +544,13 @@ function deriveStorageExtension(originalName: string, mimeType: string) {
   return '';
 }
 
-export function isPdfTextInsufficient(text: string): boolean {
+// A real text page carries well over a thousand characters. Scanned PDFs often
+// have a thin text layer (page numbers, scanner stamps, e-signature footers)
+// that adds up past a flat threshold on multi-page files without containing
+// any of the actual content.
+const MIN_TEXT_CHARS_PER_PDF_PAGE = 80;
+
+export function isPdfTextInsufficient(text: string, pageCount = 1): boolean {
   const trimmed = text.trim();
   if (trimmed.length < 100) {
     return true;
@@ -555,6 +560,9 @@ export function isPdfTextInsufficient(text: string): boolean {
   const hasWatermark = watermarks.some((term) => lower.includes(term));
   const alphaCharCount = lower.replace(/[^a-z0-9]/g, '').length;
   if (hasWatermark && alphaCharCount < 100) {
+    return true;
+  }
+  if (alphaCharCount / Math.max(1, pageCount) < MIN_TEXT_CHARS_PER_PDF_PAGE) {
     return true;
   }
   return false;

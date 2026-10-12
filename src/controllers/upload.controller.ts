@@ -17,7 +17,7 @@ import { getSupabase, DOCUMENTS_BUCKET } from '../config/supabase';
 import { ocrConfig } from '../config/globals';
 import { analyzeDocumentContent, inferBestUploadPanelKey } from '../utils';
 import { checkPromotionWindow, PROMOTION_WINDOW_LABEL } from '../utils/promotionWindow';
-import { extractImageTextWithOcr, isOcrReady, runTesseractOcr } from '../ocr';
+import { extractImageTextWithOcr, isOcrReady } from '../ocr';
 import { ProcessedUploadResult } from '../types';
 import { resolveUploadProfileLink } from '../utils/document.utils';
 import { fixedReviewPeriodLabel } from '../constants/reviewCycle';
@@ -141,9 +141,11 @@ export const registerUploadedDocument = async (req: Request, res: Response) => {
 
     if (isPdf) {
       fileType = 'pdf';
+      let pageCount = 1;
       try {
         const data = await pdf(fileBuffer);
         extractedText = data.text || '';
+        pageCount = data.numpages || 1;
       } catch (err) {
         ocrError = err instanceof Error ? err.message : 'PDF text extraction failed';
         extractedText = '';
@@ -153,7 +155,7 @@ export const registerUploadedDocument = async (req: Request, res: Response) => {
       // short scanner watermark technically has a text layer, but still needs
       // OCR. Do not bypass Windows OCR here: direct Supabase uploads are the
       // normal production path.
-      if (isPdfTextInsufficient(extractedText) && isOcrReady(ocrConfig)) {
+      if (isPdfTextInsufficient(extractedText, pageCount) && isOcrReady(ocrConfig)) {
         try {
           const ocrResult = await extractImageTextWithOcr(fileBuffer, fileName, ocrConfig, 'PDF');
           if (ocrResult.text.trim().length > extractedText.trim().length) {
@@ -166,16 +168,16 @@ export const registerUploadedDocument = async (req: Request, res: Response) => {
       }
     } else {
       fileType = 'image';
-      let ocrResult;
+      // OCR already falls back from the cloud provider to local OCR per page.
+      // If every engine fails, still save the upload (the file is already in
+      // storage) and record why, rather than rejecting it.
       try {
-        ocrResult = await extractImageTextWithOcr(fileBuffer, fileName, ocrConfig);
+        const ocrResult = await extractImageTextWithOcr(fileBuffer, fileName, ocrConfig);
+        extractedText = ocrResult.text.trim();
+        ocrFallback = { provider: ocrResult.provider, lineCount: ocrResult.lineCount };
       } catch (error) {
-        if (ocrConfig.provider === 'tesseract') throw error;
         ocrError = error instanceof Error ? error.message : 'OCR failed';
-        ocrResult = await runTesseractOcr(fileBuffer, fileName);
       }
-      extractedText = ocrResult.text.trim();
-      ocrFallback = { provider: ocrResult.provider, lineCount: ocrResult.lineCount };
     }
 
     const targetPanelKey = panelKey || inferBestUploadPanelKey(extractedText, 'kra1_teaching_effectiveness');

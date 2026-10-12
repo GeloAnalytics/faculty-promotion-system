@@ -27,6 +27,9 @@ const envSchema = z
     OCR_API_KEY_HEADER: z.string().trim().default('Authorization'),
     OCR_FILE_FIELD_NAME: z.string().trim().default('file'),
     OCR_TIMEOUT_MS: z.coerce.number().int().positive().default(30000),
+    // Per-file upload cap of the cloud OCR provider (OCR.space free plan: 1 MB).
+    // Larger pages are re-compressed to fit before upload.
+    OCR_MAX_UPLOAD_BYTES: z.coerce.number().int().positive().optional(),
     SUPABASE_URL: z.string().default(''),
     SUPABASE_SERVICE_ROLE_KEY: z.string().default(''),
     // Public anon key — safe to expose to the browser (used for direct storage uploads via signed URLs)
