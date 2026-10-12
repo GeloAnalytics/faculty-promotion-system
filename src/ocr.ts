@@ -239,25 +239,26 @@ export async function extractImageTextWithOcr(
 
   if (effectiveProvider !== 'disabled') {
     try {
+      let result: OcrResult;
       if (effectiveProvider === 'google-vision') {
-        return await runGoogleVisionOcr(fileBuffer, originalName, config, fileTypeHint);
+        result = await runGoogleVisionOcr(fileBuffer, originalName, config, fileTypeHint);
+      } else if (effectiveProvider === 'windows') {
+        result = await runWindowsOcr(fileBuffer, originalName, config.scriptPath, fileTypeHint);
+      } else if (effectiveProvider === 'http') {
+        result = await runHttpOcr(fileBuffer, originalName, config);
+      } else if (effectiveProvider === 'ocrspace') {
+        result = await runOcrSpace(fileBuffer, originalName, config, fileTypeHint);
+      } else {
+        result = await runTesseractOcr(fileBuffer, originalName, fileTypeHint);
       }
 
-      if (effectiveProvider === 'windows') {
-        return await runWindowsOcr(fileBuffer, originalName, config.scriptPath, fileTypeHint);
+      // An empty response is not a successful OCR pass. Treat it like a
+      // provider failure so the local fallbacks get a chance to read scans
+      // that a cloud/native provider silently skipped.
+      if (result.text.trim()) {
+        return result;
       }
-
-      if (effectiveProvider === 'http') {
-        return await runHttpOcr(fileBuffer, originalName, config);
-      }
-
-      if (effectiveProvider === 'ocrspace') {
-        return await runOcrSpace(fileBuffer, originalName, config, fileTypeHint);
-      }
-
-      if (effectiveProvider === 'tesseract') {
-        return await runTesseractOcr(fileBuffer, originalName, fileTypeHint);
-      }
+      primaryError = new Error(`${effectiveProvider} OCR did not return readable text`);
     } catch (err) {
       primaryError = err instanceof Error ? err : new Error(String(err));
     }

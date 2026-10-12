@@ -545,7 +545,7 @@ function deriveStorageExtension(originalName: string, mimeType: string) {
   return '';
 }
 
-function isPdfTextInsufficient(text: string): boolean {
+export function isPdfTextInsufficient(text: string): boolean {
   const trimmed = text.trim();
   if (trimmed.length < 100) {
     return true;

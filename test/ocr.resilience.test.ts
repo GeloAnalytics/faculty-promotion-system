@@ -7,6 +7,7 @@ import {
   terminateOcrWorkers,
   type OcrConfig,
 } from '../src/ocr';
+import { isPdfTextInsufficient } from '../src/utils/document.utils';
 
 test('resolveEffectiveOcrProvider correctly falls back to tesseract on non-windows or missing script', () => {
   const config: OcrConfig = {
@@ -62,6 +63,11 @@ test('isOcrReady returns true for tesseract or ready providers', () => {
   };
 
   assert.equal(isOcrReady(config), true);
+});
+
+test('scanned-PDF watermark text still triggers OCR', () => {
+  assert.equal(isPdfTextInsufficient('Scanned with CamScanner\nPage 1 of 3'), true);
+  assert.equal(isPdfTextInsufficient('A'.repeat(100)), false);
 });
 
 test('extractImageTextWithOcr does not crash with empty or corrupted buffers', async () => {

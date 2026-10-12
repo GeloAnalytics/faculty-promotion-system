@@ -8,10 +8,10 @@ import {
   parseEmployeeUploadType,
   parseUploadPanelKey,
   findUploadPanelDefinition,
-  processUploadedDocument,
   describeUploadProcessingError,
   toPrismaJson,
   getKraStoragePath,
+  isPdfTextInsufficient,
 } from '../utils/document.utils';
 import { getSupabase, DOCUMENTS_BUCKET } from '../config/supabase';
 import { ocrConfig } from '../config/globals';
@@ -149,10 +149,11 @@ export const registerUploadedDocument = async (req: Request, res: Response) => {
         extractedText = '';
       }
 
-      const MIN_MEANINGFUL_PDF_TEXT_LENGTH = 20;
-      const canAttemptPdfOcrFallback = ocrConfig.provider !== 'windows' && isOcrReady(ocrConfig);
-
-      if (extractedText.trim().length < MIN_MEANINGFUL_PDF_TEXT_LENGTH && canAttemptPdfOcrFallback) {
+      // Use the same threshold as the regular multipart route. A PDF with a
+      // short scanner watermark technically has a text layer, but still needs
+      // OCR. Do not bypass Windows OCR here: direct Supabase uploads are the
+      // normal production path.
+      if (isPdfTextInsufficient(extractedText) && isOcrReady(ocrConfig)) {
         try {
           const ocrResult = await extractImageTextWithOcr(fileBuffer, fileName, ocrConfig, 'PDF');
           if (ocrResult.text.trim().length > extractedText.trim().length) {
@@ -161,19 +162,6 @@ export const registerUploadedDocument = async (req: Request, res: Response) => {
           }
         } catch (error) {
           ocrError = error instanceof Error ? error.message : 'OCR fallback failed';
-        }
-      }
-
-      if (extractedText.trim().length < MIN_MEANINGFUL_PDF_TEXT_LENGTH && ocrConfig.provider !== 'tesseract') {
-        try {
-          const tesseractResult = await runTesseractOcr(fileBuffer, fileName, 'PDF');
-          if (tesseractResult.text.trim().length > extractedText.trim().length) {
-            extractedText = tesseractResult.text.trim();
-            ocrFallback = { provider: tesseractResult.provider, lineCount: tesseractResult.lineCount };
-            ocrError = null;
-          }
-        } catch (error) {
-          ocrError = ocrError ?? (error instanceof Error ? error.message : 'Tesseract OCR fallback failed');
         }
       }
     } else {
