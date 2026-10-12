@@ -113,6 +113,8 @@ export interface DocumentAnalysisResult {
   summary: string;
   /** SET/SEF ratings read off teaching-effectiveness evaluation forms. */
   teachingEvaluations?: TeachingEvaluationRating[];
+  /** The promotion guideline itself was uploaded; it earns no points. */
+  referenceDocument?: boolean;
 }
 
 export interface EmployeeUploadWorkflowItem {

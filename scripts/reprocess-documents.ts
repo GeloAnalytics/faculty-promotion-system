@@ -10,8 +10,9 @@
  *     from a capped OCR pass, re-runs text extraction/OCR, recomputes the
  *     analysis of every document, and writes the proposed changes to plan.json.
  *
- *   npx tsx scripts/reprocess-documents.ts apply <plan.json>
- *     Writes extractedText and extractionMetadata from plan.json.
+ *   npx tsx scripts/reprocess-documents.ts apply <plan.json> [more-plans.json...]
+ *     Writes the re-read text and a freshly computed analysis. DRY_RUN=1
+ *     reports without writing.
  *
  * Optional: DOCUMENT_IDS=id1,id2 limits either phase to those documents.
  */
@@ -199,33 +200,82 @@ async function plan(outputPath: string) {
   console.log(`Plan written to ${outputPath}`);
 }
 
-async function apply(planPath: string) {
+/**
+ * Takes the re-read text and OCR details from the plan files (a later file
+ * wins for the same document) and recomputes the analysis with the current
+ * code against each document's current panel, so edits made since the plan
+ * was written are kept. Pass DRY_RUN=1 to only report what would change.
+ */
+async function apply(planPaths: string[]) {
   const ids = selectedIds();
-  const all = (JSON.parse(fs.readFileSync(planPath, 'utf8')) as PlannedDocument[]).filter(
-    (item) => !ids || ids.includes(item.id),
-  );
-  const planned = all.filter((item) => !item.rereadFailed);
-  if (planned.length < all.length) {
-    console.warn(`Skipping ${all.length - planned.length} documents whose re-read failed; plan them again.`);
+  const dryRun = process.env.DRY_RUN === '1';
+  const byId = new Map<string, PlannedDocument>();
+  for (const planPath of planPaths) {
+    for (const item of JSON.parse(fs.readFileSync(planPath, 'utf8')) as PlannedDocument[]) {
+      // Older plan files recorded a failed download as the document's ocrError.
+      const failed = item.rereadFailed || /^download failed/.test(item.ocrError ?? '');
+      if (!failed && (!ids || ids.includes(item.id))) {
+        byId.set(item.id, item);
+      }
+    }
   }
-  for (const item of planned) {
-    await prisma.uploadedDocument.update({
+
+  let updated = 0;
+  let missing = 0;
+  for (const item of byId.values()) {
+    const current = await prisma.uploadedDocument.findUnique({
       where: { id: item.id },
-      data: { extractedText: item.extractedText, extractionMetadata: toPrismaJson(item.extractionMetadata) },
+      select: { extractedText: true, extractionMetadata: true },
     });
+    if (!current) {
+      missing += 1;
+      continue;
+    }
+    const metadata = asObject(current.extractionMetadata);
+    const planned = item.extractionMetadata;
+    // Never replace text with less text than the document already has.
+    const extractedText =
+      item.extractedText.trim().length >= (current.extractedText ?? '').trim().length
+        ? item.extractedText
+        : current.extractedText ?? '';
+    const panelKey = (typeof metadata.panelKey === 'string' ? metadata.panelKey : 'kra1_teaching_effectiveness') as UploadPanelKey;
+    const source = (asObject(planned.analysis).source === 'image' ? 'image' : 'pdf') as 'pdf' | 'image';
+    const nextMetadata: Record<string, unknown> = {
+      ...metadata,
+      analysis: analyzeDocumentContent(extractedText, panelKey, source),
+      dateCheck: checkPromotionWindow(extractedText),
+    };
+    for (const key of ['ocr', 'ocrError', 'reprocessedAt']) {
+      if (planned[key] !== undefined) {
+        nextMetadata[key] = planned[key];
+      } else if (key !== 'reprocessedAt' && item.reread) {
+        delete nextMetadata[key];
+      }
+    }
+    if (extractedText.trim().length >= 100) {
+      delete nextMetadata.ocrError;
+    }
+
+    if (!dryRun) {
+      await prisma.uploadedDocument.update({
+        where: { id: item.id },
+        data: { extractedText, extractionMetadata: toPrismaJson(nextMetadata) },
+      });
+    }
+    updated += 1;
   }
-  console.log(`Updated ${planned.length} documents from ${planPath}`);
+  console.log(`${dryRun ? 'Would update' : 'Updated'} ${updated} documents (${missing} no longer exist) from ${planPaths.join(', ')}`);
 }
 
 async function main() {
-  const [mode, file] = process.argv.slice(2);
-  if ((mode !== 'plan' && mode !== 'apply') || !file) {
-    console.error('Usage: npx tsx scripts/reprocess-documents.ts <plan|apply> <plan.json>');
+  const [mode, ...files] = process.argv.slice(2);
+  if ((mode !== 'plan' && mode !== 'apply') || !files.length) {
+    console.error('Usage: npx tsx scripts/reprocess-documents.ts plan <plan.json> | apply <plan.json> [more-plans.json...]');
     process.exitCode = 1;
     return;
   }
   try {
-    await (mode === 'plan' ? plan(file) : apply(file));
+    await (mode === 'plan' ? plan(files[0]) : apply(files));
   } finally {
     await terminateOcrWorkers();
     await prisma.$disconnect();

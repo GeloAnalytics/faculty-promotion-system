@@ -195,9 +195,11 @@ export function extractTeachingEvaluationRatings(rawText: string): TeachingEvalu
   // occurrence is the overall rating; earlier ones are per-class rows or the
   // "SET Rating Computation" heading. A short gap is allowed for a
   // neighbouring label ("SET Rating / Adjectival Rating / 95.56").
+  // The bracketed acronyms are matched on their own because OCR mangles the
+  // words around them ("Evaluation nf Faculty (SEF)", "ofTeachers (SET)").
   const labeled = [
-    ['student', String.raw`(?:\bSET\s*rating|student\s*evaluation\s*of\s*teachers?\s*\(SET\))`],
-    ['supervisor', String.raw`(?:\bSEF\s*rating|supervisor\W{0,3}s?\s*evaluation\s*of\s*faculty\s*\(SEF\))`],
+    ['student', String.raw`(?:\bSET\s*rating|\(\s*SET\s*\))`],
+    ['supervisor', String.raw`(?:\bSEF\s*rating|\(\s*SEF\s*\))`],
   ] as const;
   for (const [evaluator, label] of labeled) {
     const rating = lastRatingMatch(
@@ -239,8 +241,15 @@ export function computeTeachingEffectivenessPoints(
     return null;
   }
 
+  // A form with an unreadable term (often a FEDAF) usually repeats a rating
+  // already uploaded on that semester's own letter; don't count it twice.
+  const dated = ratings.filter((rating) => rating.period !== null);
+  const undatedDuplicates = (rating: TeachingEvaluationRating) =>
+    rating.period === null &&
+    dated.some((other) => other.evaluator === rating.evaluator && Math.abs(other.rating - rating.rating) < 0.01);
+
   const bySemester = new Map<string, TeachingEvaluationRating>();
-  for (const rating of ratings) {
+  for (const rating of ratings.filter((rating) => !undatedDuplicates(rating))) {
     const key = `${rating.evaluator}|${rating.period ?? `unknown-${rating.rating}`}`;
     const existing = bySemester.get(key);
     if (!existing || rating.rating > existing.rating) {

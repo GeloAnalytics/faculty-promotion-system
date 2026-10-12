@@ -5,7 +5,7 @@ import {
   extractTeachingEvaluationRatings,
   parseEvaluationPeriod,
 } from '../src/utils/teachingEvaluation';
-import { analyzeDocumentContent } from '../src/utils';
+import { analyzeDocumentContent, isGuidelineReferenceDocument } from '../src/utils';
 import { buildDraftPointSummary } from '../src/utils/dashboard.utils';
 
 // OCR output of real LSPU forms, names replaced. Line order is as OCR returned it.
@@ -128,6 +128,24 @@ test('reads weighted SET tables and FEDAF summaries', () => {
   ]);
 });
 
+test('reads FEDAF labels even when OCR garbles the words around (SET)/(SEF)', () => {
+  const garbled = `Faculty Evaluation Summary Student Evaluation ofTeachers (SET) 95.56 Supervisor's Evaluation nf Faculty (SEF) 97.33 C. Development Plan`;
+  assert.deepEqual(extractTeachingEvaluationRatings(garbled), [
+    { evaluator: 'student', rating: 95.56, period: null },
+    { evaluator: 'supervisor', rating: 97.33, period: null },
+  ]);
+});
+
+test('an undated rating that repeats a dated one is not counted as another semester', () => {
+  const result = computeTeachingEffectivenessPoints([
+    { evaluator: 'student', rating: 95.56, period: '2-2025' },
+    { evaluator: 'student', rating: 90, period: '1-2025' },
+    { evaluator: 'student', rating: 95.56, period: null },
+  ]);
+  assert.equal(result?.studentSemesters, 2);
+  assert.equal(result?.studentAverage, 92.78);
+});
+
 test('does not score blank forms or templates', () => {
   assert.deepEqual(extractTeachingEvaluationRatings(BLANK_LETTER_FORM), []);
   assert.deepEqual(extractTeachingEvaluationRatings(BLANK_CMO19_TEMPLATE), []);
@@ -182,4 +200,20 @@ test('dashboard scores the teaching panel from uploaded evaluation forms', () =>
   assert.equal(panel?.usedScore, 56.91);
   assert.equal(panel?.scoreSource, 'ocr-detected');
   assert.match(panel?.note ?? '', /NBC 461/);
+});
+
+test('the uploaded promotion circular itself earns no points', () => {
+  const circular = `ANNEX I – Evaluation Criteria Page 1 of 6 KRA I - INSTRUCTION 100 Criterion A – Teaching Effectiveness Maximum of 60
+ANNEX II – Implementing Guidelines Points = OR (Overall Rating) ÷ 100 x 36 Teaching Effectiveness 60 Research Outputs 100`;
+  assert.equal(isGuidelineReferenceDocument(circular), true);
+  assert.equal(isGuidelineReferenceDocument(LETTER_FORM), false);
+  const analysis = analyzeDocumentContent(circular, 'kra1_teaching_effectiveness', 'pdf');
+  assert.deepEqual(analysis.extractedScores, {});
+  assert.equal(analysis.referenceDocument, true);
+
+  const summary = buildDraftPointSummary({ features: {}, semester: null }, [
+    { extractionMetadata: { uploadType: 'evidence', panelKey: 'kra1_teaching_effectiveness', analysis } },
+  ]);
+  const panel = summary.scoreComputation.panelScores.find((item) => item.key === 'kra1_teaching_effectiveness');
+  assert.equal(panel?.usedScore, 0);
 });

@@ -317,7 +317,7 @@ export function buildDraftPointSummary(
   const panelNoteOverrides = new Map<UploadPanelKey, string>();
   if (teachingEffectiveness) {
     panelScoreByKey.set(TEACHING_EFFECTIVENESS_PANEL_KEY, teachingEffectiveness.points);
-    instruction = Math.max(instruction, teachingEffectiveness.points);
+    instruction = teachingEffectiveness.points;
     panelNoteOverrides.set(TEACHING_EFFECTIVENESS_PANEL_KEY, describeTeachingEffectiveness(teachingEffectiveness));
   }
 
