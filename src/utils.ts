@@ -21,6 +21,7 @@ import { uploadPanels } from './uploadPanels';
 import fs from 'node:fs';
 import path from 'node:path';
 import { evidenceRules, RequirementRule } from './utils/evidenceRules';
+import { extractTeachingEvaluationRatings } from './utils/teachingEvaluation';
 
 function extractAllEvidenceKeywords(rules: Record<string, RequirementRule>): string[] {
   const keywords = new Set<string>();
@@ -111,11 +112,43 @@ export const extractDocumentInsights = (text: string): DocumentExtractionResult 
   };
 };
 
+const GUIDELINE_MARKERS = [
+  /annex\s*i\s*[–-]\s*evaluation\s*criteria/i,
+  /annex\s*ii\s*[–-]\s*implementing\s*guidelines/i,
+  /points\s*=\s*or\s*\(\s*overall\s*rating\s*\)/i,
+];
+
+/**
+ * The DBM-JC circular (NBC 461) itself, uploaded as if it were evidence. It
+ * quotes every criterion, maximum score and sample computation, so analyzing
+ * it would award points nobody earned.
+ */
+export function isGuidelineReferenceDocument(text: string) {
+  return GUIDELINE_MARKERS.filter((marker) => marker.test(text)).length >= 2;
+}
+
 export const analyzeDocumentContent = (
   text: string,
   panelKey: UploadPanelKey,
   source: DocumentAnalysisResult['source'],
 ): DocumentAnalysisResult => {
+  if (isGuidelineReferenceDocument(text)) {
+    return {
+      source,
+      panelKey,
+      textLength: text.replace(/\s+/g, ' ').trim().length,
+      completenessScore: 0,
+      qualityScore: 0,
+      extractedScores: {},
+      detectedFields: [],
+      detectedCategories: [],
+      keywordHits: [],
+      summary:
+        'This is the DBM-JC promotion guideline (NBC 461), not evidence of your own work, so it does not count toward any panel.',
+      referenceDocument: true,
+    };
+  }
+
   const extraction = extractDocumentInsights(text);
   const normalizedText = text.toLowerCase();
 
@@ -139,6 +172,7 @@ export const analyzeDocumentContent = (
   const keywordHits = allKeywords.filter((term) => normalizedText.includes(term));
 
   const summary = buildDocumentSummary(panelKey, extraction.detectedFields, detectedCategories, extraction.textLength);
+  const teachingEvaluations = extractTeachingEvaluationRatings(text);
 
   return {
     source,
@@ -151,6 +185,7 @@ export const analyzeDocumentContent = (
     detectedCategories,
     keywordHits,
     summary,
+    ...(teachingEvaluations.length ? { teachingEvaluations } : {}),
   };
 };
 

@@ -17,6 +17,8 @@ import {
 } from '../utils/document.utils';
 import { getSupabase } from '../config/supabase';
 import { ocrConfig } from '../config/globals';
+import { continueDocumentOcr } from '../utils/ocrContinuation';
+import { ocrBudgetForRequest } from '../ocr';
 import { ProcessedUploadResult } from '../types';
 
 function readJsonObject(value: unknown): Record<string, unknown> {
@@ -32,6 +34,7 @@ function readOptionalString(value: unknown) {
 }
 
 export const extractDocuments = async (req: Request, res: Response) => {
+  const requestStartedAt = Date.now();
   const uploadedFiles = Array.isArray(req.files) ? req.files : [];
   if (!uploadedFiles.length) {
     return res.status(400).json({ error: 'No documents uploaded' });
@@ -62,7 +65,7 @@ export const extractDocuments = async (req: Request, res: Response) => {
         panelKey,
         panelTitle: panelDefinition.title,
         uploadType,
-        ocrConfig,
+        ocrConfig: ocrBudgetForRequest(requestStartedAt, ocrConfig),
         ownerIdentity: { fullName: req.user!.fullName, employeeId: req.user!.employeeId },
       });
 
@@ -172,6 +175,7 @@ export const viewDocument = async (req: Request, res: Response) => {
 };
 
 export const replaceDocument = async (req: Request, res: Response) => {
+  const requestStartedAt = Date.now();
   const file = req.file;
   if (!file) {
     return res.status(400).json({ error: 'No replacement document uploaded' });
@@ -217,7 +221,7 @@ export const replaceDocument = async (req: Request, res: Response) => {
     panelKey,
     panelTitle: panelDefinition.title,
     uploadType,
-    ocrConfig,
+    ocrConfig: ocrBudgetForRequest(requestStartedAt, ocrConfig),
   });
 
   const storedPath = resolveStoredDocumentPath(document.extractionMetadata);
@@ -303,4 +307,31 @@ export const deleteDocument = async (req: Request, res: Response) => {
     originalName: document.originalName,
     message: `${document.originalName} was deleted successfully`,
   });
+};
+
+/**
+ * POST /api/documents/:documentId/continue-ocr
+ * Reads the next batch of pages of a long scan whose first OCR pass ran out
+ * of time, appends the text and re-scores the document. The client calls it
+ * until `nextPage` is null.
+ */
+export const continueOcr = async (req: Request, res: Response) => {
+  const requestStartedAt = Date.now();
+  const document = await prisma.uploadedDocument.findUnique({
+    where: { id: req.params.documentId },
+    select: { id: true, ownerUserId: true, originalName: true, mimeType: true, extractedText: true, extractionMetadata: true },
+  });
+
+  if (!document) {
+    return res.status(404).json({ error: 'Uploaded document not found' });
+  }
+  if (req.user!.role !== UserRole.ADMIN && document.ownerUserId !== req.user!.id) {
+    return res.status(403).json({ error: 'You can only process documents you uploaded' });
+  }
+
+  const result = await continueDocumentOcr(document, ocrBudgetForRequest(requestStartedAt, ocrConfig));
+  if (result.status === 'failed') {
+    return res.status(502).json({ ...result, error: result.error ?? 'OCR could not continue' });
+  }
+  return res.json(result);
 };

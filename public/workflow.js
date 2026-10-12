@@ -157,6 +157,9 @@ async function loadEmployeeWorkspace() {
   renderEmployeeUploads(employeeDashboard?.uploads || []);
   renderEmployeeProfileForm(facultyOptions, employeeDashboard?.latestProfile?.baselineData?.personalData);
   setNotice(employeeUploadStatus, 'Upload your documentary evidence for each panel. PDFs can be previewed inside the portal.');
+  resumePendingOcr(employeeDashboard?.uploads).catch((error) =>
+    setNotice(employeeUploadStatus, toErrorMessage(error), true),
+  );
 }
 
 async function loadEvaluatorWorkspace() {
@@ -1646,7 +1649,7 @@ async function uploadFilesDirectToSupabase({ files, panelKey, uploadType, docume
 
     // Step 3: Register with the backend for OCR + database record
     if (progressLabel) progressLabel.textContent = `Processing OCR for ${file.name}...`;
-    await apiFetch('/api/documents/register', {
+    const registered = await apiFetch('/api/documents/register', {
       method: 'POST',
       body: JSON.stringify({
         storagePath,
@@ -1659,7 +1662,86 @@ async function uploadFilesDirectToSupabase({ files, panelKey, uploadType, docume
         profileId: profileId || undefined,
       }),
     });
+
+    // Long scans are read in batches; keep going until every page is in.
+    for (const result of registered?.results || []) {
+      if (result?.ocrProgress?.nextPage) {
+        await continueOcrUntilDone(result.documentId, result.ocrProgress, (progress) => {
+          if (progressLabel) {
+            progressLabel.textContent = describeOcrProgress(file.name, progress);
+          }
+        });
+      }
+    }
     if (progressFill) progressFill.style.width = `${Math.round(((i + 1) / total) * 100)}%`;
+  }
+}
+
+function describeOcrProgress(fileName, progress) {
+  const read = progress?.pagesRead || 0;
+  const total = progress?.totalPages || 0;
+  return total
+    ? `Reading ${fileName}: ${read} of ${total} pages done...`
+    : `Reading the remaining pages of ${fileName}...`;
+}
+
+/**
+ * Calls /continue-ocr until the document has no pages left. Each call reads
+ * as many pages as fit in one server request (about 4 minutes).
+ */
+async function continueOcrUntilDone(documentId, initialProgress, onProgress) {
+  let progress = initialProgress;
+  let busyRetries = 0;
+  onProgress?.(progress);
+  while (progress?.nextPage) {
+    const result = await apiFetch(`/api/documents/${encodeURIComponent(documentId)}/continue-ocr`, { method: 'POST' });
+    if (result.status === 'busy') {
+      // Another tab or request is reading this document; wait for it.
+      if (++busyRetries > 60) {
+        return progress;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 5000));
+      continue;
+    }
+    busyRetries = 0;
+    progress = result;
+    onProgress?.(progress);
+  }
+  return progress;
+}
+
+let pendingOcrResumeRunning = false;
+
+/**
+ * Finishes long scans whose reading was interrupted (tab closed, network
+ * drop, or uploaded through a path that does not wait for OCR).
+ */
+async function resumePendingOcr(uploads) {
+  if (pendingOcrResumeRunning) {
+    return;
+  }
+  const pending = (uploads || []).filter((upload) => upload?.metadata?.ocrProgress?.nextPage);
+  if (!pending.length) {
+    return;
+  }
+  pendingOcrResumeRunning = true;
+  let advanced = false;
+  try {
+    for (const upload of pending) {
+      try {
+        await continueOcrUntilDone(upload.id, upload.metadata.ocrProgress, (progress) => {
+          setNotice(employeeUploadStatus, describeOcrProgress(upload.originalName, progress));
+        });
+        advanced = true;
+      } catch (error) {
+        setNotice(employeeUploadStatus, `Could not finish reading ${upload.originalName}: ${toErrorMessage(error)}`, true);
+      }
+    }
+  } finally {
+    pendingOcrResumeRunning = false;
+  }
+  if (advanced) {
+    await loadEmployeeWorkspace();
   }
 }
 

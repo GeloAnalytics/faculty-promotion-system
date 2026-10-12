@@ -4,7 +4,13 @@ import http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { createCanvas } from '@napi-rs/canvas';
 import UTIF from 'utif2';
-import { extractImageTextWithOcr, resolveEffectiveOcrProvider, terminateOcrWorkers, type OcrConfig } from '../src/ocr';
+import {
+  extractImageTextWithOcr,
+  resetOcrSpaceRateLimitForTests,
+  resolveEffectiveOcrProvider,
+  terminateOcrWorkers,
+  type OcrConfig,
+} from '../src/ocr';
 import { decodeImagePagesForOcr, fitImageUnderBytes } from '../src/ocrImage';
 import { isPdfTextInsufficient } from '../src/utils/document.utils';
 
@@ -230,16 +236,22 @@ test('large photos are compressed under the cloud OCR upload cap', async () => {
 });
 
 /** Stands in for api.ocr.space: enforces the upload cap or simulates an outage. */
-async function startFakeOcrSpace(mode: { maxBytes: number; fail?: boolean }) {
+async function startFakeOcrSpace(mode: { maxBytes: number; fail?: boolean; delayMs?: number; rateLimited?: boolean }) {
   const received: number[] = [];
   const server = http.createServer((req, res) => {
     const chunks: Buffer[] = [];
     req.on('data', (chunk) => chunks.push(chunk));
-    req.on('end', () => {
+    req.on('end', async () => {
+      if (mode.delayMs) {
+        await new Promise((resolve) => setTimeout(resolve, mode.delayMs));
+      }
       const body = Buffer.concat(chunks);
       received.push(body.length);
       res.setHeader('content-type', 'application/json');
-      if (mode.fail) {
+      if (mode.rateLimited) {
+        res.statusCode = 429;
+        res.end('{"error":"E553: Rate limit exceeded. Max 180 requests per 3600s","retryAfter":900}');
+      } else if (mode.fail) {
         res.statusCode = 503;
         res.end('{}');
       } else if (body.length > mode.maxBytes) {
@@ -299,6 +311,57 @@ test('small multi-page PDFs go to OCR.space page by page, past its 3-page free l
     assert.equal(fake.received.length, 5);
     assert.equal(result.pagesRead, 5);
   } finally {
+    fake.close();
+  }
+});
+
+test('a scan too long for one request is resumed from nextPage until every page is read once', async () => {
+  const fake = await startFakeOcrSpace({ maxBytes: Infinity, delayMs: 300 });
+  try {
+    const pdf = scannedThesisPdf(6);
+    const config: OcrConfig = {
+      ...tesseractOnly,
+      provider: 'ocrspace',
+      apiUrl: fake.url,
+      apiKey: 'test-key',
+      totalBudgetMs: 700,
+    };
+
+    const first = await extractImageTextWithOcr(pdf, 'thesis.pdf', config, 'PDF');
+    assert.equal(first.stoppedEarly, 'time-budget');
+    assert.equal(first.nextPage, (first.pagesRead ?? 0) + 1);
+    assert.ok((first.pagesRead ?? 0) >= 1 && (first.pagesRead ?? 0) < 6);
+
+    let progress = first;
+    let passes = 1;
+    while (progress.nextPage) {
+      const startPage = progress.nextPage;
+      progress = await extractImageTextWithOcr(pdf, 'thesis.pdf', config, 'PDF', { startPage });
+      assert.ok((progress.pagesRead ?? 0) >= startPage, 'each pass must read at least one page');
+      passes += 1;
+      assert.ok(passes <= 6, 'resuming must terminate');
+    }
+    assert.equal(progress.pagesRead, 6);
+    assert.equal(progress.totalPages, 6);
+    assert.equal(progress.stoppedEarly, undefined);
+    assert.equal(fake.received.length, 6, 'every page is sent to OCR exactly once across passes');
+  } finally {
+    fake.close();
+  }
+});
+
+test('after OCR.space reports its hourly limit, later pages and uploads go straight to local OCR', async () => {
+  const fake = await startFakeOcrSpace({ maxBytes: Infinity, rateLimited: true });
+  try {
+    const config: OcrConfig = { ...tesseractOnly, provider: 'ocrspace', apiUrl: fake.url, apiKey: 'test-key' };
+    const first = await extractImageTextWithOcr(scannedThesisPdf(3), 'thesis.pdf', config, 'PDF');
+    assert.equal(first.pagesRead, 3);
+    assert.match(first.text.toUpperCase(), /CHARLIE/);
+    const second = await extractImageTextWithOcr(renderTextCanvas().toBuffer('image/png'), 'certificate.png', config);
+    assertReadsSample(second.text);
+    assert.equal(fake.received.length, 1, 'only the request that hit the limit reaches OCR.space');
+  } finally {
+    resetOcrSpaceRateLimitForTests();
     fake.close();
   }
 });

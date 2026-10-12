@@ -17,7 +17,7 @@ import { getSupabase, DOCUMENTS_BUCKET } from '../config/supabase';
 import { ocrConfig } from '../config/globals';
 import { analyzeDocumentContent, inferBestUploadPanelKey } from '../utils';
 import { checkPromotionWindow, PROMOTION_WINDOW_LABEL } from '../utils/promotionWindow';
-import { extractImageTextWithOcr, isOcrReady, summarizeOcrResult } from '../ocr';
+import { extractImageTextWithOcr, isOcrReady, ocrBudgetForRequest, readOcrProgress, summarizeOcrResult } from '../ocr';
 import { ProcessedUploadResult } from '../types';
 import { resolveUploadProfileLink } from '../utils/document.utils';
 import { fixedReviewPeriodLabel } from '../constants/reviewCycle';
@@ -67,6 +67,7 @@ export const getSignedUploadUrl = async (req: Request, res: Response) => {
  * No file body is sent to this endpoint — it is only JSON metadata.
  */
 export const registerUploadedDocument = async (req: Request, res: Response) => {
+  const requestStartedAt = Date.now();
   const {
     storagePath,
     originalName,
@@ -157,9 +158,13 @@ export const registerUploadedDocument = async (req: Request, res: Response) => {
       // normal production path.
       if (isPdfTextInsufficient(extractedText, pageCount) && isOcrReady(ocrConfig)) {
         try {
-          const ocrResult = await extractImageTextWithOcr(fileBuffer, fileName, ocrConfig, 'PDF');
+          const ocrResult = await extractImageTextWithOcr(fileBuffer, fileName, ocrBudgetForRequest(requestStartedAt, ocrConfig), 'PDF');
           if (ocrResult.text.trim().length > extractedText.trim().length) {
             extractedText = ocrResult.text.trim();
+          }
+          // Keep the OCR progress whenever pages are left, so the rest of a
+          // long scan can be read by /continue-ocr.
+          if (ocrResult.text.trim() === extractedText || ocrResult.nextPage) {
             ocrFallback = summarizeOcrResult(ocrResult);
           }
         } catch (error) {
@@ -172,7 +177,7 @@ export const registerUploadedDocument = async (req: Request, res: Response) => {
       // If every engine fails, still save the upload (the file is already in
       // storage) and record why, rather than rejecting it.
       try {
-        const ocrResult = await extractImageTextWithOcr(fileBuffer, fileName, ocrConfig);
+        const ocrResult = await extractImageTextWithOcr(fileBuffer, fileName, ocrBudgetForRequest(requestStartedAt, ocrConfig));
         extractedText = ocrResult.text.trim();
         ocrFallback = summarizeOcrResult(ocrResult);
       } catch (error) {
@@ -230,6 +235,7 @@ export const registerUploadedDocument = async (req: Request, res: Response) => {
       textPreview: extractedText.slice(0, 1000),
       analysis: computedAnalysis,
       dateCheck,
+      ...(ocrFallback?.nextPage ? { ocrProgress: readOcrProgress({ ocr: ocrFallback }) } : {}),
     });
   } catch (error) {
     failures.push({

@@ -1,4 +1,5 @@
 import { DocumentDateCheck } from './utils/promotionWindow';
+import type { TeachingEvaluationRating } from './utils/teachingEvaluation';
 
 export const featureKeys = [
   'age',
@@ -110,6 +111,10 @@ export interface DocumentAnalysisResult {
   detectedCategories: string[];
   keywordHits: string[];
   summary: string;
+  /** SET/SEF ratings read off teaching-effectiveness evaluation forms. */
+  teachingEvaluations?: TeachingEvaluationRating[];
+  /** The promotion guideline itself was uploaded; it earns no points. */
+  referenceDocument?: boolean;
 }
 
 export interface EmployeeUploadWorkflowItem {
@@ -274,6 +279,8 @@ export type ProcessedUploadResult = {
   textPreview: string;
   analysis: DocumentAnalysisResult;
   dateCheck: DocumentDateCheck;
+  /** Present when a long scan still has pages left for /continue-ocr. */
+  ocrProgress?: { pagesRead: number | null; totalPages: number | null; nextPage: number | null };
 };
 
 declare global {
