@@ -11,16 +11,18 @@ const execFileAsync = promisify(execFile);
 
 export type OcrProvider = 'windows' | 'google-vision' | 'http' | 'ocrspace' | 'tesseract' | 'disabled';
 
-// The first 5 pages contain all key certificate, appointment, and scoring data;
-// OCR also stops early once enough promotion-relevant text has been read.
-const DEFAULT_MAX_OCR_PAGES = 5;
+// Scanned theses and dissertations run to dozens of pages, so OCR reads every
+// page up to this cap (OCR_MAX_PAGES overrides it). The time budget below is
+// what actually bounds very long scans.
+export const DEFAULT_MAX_OCR_PAGES = 100;
 // pdf.js renders at 72 DPI per 1.0 scale. 2.0 (~144 DPI) is the lowest scale
 // at which Tesseract reliably reads 10-11pt body text on scanned forms.
 const OCR_RASTERIZE_SCALE = 2;
 // Whole-request OCR budget. Must stay below the Vercel function maxDuration in
 // vercel.json (300s) so the upload is still saved, with whatever text was read,
 // instead of the platform killing the request.
-const DEFAULT_OCR_BUDGET_MS = 200_000;
+// Leaves ~70s for the storage download, pdf-parse and database writes.
+const DEFAULT_OCR_BUDGET_MS = 230_000;
 // OCR.space free plan rejects files over 1 MB. Paid plans can raise this via
 // OCR_MAX_UPLOAD_BYTES.
 export const DEFAULT_OCR_MAX_UPLOAD_BYTES = 1024 * 1024;
@@ -40,6 +42,7 @@ export interface OcrConfig {
   fileFieldName: string;
   timeoutMs: number;
   maxUploadBytes?: number;
+  maxPages?: number;
   totalBudgetMs?: number;
 }
 
@@ -47,6 +50,11 @@ export interface OcrResult {
   provider: Exclude<OcrProvider, 'disabled'>;
   text: string;
   lineCount: number;
+  pagesRead?: number;
+  totalPages?: number;
+  // Set when the document had more pages than were read, so a partially
+  // OCR'd upload can be told apart from a short one.
+  stoppedEarly?: 'page-limit' | 'time-budget';
 }
 
 /**
@@ -86,6 +94,17 @@ export function resolveEffectiveOcrProvider(config: OcrConfig): OcrProvider {
   }
 
   return 'tesseract';
+}
+
+/** OCR details stored in extractionMetadata.ocr for each upload. */
+export function summarizeOcrResult(result: OcrResult) {
+  return {
+    provider: result.provider,
+    lineCount: result.lineCount,
+    pagesRead: result.pagesRead,
+    totalPages: result.totalPages,
+    stoppedEarly: result.stoppedEarly,
+  };
 }
 
 export function isOcrReady(config: OcrConfig) {
@@ -240,6 +259,7 @@ export async function terminateOcrWorkers() {
 
 interface OcrPage {
   index: number;
+  totalPages: number;
   buffer: Buffer;
   fileName: string;
 }
@@ -266,17 +286,13 @@ async function* iteratePdfPages(
   fileBuffer: Buffer,
   maxPages: number = DEFAULT_MAX_OCR_PAGES,
   scale: number = OCR_RASTERIZE_SCALE,
-): AsyncGenerator<{ pageIndex: number; buffer: Buffer }, void, unknown> {
+): AsyncGenerator<{ pageIndex: number; totalPages: number; buffer: Buffer }, void, unknown> {
   const { pdf } = await import('pdf-to-img');
   // Pass Uint8Array directly to pdf-to-img without creating base64 data-URL strings
   const doc = await pdf(fileBuffer, { scale });
-  let count = 0;
-  for await (const page of doc) {
-    count++;
-    yield { pageIndex: count, buffer: page as Buffer };
-    if (count >= maxPages) {
-      break;
-    }
+  const lastPage = Math.min(doc.length, maxPages);
+  for (let pageIndex = 1; pageIndex <= lastPage; pageIndex++) {
+    yield { pageIndex, totalPages: doc.length, buffer: await doc.getPage(pageIndex) };
   }
 }
 
@@ -289,24 +305,25 @@ async function* iterateOcrPages(
   fileBuffer: Buffer,
   originalName: string,
   isPdf: boolean,
+  maxPages: number,
 ): AsyncGenerator<OcrPage, void, unknown> {
   const baseName = path.parse(originalName).name || 'document';
 
   if (isPdf) {
-    for await (const { pageIndex, buffer } of iteratePdfPages(fileBuffer)) {
-      yield { index: pageIndex, buffer, fileName: `${baseName}-page${pageIndex}.png` };
+    for await (const { pageIndex, totalPages, buffer } of iteratePdfPages(fileBuffer, maxPages)) {
+      yield { index: pageIndex, totalPages, buffer, fileName: `${baseName}-page${pageIndex}.png` };
     }
     return;
   }
 
-  const decodedPages = await decodeImagePagesForOcr(fileBuffer, DEFAULT_MAX_OCR_PAGES);
+  const decodedPages = await decodeImagePagesForOcr(fileBuffer, maxPages);
   if (!decodedPages) {
-    yield { index: 1, buffer: fileBuffer, fileName: originalName };
+    yield { index: 1, totalPages: 1, buffer: fileBuffer, fileName: originalName };
     return;
   }
 
   for (const [offset, buffer] of decodedPages.entries()) {
-    yield { index: offset + 1, buffer, fileName: `${baseName}-page${offset + 1}.jpg` };
+    yield { index: offset + 1, totalPages: decodedPages.length, buffer, fileName: `${baseName}-page${offset + 1}.jpg` };
   }
 }
 
@@ -322,15 +339,33 @@ async function recognizeDocumentPages(
   isPdf: boolean,
   recognizers: PageRecognizer[],
   budgetMs: number,
+  maxPages: number,
 ): Promise<OcrResult & { firstError: Error | null }> {
   const deadline = Date.now() + budgetMs;
   const pageTexts: string[] = [];
   const providerHits = new Map<PageRecognizer['provider'], number>();
   const failureCounts = new Map<PageRecognizer, number>();
   let firstError: Error | null = null;
+  let pagesRead = 0;
+  let totalPages = 0;
+  let stoppedEarly: OcrResult['stoppedEarly'];
 
+  const pages = iterateOcrPages(fileBuffer, originalName, isPdf, maxPages);
+  let nextPage = pages.next();
   try {
-    for await (const page of iterateOcrPages(fileBuffer, originalName, isPdf)) {
+    while (true) {
+      const current = await nextPage;
+      if (current.done) {
+        break;
+      }
+      const page = current.value;
+      totalPages = page.totalPages;
+      // Render the following page while this one is being recognized; cloud
+      // OCR is network-bound and Tesseract runs in a worker thread, so the
+      // main thread is otherwise idle.
+      nextPage = pages.next();
+      nextPage.catch(() => {});
+
       for (const recognizer of recognizers) {
         if ((failureCounts.get(recognizer) ?? 0) >= MAX_RECOGNIZER_FAILURES_PER_DOCUMENT) {
           continue;
@@ -355,13 +390,11 @@ async function recognizeDocumentPages(
         }
       }
 
-      if (Date.now() > deadline) {
-        console.warn(`[OCR] Time budget reached after page ${page.index} of ${originalName}; keeping text read so far`);
-        break;
-      }
+      pagesRead = page.index;
 
-      const combined = pageTexts.join('\n');
-      if (combined.length > 1200 && containsKeyPromotionSignals(combined)) {
+      if (Date.now() > deadline && page.index < page.totalPages) {
+        stoppedEarly = 'time-budget';
+        console.warn(`[OCR] Time budget reached after page ${page.index} of ${originalName}; keeping text read so far`);
         break;
       }
     }
@@ -371,12 +404,19 @@ async function recognizeDocumentPages(
     firstError ??= new Error(`Could not render document pages for OCR: ${toError(error).message}`);
   }
 
+  if (!stoppedEarly && totalPages > pagesRead && pagesRead >= maxPages) {
+    stoppedEarly = 'page-limit';
+  }
+
   const text = pageTexts.join('\n\n').trim();
   const [topProvider] = [...providerHits.entries()].sort((a, b) => b[1] - a[1])[0] ?? [];
   return {
     provider: topProvider ?? recognizers[0]?.provider ?? 'tesseract',
     text,
     lineCount: countLines(text),
+    pagesRead,
+    totalPages,
+    stoppedEarly,
     firstError,
   };
 }
@@ -410,20 +450,15 @@ export async function extractImageTextWithOcr(
 ): Promise<OcrResult> {
   const effectiveProvider = resolveEffectiveOcrProvider(config);
   const isPdf = isPdfInput(originalName, fileTypeHint);
-  const maxUploadBytes = config.maxUploadBytes ?? DEFAULT_OCR_MAX_UPLOAD_BYTES;
   const startedAt = Date.now();
   let primaryError: Error | null = null;
 
-  // Whole-document fast paths: one request instead of one per page. Anything
-  // they cannot read falls through to page-by-page OCR below.
-  const useWholeDocumentRequest =
-    effectiveProvider === 'http' || (effectiveProvider === 'ocrspace' && isPdf && fileBuffer.length <= maxUploadBytes);
-  if (useWholeDocumentRequest) {
+  // A generic HTTP OCR API gets the whole document in one request. OCR.space
+  // deliberately does not: its free plan silently stops after 3 PDF pages, so
+  // PDFs always go page by page below.
+  if (effectiveProvider === 'http') {
     try {
-      const result =
-        effectiveProvider === 'http'
-          ? await runHttpOcr(fileBuffer, originalName, config)
-          : await runOcrSpaceRequest(fileBuffer, originalName, config, 'PDF');
+      const result = await runHttpOcr(fileBuffer, originalName, config);
       // An empty response is not a successful OCR pass. Treat it like a
       // provider failure so page-level OCR gets a chance to read the scan.
       if (result.text.trim()) {
@@ -442,10 +477,12 @@ export async function extractImageTextWithOcr(
     isPdf,
     buildRecognizers(effectiveProvider, config),
     budgetMs,
+    config.maxPages ?? DEFAULT_MAX_OCR_PAGES,
   );
 
   if (result.text) {
-    return { provider: result.provider, text: result.text, lineCount: result.lineCount };
+    const { firstError: _firstError, ...ocrResult } = result;
+    return ocrResult;
   }
 
   const error = primaryError ?? result.firstError;
@@ -468,6 +505,7 @@ async function runSingleRecognizer(
     isPdfInput(originalName, fileTypeHint),
     [recognizer],
     DEFAULT_OCR_BUDGET_MS,
+    DEFAULT_MAX_OCR_PAGES,
   );
   if (!result.text && result.firstError) {
     throw result.firstError;
@@ -764,18 +802,6 @@ async function runGoogleVisionImageRequest(imageBuffer: Buffer, config: OcrConfi
   } finally {
     clearTimeout(timeout);
   }
-}
-
-function containsKeyPromotionSignals(text: string): boolean {
-  const lower = text.toLowerCase();
-  const keywordHits = [
-    'nbc', '461', 'kra', 'criterion', 'criteria', 'points', 'score',
-    'evaluation', 'designation', 'appointment', 'certificate', 'training',
-    'seminar', 'workshop', 'published', 'journal', 'research', 'degree',
-    'master', 'doctor', 'phd', 'service record', 'special order', 'memorandum'
-  ].filter((word) => lower.includes(word)).length;
-
-  return keywordHits >= 2;
 }
 
 function extractTextFromApiPayload(payload: Record<string, unknown>) {

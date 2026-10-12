@@ -17,7 +17,7 @@ import { getSupabase, DOCUMENTS_BUCKET } from '../config/supabase';
 import { ocrConfig } from '../config/globals';
 import { analyzeDocumentContent, inferBestUploadPanelKey } from '../utils';
 import { checkPromotionWindow, PROMOTION_WINDOW_LABEL } from '../utils/promotionWindow';
-import { extractImageTextWithOcr, isOcrReady } from '../ocr';
+import { extractImageTextWithOcr, isOcrReady, summarizeOcrResult } from '../ocr';
 import { ProcessedUploadResult } from '../types';
 import { resolveUploadProfileLink } from '../utils/document.utils';
 import { fixedReviewPeriodLabel } from '../constants/reviewCycle';
@@ -129,7 +129,7 @@ export const registerUploadedDocument = async (req: Request, res: Response) => {
   try {
     let extractedText = '';
     let fileType: 'pdf' | 'image' = 'image';
-    let ocrFallback: { provider: string; lineCount: number } | null = null;
+    let ocrFallback: ReturnType<typeof summarizeOcrResult> | null = null;
     let ocrError: string | null = null;
 
     const isPdf = lowerMime === 'application/pdf' || fileName.toLowerCase().endsWith('.pdf');
@@ -160,7 +160,7 @@ export const registerUploadedDocument = async (req: Request, res: Response) => {
           const ocrResult = await extractImageTextWithOcr(fileBuffer, fileName, ocrConfig, 'PDF');
           if (ocrResult.text.trim().length > extractedText.trim().length) {
             extractedText = ocrResult.text.trim();
-            ocrFallback = { provider: ocrResult.provider, lineCount: ocrResult.lineCount };
+            ocrFallback = summarizeOcrResult(ocrResult);
           }
         } catch (error) {
           ocrError = error instanceof Error ? error.message : 'OCR fallback failed';
@@ -174,7 +174,7 @@ export const registerUploadedDocument = async (req: Request, res: Response) => {
       try {
         const ocrResult = await extractImageTextWithOcr(fileBuffer, fileName, ocrConfig);
         extractedText = ocrResult.text.trim();
-        ocrFallback = { provider: ocrResult.provider, lineCount: ocrResult.lineCount };
+        ocrFallback = summarizeOcrResult(ocrResult);
       } catch (error) {
         ocrError = error instanceof Error ? error.message : 'OCR failed';
       }

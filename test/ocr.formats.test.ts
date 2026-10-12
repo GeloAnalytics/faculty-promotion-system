@@ -56,32 +56,51 @@ function encodeBmp(canvas: ReturnType<typeof createCanvas>) {
   return buffer;
 }
 
-/** Image-only PDF (no text layer), the shape phone scanner apps produce. */
-function jpegToPdf(jpeg: Buffer, width: number, height: number) {
-  const content = `q ${width} 0 0 ${height} 0 0 cm /Im0 Do Q`;
-  const objects = [
-    '<< /Type /Catalog /Pages 2 0 R >>',
-    '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
-    `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${width} ${height}] /Resources << /XObject << /Im0 4 0 R >> >> /Contents 5 0 R >>`,
-    null,
-    `<< /Length ${content.length} >>\nstream\n${content}\nendstream`,
+/**
+ * Image-only PDF (no text layer), the shape phone scanner apps produce. Each
+ * canvas becomes one A4-proportioned page.
+ */
+function canvasesToScannedPdf(canvases: Array<ReturnType<typeof createCanvas>>) {
+  const pageWidth = 595;
+  const pageHeight = 842;
+  // Objects 1-2 are the catalog and page tree; each page then takes three
+  // consecutive objects: page, image, content stream.
+  const pageObjectNumber = (index: number) => 3 + index * 3;
+  const objects: Array<Buffer[]> = [
+    [Buffer.from('<< /Type /Catalog /Pages 2 0 R >>')],
+    [
+      Buffer.from(
+        `<< /Type /Pages /Kids [${canvases.map((_, index) => `${pageObjectNumber(index)} 0 R`).join(' ')}] /Count ${canvases.length} >>`,
+      ),
+    ],
   ];
+  canvases.forEach((canvas, index) => {
+    const pageNumber = pageObjectNumber(index);
+    const jpeg = canvas.toBuffer('image/jpeg', 85);
+    const content = `q ${pageWidth} 0 0 ${pageHeight} 0 0 cm /Im0 Do Q`;
+    objects.push(
+      [
+        Buffer.from(
+          `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pageWidth} ${pageHeight}] /Resources << /XObject << /Im0 ${pageNumber + 1} 0 R >> >> /Contents ${pageNumber + 2} 0 R >>`,
+        ),
+      ],
+      [
+        Buffer.from(
+          `<< /Type /XObject /Subtype /Image /Width ${canvas.width} /Height ${canvas.height} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${jpeg.length} >>\nstream\n`,
+        ),
+        jpeg,
+        Buffer.from('\nendstream'),
+      ],
+      [Buffer.from(`<< /Length ${content.length} >>\nstream\n${content}\nendstream`)],
+    );
+  });
+
   const chunks: Buffer[] = [Buffer.from('%PDF-1.4\n')];
   const offsets: number[] = [];
   let length = chunks[0].length;
   objects.forEach((body, index) => {
     offsets.push(length);
-    const parts =
-      body === null
-        ? [
-            Buffer.from(
-              `${index + 1} 0 obj\n<< /Type /XObject /Subtype /Image /Width ${width} /Height ${height} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${jpeg.length} >>\nstream\n`,
-            ),
-            jpeg,
-            Buffer.from('\nendstream\nendobj\n'),
-          ]
-        : [Buffer.from(`${index + 1} 0 obj\n${body}\nendobj\n`)];
-    for (const part of parts) {
+    for (const part of [Buffer.from(`${index + 1} 0 obj\n`), ...body, Buffer.from('\nendobj\n')]) {
       chunks.push(part);
       length += part.length;
     }
@@ -155,10 +174,43 @@ test('OCR reads every page of a multi-page TIFF', async () => {
 });
 
 test('OCR reads an image-only scanned PDF', async () => {
-  const canvas = renderTextCanvas(SAMPLE_LINES, { width: 1240, height: 1754 });
-  const pdf = jpegToPdf(canvas.toBuffer('image/jpeg', 85), 620, 877);
+  const pdf = canvasesToScannedPdf([renderTextCanvas(SAMPLE_LINES, { width: 1240, height: 1754 })]);
   const result = await extractImageTextWithOcr(pdf, 'scanned.pdf', tesseractOnly, 'PDF');
   assertReadsSample(result.text);
+});
+
+// Word markers rather than digits: Tesseract can misread a lone digit in the
+// test font, and these tests are about page coverage, not digit accuracy.
+const PAGE_MARKERS = ['ALPHA', 'BRAVO', 'CHARLIE', 'DELTA', 'ECHO', 'FOXTROT', 'GOLF', 'HOTEL', 'INDIA', 'JULIET', 'KILO', 'LIMA'];
+
+/** Pages of a scanned thesis; page 1 is keyword-heavy like a real title page. */
+function scannedThesisPdf(pageCount: number) {
+  const pages = Array.from({ length: pageCount }, (_, index) =>
+    renderTextCanvas(
+      index === 0
+        ? ['MASTER OF ARTS THESIS', 'Research on Faculty Training', 'Degree Requirement']
+        : ['CHAPTER FINDINGS', `Marker ${PAGE_MARKERS[index]}`],
+      { width: 1240, height: 1754 },
+    ),
+  );
+  return canvasesToScannedPdf(pages);
+}
+
+test('every page of a long scanned thesis is read, not just the title page', async () => {
+  const result = await extractImageTextWithOcr(scannedThesisPdf(12), 'thesis.pdf', tesseractOnly, 'PDF');
+  for (let page = 2; page <= 12; page++) {
+    assert.match(result.text.toUpperCase(), new RegExp(PAGE_MARKERS[page - 1]), `page ${page} missing from OCR text`);
+  }
+  assert.equal(result.pagesRead, 12);
+  assert.equal(result.totalPages, 12);
+  assert.equal(result.stoppedEarly, undefined);
+});
+
+test('a document longer than the page limit is marked as partially read', async () => {
+  const result = await extractImageTextWithOcr(scannedThesisPdf(4), 'thesis.pdf', { ...tesseractOnly, maxPages: 2 }, 'PDF');
+  assert.equal(result.pagesRead, 2);
+  assert.equal(result.totalPages, 4);
+  assert.equal(result.stoppedEarly, 'page-limit');
 });
 
 test('large photos are compressed under the cloud OCR upload cap', async () => {
@@ -232,6 +284,20 @@ test('an OCR.space outage falls back to local OCR instead of saving empty text',
     const result = await extractImageTextWithOcr(renderTextCanvas().toBuffer('image/png'), 'certificate.png', config);
     assert.equal(result.provider, 'tesseract');
     assertReadsSample(result.text);
+  } finally {
+    fake.close();
+  }
+});
+
+test('small multi-page PDFs go to OCR.space page by page, past its 3-page free limit', async () => {
+  const fake = await startFakeOcrSpace({ maxBytes: Infinity });
+  try {
+    const pdf = scannedThesisPdf(5);
+    assert.ok(pdf.length < 1024 * 1024, 'fixture should qualify for a single whole-file request');
+    const config: OcrConfig = { ...tesseractOnly, provider: 'ocrspace', apiUrl: fake.url, apiKey: 'test-key' };
+    const result = await extractImageTextWithOcr(pdf, 'thesis.pdf', config, 'PDF');
+    assert.equal(fake.received.length, 5);
+    assert.equal(result.pagesRead, 5);
   } finally {
     fake.close();
   }

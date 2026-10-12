@@ -21,6 +21,7 @@ export const ocrConfig: OcrConfig = {
   fileFieldName: env.OCR_FILE_FIELD_NAME,
   timeoutMs: env.OCR_TIMEOUT_MS,
   maxUploadBytes: env.OCR_MAX_UPLOAD_BYTES,
+  maxPages: env.OCR_MAX_PAGES,
 };
 
 export const isOcrReadyFlag = isOcrReady(ocrConfig);

@@ -10,7 +10,7 @@ import { repoRoot } from '../config/globals';
 import { fixedReviewPeriodLabel } from '../constants/reviewCycle';
 import { uploadPanels } from '../uploadPanels';
 import { analyzeDocumentContent, inferBestUploadPanelKey } from '../utils';
-import { extractImageTextWithOcr, type OcrConfig, type OcrResult } from '../ocr';
+import { extractImageTextWithOcr, summarizeOcrResult, type OcrConfig, type OcrResult } from '../ocr';
 import { EmployeeUploadType, UploadPanelDefinition, ProcessedUploadResult, ProfileLinkResult } from '../types';
 import { findBestMatchingProfile, scoreProfileFilename } from './profileMatching';
 import { checkPromotionWindow, PROMOTION_WINDOW_LABEL } from './promotionWindow';
@@ -93,7 +93,7 @@ export async function processUploadedDocument(args: {
       extractedText = '';
     }
 
-    let ocrFallback: { provider: string; lineCount: number } | null = null;
+    let ocrFallback: ReturnType<typeof summarizeOcrResult> | null = null;
     let ocrError: string | null = null;
 
     if (isPdfTextInsufficient(extractedText, pageCount)) {
@@ -101,7 +101,7 @@ export async function processUploadedDocument(args: {
         const ocrResult = await extractImageTextWithOcr(file.buffer, fileName, ocrConfig, 'PDF');
         if (ocrResult.text.trim().length > extractedText.length) {
           extractedText = ocrResult.text.trim();
-          ocrFallback = { provider: ocrResult.provider, lineCount: ocrResult.lineCount };
+          ocrFallback = summarizeOcrResult(ocrResult);
           ocrError = null;
         }
       } catch (error) {
@@ -214,10 +214,7 @@ export async function processUploadedDocument(args: {
             panelTitle: targetPanelDefinition.title,
             detectedPanelKey,
             storedForTraining: true,
-            ocr: {
-              provider: ocrResult.provider,
-              lineCount: ocrResult.lineCount,
-            },
+            ocr: summarizeOcrResult(ocrResult),
             ...(ocrError ? { ocrError } : {}),
             analysis,
             dateCheck,

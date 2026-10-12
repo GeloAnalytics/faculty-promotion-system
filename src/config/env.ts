@@ -30,6 +30,8 @@ const envSchema = z
     // Per-file upload cap of the cloud OCR provider (OCR.space free plan: 1 MB).
     // Larger pages are re-compressed to fit before upload.
     OCR_MAX_UPLOAD_BYTES: z.coerce.number().int().positive().optional(),
+    // Most pages OCR'd per scanned document (default 100).
+    OCR_MAX_PAGES: z.coerce.number().int().positive().optional(),
     SUPABASE_URL: z.string().default(''),
     SUPABASE_SERVICE_ROLE_KEY: z.string().default(''),
     // Public anon key — safe to expose to the browser (used for direct storage uploads via signed URLs)
