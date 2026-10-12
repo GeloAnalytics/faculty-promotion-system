@@ -21,6 +21,7 @@ import { uploadPanels } from './uploadPanels';
 import fs from 'node:fs';
 import path from 'node:path';
 import { evidenceRules, RequirementRule } from './utils/evidenceRules';
+import { extractTeachingEvaluationRatings } from './utils/teachingEvaluation';
 
 function extractAllEvidenceKeywords(rules: Record<string, RequirementRule>): string[] {
   const keywords = new Set<string>();
@@ -139,6 +140,7 @@ export const analyzeDocumentContent = (
   const keywordHits = allKeywords.filter((term) => normalizedText.includes(term));
 
   const summary = buildDocumentSummary(panelKey, extraction.detectedFields, detectedCategories, extraction.textLength);
+  const teachingEvaluations = extractTeachingEvaluationRatings(text);
 
   return {
     source,
@@ -151,6 +153,7 @@ export const analyzeDocumentContent = (
     detectedCategories,
     keywordHits,
     summary,
+    ...(teachingEvaluations.length ? { teachingEvaluations } : {}),
   };
 };
 

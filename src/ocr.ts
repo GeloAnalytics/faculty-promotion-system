@@ -11,10 +11,11 @@ const execFileAsync = promisify(execFile);
 
 export type OcrProvider = 'windows' | 'google-vision' | 'http' | 'ocrspace' | 'tesseract' | 'disabled';
 
-// Scanned theses and dissertations run to dozens of pages, so OCR reads every
-// page up to this cap (OCR_MAX_PAGES overrides it). The time budget below is
-// what actually bounds very long scans.
-export const DEFAULT_MAX_OCR_PAGES = 100;
+// Scanned theses and dissertations run to hundreds of pages, so OCR reads
+// every page up to this cap (OCR_MAX_PAGES overrides it). One request only
+// gets the time budget below; a document that needs longer is saved with
+// `ocr.nextPage` and finished by resuming from that page.
+export const DEFAULT_MAX_OCR_PAGES = 500;
 // pdf.js renders at 72 DPI per 1.0 scale. 2.0 (~144 DPI) is the lowest scale
 // at which Tesseract reliably reads 10-11pt body text on scanned forms.
 const OCR_RASTERIZE_SCALE = 2;
@@ -23,6 +24,23 @@ const OCR_RASTERIZE_SCALE = 2;
 // instead of the platform killing the request.
 // Leaves ~70s for the storage download, pdf-parse and database writes.
 const DEFAULT_OCR_BUDGET_MS = 230_000;
+// vercel.json maxDuration for the API function.
+const FUNCTION_TIME_LIMIT_MS = 300_000;
+// Left for the database writes and response after OCR stops.
+const FUNCTION_SAFETY_MARGIN_MS = 45_000;
+const MIN_OCR_BUDGET_MS = 30_000;
+
+/**
+ * OCR budget for a request that started at `requestStartedAt`, so time spent
+ * downloading and parsing a large file is not counted twice and the request
+ * still finishes (and saves its progress) before the platform kills it.
+ */
+export function ocrBudgetForRequest(requestStartedAt: number, config: OcrConfig): OcrConfig {
+  const remaining = FUNCTION_TIME_LIMIT_MS - FUNCTION_SAFETY_MARGIN_MS - (Date.now() - requestStartedAt);
+  const configured = config.totalBudgetMs ?? DEFAULT_OCR_BUDGET_MS;
+  return { ...config, totalBudgetMs: Math.max(MIN_OCR_BUDGET_MS, Math.min(configured, remaining)) };
+}
+
 // OCR.space free plan rejects files over 1 MB. Paid plans can raise this via
 // OCR_MAX_UPLOAD_BYTES.
 export const DEFAULT_OCR_MAX_UPLOAD_BYTES = 1024 * 1024;
@@ -50,11 +68,19 @@ export interface OcrResult {
   provider: Exclude<OcrProvider, 'disabled'>;
   text: string;
   lineCount: number;
+  /** Last page read, counted from the start of the document. */
   pagesRead?: number;
   totalPages?: number;
   // Set when the document had more pages than were read, so a partially
   // OCR'd upload can be told apart from a short one.
   stoppedEarly?: 'page-limit' | 'time-budget';
+  /** Page to resume from when the time budget ran out. */
+  nextPage?: number;
+}
+
+export interface OcrRunOptions {
+  /** 1-based page to start reading from (resuming a partial OCR pass). */
+  startPage?: number;
 }
 
 /**
@@ -104,6 +130,32 @@ export function summarizeOcrResult(result: OcrResult) {
     pagesRead: result.pagesRead,
     totalPages: result.totalPages,
     stoppedEarly: result.stoppedEarly,
+    nextPage: result.nextPage,
+  };
+}
+
+function readPositiveInteger(value: unknown) {
+  return typeof value === 'number' && Number.isInteger(value) && value > 0 ? value : null;
+}
+
+function readOcrMetadata(extractionMetadata: unknown): Record<string, unknown> {
+  const metadata =
+    extractionMetadata && typeof extractionMetadata === 'object' ? (extractionMetadata as Record<string, unknown>) : {};
+  return metadata.ocr && typeof metadata.ocr === 'object' ? (metadata.ocr as Record<string, unknown>) : {};
+}
+
+/** Page the next OCR pass should start from, or null when the document is fully read. */
+export function readPendingOcrPage(extractionMetadata: unknown): number | null {
+  return readPositiveInteger(readOcrMetadata(extractionMetadata).nextPage);
+}
+
+/** OCR progress stored in extractionMetadata.ocr, for clients showing "page X of Y". */
+export function readOcrProgress(extractionMetadata: unknown) {
+  const ocr = readOcrMetadata(extractionMetadata);
+  return {
+    pagesRead: readPositiveInteger(ocr.pagesRead),
+    totalPages: readPositiveInteger(ocr.totalPages),
+    nextPage: readPositiveInteger(ocr.nextPage),
   };
 }
 
@@ -285,13 +337,14 @@ function toError(error: unknown) {
 async function* iteratePdfPages(
   fileBuffer: Buffer,
   maxPages: number = DEFAULT_MAX_OCR_PAGES,
+  startPage = 1,
   scale: number = OCR_RASTERIZE_SCALE,
 ): AsyncGenerator<{ pageIndex: number; totalPages: number; buffer: Buffer }, void, unknown> {
   const { pdf } = await import('pdf-to-img');
   // Pass Uint8Array directly to pdf-to-img without creating base64 data-URL strings
   const doc = await pdf(fileBuffer, { scale });
   const lastPage = Math.min(doc.length, maxPages);
-  for (let pageIndex = 1; pageIndex <= lastPage; pageIndex++) {
+  for (let pageIndex = Math.max(1, startPage); pageIndex <= lastPage; pageIndex++) {
     yield { pageIndex, totalPages: doc.length, buffer: await doc.getPage(pageIndex) };
   }
 }
@@ -306,11 +359,12 @@ async function* iterateOcrPages(
   originalName: string,
   isPdf: boolean,
   maxPages: number,
+  startPage = 1,
 ): AsyncGenerator<OcrPage, void, unknown> {
   const baseName = path.parse(originalName).name || 'document';
 
   if (isPdf) {
-    for await (const { pageIndex, totalPages, buffer } of iteratePdfPages(fileBuffer, maxPages)) {
+    for await (const { pageIndex, totalPages, buffer } of iteratePdfPages(fileBuffer, maxPages, startPage)) {
       yield { index: pageIndex, totalPages, buffer, fileName: `${baseName}-page${pageIndex}.png` };
     }
     return;
@@ -318,11 +372,16 @@ async function* iterateOcrPages(
 
   const decodedPages = await decodeImagePagesForOcr(fileBuffer, maxPages);
   if (!decodedPages) {
-    yield { index: 1, totalPages: 1, buffer: fileBuffer, fileName: originalName };
+    if (startPage <= 1) {
+      yield { index: 1, totalPages: 1, buffer: fileBuffer, fileName: originalName };
+    }
     return;
   }
 
   for (const [offset, buffer] of decodedPages.entries()) {
+    if (offset + 1 < startPage) {
+      continue;
+    }
     yield { index: offset + 1, totalPages: decodedPages.length, buffer, fileName: `${baseName}-page${offset + 1}.jpg` };
   }
 }
@@ -340,17 +399,18 @@ async function recognizeDocumentPages(
   recognizers: PageRecognizer[],
   budgetMs: number,
   maxPages: number,
+  startPage = 1,
 ): Promise<OcrResult & { firstError: Error | null }> {
   const deadline = Date.now() + budgetMs;
   const pageTexts: string[] = [];
   const providerHits = new Map<PageRecognizer['provider'], number>();
   const failureCounts = new Map<PageRecognizer, number>();
   let firstError: Error | null = null;
-  let pagesRead = 0;
+  let pagesRead = Math.max(0, startPage - 1);
   let totalPages = 0;
   let stoppedEarly: OcrResult['stoppedEarly'];
 
-  const pages = iterateOcrPages(fileBuffer, originalName, isPdf, maxPages);
+  const pages = iterateOcrPages(fileBuffer, originalName, isPdf, maxPages, startPage);
   let nextPage = pages.next();
   try {
     while (true) {
@@ -360,17 +420,25 @@ async function recognizeDocumentPages(
       }
       const page = current.value;
       totalPages = page.totalPages;
+      // Out of time before this page was even tried: leave it for the next
+      // pass instead of recording it as read with no text.
+      if (Date.now() > deadline && page.index > startPage) {
+        stoppedEarly = 'time-budget';
+        break;
+      }
       // Render the following page while this one is being recognized; cloud
       // OCR is network-bound and Tesseract runs in a worker thread, so the
       // main thread is otherwise idle.
       nextPage = pages.next();
       nextPage.catch(() => {});
 
+      let cutOffMidPage = false;
       for (const recognizer of recognizers) {
         if ((failureCounts.get(recognizer) ?? 0) >= MAX_RECOGNIZER_FAILURES_PER_DOCUMENT) {
           continue;
         }
         if (Date.now() > deadline) {
+          cutOffMidPage = true;
           break;
         }
 
@@ -390,6 +458,11 @@ async function recognizeDocumentPages(
         }
       }
 
+      // A fallback engine never got its turn on this page; retry it next pass.
+      if (cutOffMidPage && page.index > startPage) {
+        stoppedEarly = 'time-budget';
+        break;
+      }
       pagesRead = page.index;
 
       if (Date.now() > deadline && page.index < page.totalPages) {
@@ -417,6 +490,7 @@ async function recognizeDocumentPages(
     pagesRead,
     totalPages,
     stoppedEarly,
+    ...(stoppedEarly === 'time-budget' ? { nextPage: pagesRead + 1 } : {}),
     firstError,
   };
 }
@@ -447,16 +521,18 @@ export async function extractImageTextWithOcr(
   originalName: string,
   config: OcrConfig,
   fileTypeHint?: string,
+  options: OcrRunOptions = {},
 ): Promise<OcrResult> {
   const effectiveProvider = resolveEffectiveOcrProvider(config);
   const isPdf = isPdfInput(originalName, fileTypeHint);
+  const startPage = Math.max(1, Math.floor(options.startPage ?? 1));
   const startedAt = Date.now();
   let primaryError: Error | null = null;
 
   // A generic HTTP OCR API gets the whole document in one request. OCR.space
   // deliberately does not: its free plan silently stops after 3 PDF pages, so
   // PDFs always go page by page below.
-  if (effectiveProvider === 'http') {
+  if (effectiveProvider === 'http' && startPage === 1) {
     try {
       const result = await runHttpOcr(fileBuffer, originalName, config);
       // An empty response is not a successful OCR pass. Treat it like a
@@ -478,19 +554,21 @@ export async function extractImageTextWithOcr(
     buildRecognizers(effectiveProvider, config),
     budgetMs,
     config.maxPages ?? DEFAULT_MAX_OCR_PAGES,
+    startPage,
   );
 
-  if (result.text) {
-    const { firstError: _firstError, ...ocrResult } = result;
+  const { firstError, ...ocrResult } = result;
+  // Pages left to read are worth another pass even if these were blank.
+  if (result.text || result.nextPage) {
     return ocrResult;
   }
 
-  const error = primaryError ?? result.firstError;
+  const error = primaryError ?? firstError;
   if (error) {
     throw error;
   }
 
-  return { provider: result.provider, text: '', lineCount: 0 };
+  return { ...ocrResult, provider: result.provider, text: '', lineCount: 0 };
 }
 
 async function runSingleRecognizer(
@@ -574,11 +652,32 @@ function windowsRecognizer(scriptPath: string): PageRecognizer {
   };
 }
 
+// OCR.space's free plan allows 180 requests per hour. Once it answers 429,
+// every request until `retryAfter` fails too, so skip straight to local OCR
+// instead of spending a round trip per page.
+let ocrSpaceRateLimitedUntil = 0;
+
+function noteOcrSpaceRateLimit(status: number, errorBody: string) {
+  if (status !== 429) {
+    return;
+  }
+  const retryAfterSeconds = Number(/"retryAfter"\s*:\s*(\d+)/.exec(errorBody)?.[1]);
+  const waitMs = Number.isFinite(retryAfterSeconds) && retryAfterSeconds > 0 ? retryAfterSeconds * 1000 : 60_000;
+  ocrSpaceRateLimitedUntil = Date.now() + waitMs;
+}
+
+export function resetOcrSpaceRateLimitForTests() {
+  ocrSpaceRateLimitedUntil = 0;
+}
+
 function ocrSpaceRecognizer(config: OcrConfig): PageRecognizer {
   const maxUploadBytes = config.maxUploadBytes ?? DEFAULT_OCR_MAX_UPLOAD_BYTES;
   return {
     provider: 'ocrspace',
     async recognize(page) {
+      if (Date.now() < ocrSpaceRateLimitedUntil) {
+        throw new Error('OCR.space hourly limit reached; using local OCR until it resets');
+      }
       const upload = await fitImageUnderBytes(page.buffer, maxUploadBytes);
       const fileName = upload.converted ? `${path.parse(page.fileName).name}.jpg` : page.fileName;
       const result = await runOcrSpaceRequest(upload.buffer, fileName, config);
@@ -699,6 +798,7 @@ async function runOcrSpaceRequest(
 
       if (!response.ok) {
         const errorBody = await response.text().catch(() => '');
+        noteOcrSpaceRateLimit(response.status, errorBody);
         throw new Error(`OCR.space request failed with status ${response.status}${errorBody ? `: ${errorBody}` : ''}`);
       }
 

@@ -2,6 +2,8 @@ import { uploadPanels, uploadPanelKeywordMap } from '../uploadPanels';
 import { academicRankOptions, normalizeAcademicRankOption } from '../constants/faculty';
 import { fixedReviewPeriodLabel, reviewCycleMetricKeys, reviewCycleYearLabels } from '../constants/reviewCycle';
 import type { UploadPanelKey } from '../types';
+import { readOcrProgress } from '../ocr';
+import { computeTeachingEffectivenessPoints, type TeachingEvaluationRating } from './teachingEvaluation';
 import { validateEvidencePacket, getEvidenceChecklistCompleteness, type EvidenceValidationSummary } from './evidenceValidation';
 
 type EvaluatorAssessmentSnapshot = {
@@ -146,7 +148,23 @@ type ParsedDocumentMetadata = {
   linkage: string | null;
   keywordHits: string[];
   detectedCategories: string[];
+  teachingEvaluations: TeachingEvaluationRating[];
+  ocrProgress: ReturnType<typeof readOcrProgress>;
 };
+
+function readTeachingEvaluations(value: unknown): TeachingEvaluationRating[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value.flatMap((entry) => {
+    const item = readJsonObject(entry);
+    const rating = readOptionalNumber(item.rating);
+    if ((item.evaluator !== 'student' && item.evaluator !== 'supervisor') || rating === null) {
+      return [];
+    }
+    return [{ evaluator: item.evaluator, rating, period: typeof item.period === 'string' ? item.period : null }];
+  });
+}
 
 export function summarizeDocumentMetadata(value: unknown): ParsedDocumentMetadata {
   const metadata = readJsonObject(value);
@@ -174,6 +192,8 @@ export function summarizeDocumentMetadata(value: unknown): ParsedDocumentMetadat
         : null,
     keywordHits,
     detectedCategories,
+    teachingEvaluations: readTeachingEvaluations(analysis.teachingEvaluations),
+    ocrProgress: readOcrProgress(metadata),
   };
 }
 
@@ -201,6 +221,7 @@ export function buildDraftPointSummary(
   const panelKeywords = new Map<UploadPanelKey, Set<string>>();
   const panelQualitySignal = new Map<UploadPanelKey, { total: number; count: number }>();
   const panelTopicalHits = new Map<UploadPanelKey, Set<string>>();
+  const teachingEvaluations: TeachingEvaluationRating[] = [];
 
   let instruction = 0;
   let research = 0;
@@ -240,6 +261,10 @@ export function buildDraftPointSummary(
         existingQuality.total += documentQuality;
         existingQuality.count += 1;
         panelQualitySignal.set(panelKey, existingQuality);
+
+        if (panelKey === TEACHING_EFFECTIVENESS_PANEL_KEY) {
+          teachingEvaluations.push(...metadata.teachingEvaluations);
+        }
       }
       panelUploadTypeCounts.set(panelKey, existingPanelCounts);
 
@@ -285,6 +310,17 @@ export function buildDraftPointSummary(
     ipcrAverage = Math.max(ipcrAverage, metadata.extractedScores.ipcrAverage ?? 0);
   }
 
+  // Teaching effectiveness is not a single number on any one form: NBC 461
+  // averages every semester's SET and SEF rating, so it replaces whatever
+  // per-document score OCR picked up for this panel.
+  const teachingEffectiveness = computeTeachingEffectivenessPoints(teachingEvaluations);
+  const panelNoteOverrides = new Map<UploadPanelKey, string>();
+  if (teachingEffectiveness) {
+    panelScoreByKey.set(TEACHING_EFFECTIVENESS_PANEL_KEY, teachingEffectiveness.points);
+    instruction = Math.max(instruction, teachingEffectiveness.points);
+    panelNoteOverrides.set(TEACHING_EFFECTIVENESS_PANEL_KEY, describeTeachingEffectiveness(teachingEffectiveness));
+  }
+
   const coverage = uploadPanels.length ? uploadedPanels.size / uploadPanels.length : 0;
   const averagedCompleteness = completenessSamples ? completenessTotal / completenessSamples : 0;
   const overallEstimate = instruction + research + extension + professionalDevelopment + ipcrAverage;
@@ -319,6 +355,7 @@ export function buildDraftPointSummary(
     panelQualitySignal,
     panelTopicalHits,
     criterionReviews,
+    panelNoteOverrides,
   });
   const hasDoctoralGraduateBonus = canUseDoctoralGraduateBonus(
     normalizeAttainment(highestEducationalAttainment),
@@ -377,6 +414,7 @@ export function buildDraftPointSummary(
     },
     overallEstimate: roundScore(overallEstimate),
     scoreComputation,
+    teachingEffectiveness,
     evidenceCoverage: {
       uploadedPanels: Array.from(uploadedPanels),
       uploadedPanelCount: uploadedPanels.size,
@@ -1296,6 +1334,7 @@ function buildEvidenceBasedScoreComputation(args: {
   panelQualitySignal: Map<UploadPanelKey, { total: number; count: number }>;
   panelTopicalHits: Map<UploadPanelKey, Set<string>>;
   criterionReviews?: Map<UploadPanelKey, CriterionReviewDecision>;
+  panelNoteOverrides?: Map<UploadPanelKey, string>;
 }): EvidenceBasedScoreComputation {
   const panelScores = uploadPanels.map((panel) => {
     const counts = args.panelUploadTypeCounts.get(panel.key) ?? { scoreSheet: 0, evidence: 0 };
@@ -1370,7 +1409,9 @@ function buildEvidenceBasedScoreComputation(args: {
       required,
       status,
       reviewDecision,
-      note: getComputedPanelScoreNote(status, scoreSource, roundScore(usedScore)),
+      note:
+        (status === 'counted' && scoreSource === 'ocr-detected' && args.panelNoteOverrides?.get(panel.key)) ||
+        getComputedPanelScoreNote(status, scoreSource, roundScore(usedScore)),
     } satisfies ComputedPanelScore;
   });
 
@@ -1445,6 +1486,22 @@ function getWeightProfileForRank(rank: string | null) {
   }
   const groupKey = rankGroupByRank[normalizedRank];
   return rankGroups.find((group) => group.key === groupKey) ?? null;
+}
+
+const TEACHING_EFFECTIVENESS_PANEL_KEY: UploadPanelKey = 'kra1_teaching_effectiveness';
+
+function describeTeachingEffectiveness(result: NonNullable<ReturnType<typeof computeTeachingEffectivenessPoints>>) {
+  const describe = (label: string, average: number | null, semesters: number, maxPoints: number, points: number) =>
+    average === null
+      ? `no ${label} evaluation rating found yet (0 of ${maxPoints})`
+      : `${label} ${average} average over ${semesters} semester${semesters === 1 ? '' : 's'} ÷ 100 × ${maxPoints} = ${points}`;
+  return `Computed with the NBC 461 formula from the uploaded evaluation forms: ${describe(
+    'student',
+    result.studentAverage,
+    result.studentSemesters,
+    36,
+    result.studentPoints,
+  )}; ${describe('supervisor', result.supervisorAverage, result.supervisorSemesters, 24, result.supervisorPoints)}.`;
 }
 
 function getComputedPanelScoreNote(

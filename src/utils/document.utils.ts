@@ -10,7 +10,7 @@ import { repoRoot } from '../config/globals';
 import { fixedReviewPeriodLabel } from '../constants/reviewCycle';
 import { uploadPanels } from '../uploadPanels';
 import { analyzeDocumentContent, inferBestUploadPanelKey } from '../utils';
-import { extractImageTextWithOcr, summarizeOcrResult, type OcrConfig, type OcrResult } from '../ocr';
+import { extractImageTextWithOcr, readOcrProgress, summarizeOcrResult, type OcrConfig, type OcrResult } from '../ocr';
 import { EmployeeUploadType, UploadPanelDefinition, ProcessedUploadResult, ProfileLinkResult } from '../types';
 import { findBestMatchingProfile, scoreProfileFilename } from './profileMatching';
 import { checkPromotionWindow, PROMOTION_WINDOW_LABEL } from './promotionWindow';
@@ -103,6 +103,9 @@ export async function processUploadedDocument(args: {
           extractedText = ocrResult.text.trim();
           ocrFallback = summarizeOcrResult(ocrResult);
           ocrError = null;
+        } else if (ocrResult.nextPage) {
+          // Keep the resume point so the rest of a long scan still gets read.
+          ocrFallback = summarizeOcrResult(ocrResult);
         }
       } catch (error) {
         ocrError = error instanceof Error ? error.message : 'OCR fallback failed';
@@ -161,6 +164,7 @@ export async function processUploadedDocument(args: {
         textPreview: extractedText.slice(0, 1000),
         analysis,
         dateCheck,
+        ...(ocrFallback?.nextPage ? { ocrProgress: readOcrProgress({ ocr: ocrFallback }) } : {}),
       };
     } catch (error) {
       await removePersistedDocumentFile(storage);
@@ -235,6 +239,7 @@ export async function processUploadedDocument(args: {
         textPreview: extractedText.slice(0, 1000),
         analysis,
         dateCheck,
+        ...(ocrResult.nextPage ? { ocrProgress: readOcrProgress({ ocr: summarizeOcrResult(ocrResult) }) } : {}),
       };
     } catch (error) {
       await removePersistedDocumentFile(storage);
