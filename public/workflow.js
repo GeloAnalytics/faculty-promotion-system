@@ -1625,13 +1625,12 @@ async function uploadFilesDirectToSupabase({ files, panelKey, uploadType, docume
     if (progressFill) progressFill.style.width = `${Math.round(((i) / total) * 60) + 5}%`;
 
     // Step 1: Get a signed URL from backend, passing panelKey for KRA storage pathing
-    const { signedUrl, storagePath, token } = await apiFetch('/api/documents/signed-upload-url', {
+    const { signedUrl, storagePath, token, provider } = await apiFetch('/api/documents/signed-upload-url', {
       method: 'POST',
       body: JSON.stringify({ fileName: file.name, mimeType: file.type, panelKey }),
     });
 
-    // Step 2: Upload directly to Supabase from the browser
-    // The signed upload URL requires the token in an Authorization header.
+    // Step 2: Upload directly to cloud storage (Cloudflare R2 / S3 / Supabase) from the browser
     const uploadHeaders = { 'Content-Type': file.type || 'application/octet-stream' };
     if (token) {
       uploadHeaders['Authorization'] = `Bearer ${token}`;
@@ -1660,6 +1659,7 @@ async function uploadFilesDirectToSupabase({ files, panelKey, uploadType, docume
         uploadType,
         documentType: documentType || undefined,
         profileId: profileId || undefined,
+        provider: provider || undefined,
       }),
     });
 

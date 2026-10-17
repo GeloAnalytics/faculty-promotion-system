@@ -36,6 +36,19 @@ const envSchema = z
     SUPABASE_SERVICE_ROLE_KEY: z.string().default(''),
     // Public anon key — safe to expose to the browser (used for direct storage uploads via signed URLs)
     SUPABASE_ANON_KEY: z.string().default(''),
+    // Cloudflare R2 Object Storage
+    R2_ACCOUNT_ID: z.string().trim().default(''),
+    R2_ACCESS_KEY_ID: z.string().trim().default(''),
+    R2_SECRET_ACCESS_KEY: z.string().trim().default(''),
+    R2_BUCKET_NAME: z.string().trim().default('documents'),
+    R2_PUBLIC_URL: z.string().trim().default(''),
+    // Generic S3 overrides (AWS S3, Wasabi, MinIO, Backblaze B2)
+    S3_ENDPOINT: z.string().trim().default(''),
+    S3_REGION: z.string().trim().default('auto'),
+    S3_ACCESS_KEY_ID: z.string().trim().default(''),
+    S3_SECRET_ACCESS_KEY: z.string().trim().default(''),
+    S3_BUCKET_NAME: z.string().trim().default(''),
+    S3_FORCE_PATH_STYLE: z.coerce.boolean().default(false),
   });
 
 export const env = envSchema.parse(process.env);

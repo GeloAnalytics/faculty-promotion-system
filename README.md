@@ -75,7 +75,7 @@ Verified on 2026-08-12:
 - Dev server boots cleanly with zero console/server errors across all three portals (employee, evaluator, admin).
 - The Content-Security-Policy header is live and verified against the riskiest real path: the document-preview iframe, which loads a `blob:` URL created via `URL.createObjectURL` - confirmed zero CSP violations end to end, including a real upload → fetch → blob → iframe round trip.
 - OCR is self-hosted-fallback-capable: 0 of 438 real production documents currently have empty extracted text (down from a meaningful failure rate before the `tesseract.js`/`pdf-to-img` fallback was added).
-- The live deployment is on Render (`https://faculty-promotion-system-0l51.onrender.com`); `netlify.toml` also exists in the repo for publishing the static `public/` frontend independently via Netlify.
+- The live deployment is routed to the custom domain on Vercel; `vercel.json` provides serverless function routing and static asset serving.
 
 ## What Already Works
 
@@ -86,11 +86,11 @@ Verified on 2026-08-12:
 - Auto-creation of a `FacultyProfile` on an employee's first document upload - no separate manual intake step.
 - Active static UI in `public/` (Faculty, Evaluator, and Admin portals) served directly by the Express backend. A Vue 3 + Vite rewrite exists as an early-stage scaffold in `frontend/` but has not replaced the deployed frontend.
 - Express + TypeScript backend, split into `src/app.ts` (the Express app itself, importable without starting a server - this is what the integration tests exercise) and a thin `src/server.ts` bootstrap.
-- Prisma + PostgreSQL persistence (Supabase-hosted).
+- Prisma + PostgreSQL persistence (Supabase-hosted pooler).
 - Document text extraction: `pdf-parse` for text-layer PDFs, OCR.space for scanned images/image-based PDFs, with a **self-hosted `tesseract.js` + `pdf-to-img` fallback** that automatically takes over whenever the configured OCR provider fails or exceeds its size/timeout limits - a document's size no longer determines whether it gets scored.
 - KRA/criterion upload panels, restricted to the current promotion cycle's date range.
 - File preview, replacement, and deletion for uploaded evidence documents.
-- Uploaded-document storage and metadata extraction via Supabase Storage (`documents` bucket) - survives across deploys on ephemeral hosts like Render.
+- High-capacity, zero-cost cloud storage via **Cloudflare R2** (S3-compatible, 10 GB free tier with $0 egress fees), bypassing Vercel's 4.5 MB serverless body cap via direct-to-bucket presigned PUT uploads. Supabase and local storage remain supported as fallback providers.
 - Evidence-based score computation with three ordered scoring tiers per panel (`scoreSource`: `ocr-detected` → `evidence-checklist` → `evidence-relevance-estimate` → `0` for no evidence at all). Score extraction is anchored to full panel-title/KRA-heading phrases only (not individual generic words), and rejects both bare calendar years and day-of-month date fragments, to avoid fabricating a score from an unrelated number (control numbers, dates, page numbers) elsewhere in a document.
 - Per-panel evidence-checklist fractional credit (`AND` rules average their conditions' match fractions, `OR` rules take the best alternative) when no explicit score is OCR-detected.
 - Live employee-side score summary: per-KRA totals, per-panel scores with their source tier, total score, weighted score (using the verified rank-weight table above), score bracket, and advisory projected rank.

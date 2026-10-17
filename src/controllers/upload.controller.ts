@@ -24,10 +24,19 @@ import { fixedReviewPeriodLabel } from '../constants/reviewCycle';
 import pdf from 'pdf-parse';
 import { env } from '../config/env';
 
+import {
+  createSignedUploadUrl,
+  downloadFileBuffer,
+  getActiveStorageProvider,
+  getDefaultBucketName,
+  type StorageDescriptor,
+  type StorageProviderType,
+} from '../services/storage.service';
+
 /**
  * POST /api/documents/signed-upload-url
- * Returns a short-lived Supabase signed URL so the browser can upload
- * directly to storage — bypassing the 4.5 MB Vercel serverless body limit.
+ * Returns a short-lived signed URL (Cloudflare R2, S3, or Supabase) so the browser
+ * can upload directly to storage — bypassing the 4.5 MB Vercel serverless body limit.
  * Storage key is routed into KRA-specific folders (e.g. kra1/kra1_teaching_effectiveness/<uuid>.pdf).
  */
 export const getSignedUploadUrl = async (req: Request, res: Response) => {
@@ -45,24 +54,26 @@ export const getSignedUploadUrl = async (req: Request, res: Response) => {
   const rawMimeType = typeof mimeType === 'string' ? mimeType : undefined;
   const storageKey = getKraStoragePath(rawPanelKey, String(fileName), rawMimeType);
 
-  const { data, error } = await getSupabase()
-    .storage.from(DOCUMENTS_BUCKET)
-    .createSignedUploadUrl(storageKey);
+  try {
+    const result = await createSignedUploadUrl(
+      storageKey,
+      rawMimeType || 'application/octet-stream',
+    );
 
-  if (error || !data) {
-    return res.status(500).json({ error: `Could not create signed URL: ${error?.message ?? 'unknown error'}` });
+    return res.json({
+      signedUrl: result.signedUrl,
+      storagePath: result.storagePath,
+      token: result.token ?? undefined,
+      provider: result.provider,
+    });
+  } catch (err: any) {
+    return res.status(500).json({ error: `Could not create signed URL: ${err?.message ?? 'unknown error'}` });
   }
-
-  return res.json({
-    signedUrl: data.signedUrl,
-    storagePath: storageKey,
-    token: data.token,
-  });
 };
 
 /**
  * POST /api/documents/register
- * Called after a successful direct-to-Supabase browser upload.
+ * Called after a successful direct-to-storage browser upload (Cloudflare R2 / S3 / Supabase).
  * Reads the file from storage, runs OCR, saves the database record.
  * No file body is sent to this endpoint — it is only JSON metadata.
  */
@@ -77,6 +88,8 @@ export const registerUploadedDocument = async (req: Request, res: Response) => {
     uploadType: rawUploadType,
     profileId: requestedProfileId,
     documentType: rawDocumentType,
+    provider: rawProvider,
+    bucket: rawBucket,
   } = req.body as Record<string, unknown>;
 
   if (typeof storagePath !== 'string' || !storagePath.trim()) {
@@ -95,18 +108,31 @@ export const registerUploadedDocument = async (req: Request, res: Response) => {
   const resolvedProfileId =
     typeof requestedProfileId === 'string' && requestedProfileId.trim() ? requestedProfileId : null;
 
-  // Download the file from Supabase storage for OCR processing
-  const { data: fileData, error: downloadError } = await getSupabase()
-    .storage.from(DOCUMENTS_BUCKET)
-    .download(storagePath);
+  const storageProvider: StorageProviderType =
+    typeof rawProvider === 'string' && (rawProvider === 'r2' || rawProvider === 's3' || rawProvider === 'supabase')
+      ? (rawProvider as StorageProviderType)
+      : getActiveStorageProvider();
 
-  if (downloadError || !fileData) {
+  const bucket = typeof rawBucket === 'string' && rawBucket.trim()
+    ? rawBucket
+    : getDefaultBucketName();
+
+  const storage: StorageDescriptor = {
+    provider: storageProvider,
+    bucket,
+    path: storagePath,
+  };
+
+  // Download the file from storage for OCR / text processing
+  let fileBuffer: Buffer;
+  try {
+    fileBuffer = await downloadFileBuffer(storage);
+  } catch (downloadError: any) {
     return res.status(404).json({
       error: `Could not retrieve uploaded file from storage: ${downloadError?.message ?? 'file not found'}`,
     });
   }
 
-  const fileBuffer = Buffer.from(await fileData.arrayBuffer());
   const fileName = String(originalName).trim();
   const lowerMime = mimeType.toLowerCase();
 
@@ -117,12 +143,6 @@ export const registerUploadedDocument = async (req: Request, res: Response) => {
     { fullName: req.user!.fullName, employeeId: req.user!.employeeId },
   );
   const profileId = linkage.profileId;
-
-  const storage = {
-    provider: 'supabase',
-    bucket: DOCUMENTS_BUCKET,
-    path: storagePath,
-  };
 
   const results: ProcessedUploadResult[] = [];
   const failures: Array<{ originalName: string; error: string }> = [];
@@ -220,7 +240,7 @@ export const registerUploadedDocument = async (req: Request, res: Response) => {
         action: AuditLogAction.UPLOAD,
         userId: req.user!.id,
         targetId: savedDocument.id,
-        details: { originalName: fileName, panelKey: targetPanelKey, uploadType, method: 'direct-supabase' },
+        details: { originalName: fileName, panelKey: targetPanelKey, uploadType, method: `direct-${storageProvider}` },
       },
     });
 

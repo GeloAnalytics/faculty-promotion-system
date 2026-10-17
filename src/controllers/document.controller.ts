@@ -15,6 +15,7 @@ import {
   resolveStoredDocumentPath,
   removePersistedDocumentFile,
 } from '../utils/document.utils';
+import { getDownloadStream } from '../services/storage.service';
 import { getSupabase } from '../config/supabase';
 import { ocrConfig } from '../config/globals';
 import { continueDocumentOcr } from '../utils/ocrContinuation';
@@ -156,21 +157,11 @@ export const viewDocument = async (req: Request, res: Response) => {
   res.setHeader('X-Frame-Options', 'SAMEORIGIN');
   res.setHeader('Content-Security-Policy', "frame-ancestors 'self'");
 
-  if (stored.provider === 'supabase') {
-    const { data, error } = await getSupabase().storage.from(stored.bucket).download(stored.path);
-    if (error || !data) {
-      return res.status(404).json({ error: 'Stored document file is unavailable for preview' });
-    }
-    const arrayBuffer = await data.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
-    return res.end(buffer);
-  } else {
-    try {
-      await fs.access(stored.path);
-    } catch {
-      return res.status(404).json({ error: 'Stored document file is unavailable for preview' });
-    }
-    await pipeline(createReadStream(stored.path), res);
+  try {
+    const stream = await getDownloadStream(stored);
+    await pipeline(stream, res);
+  } catch {
+    return res.status(404).json({ error: 'Stored document file is unavailable for preview' });
   }
 };
 

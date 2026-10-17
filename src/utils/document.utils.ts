@@ -6,6 +6,12 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { prisma } from '../config/db';
 import { getSupabase, DOCUMENTS_BUCKET } from '../config/supabase';
+import {
+  uploadFileBuffer,
+  deleteStoredFile,
+  getDefaultBucketName,
+  type StorageDescriptor,
+} from '../services/storage.service';
 import { repoRoot } from '../config/globals';
 import { fixedReviewPeriodLabel } from '../constants/reviewCycle';
 import { uploadPanels } from '../uploadPanels';
@@ -413,10 +419,19 @@ export async function attachExistingDocumentsToProfile(
   };
 }
 
-export function resolveStoredDocumentPath(extractionMetadata: unknown) {
+export function resolveStoredDocumentPath(extractionMetadata: unknown): StorageDescriptor | null {
   const metadata = readJsonObject(extractionMetadata);
   const storage = readJsonObject(metadata.storage);
   
+  if (storage.provider === 'r2' || storage.provider === 's3') {
+    if (typeof storage.path !== 'string') return null;
+    return {
+      provider: storage.provider,
+      bucket: typeof storage.bucket === 'string' ? (storage.bucket as string) : getDefaultBucketName(),
+      path: storage.path as string,
+    };
+  }
+
   if (storage.provider === 'supabase') {
     if (typeof storage.path !== 'string') return null;
     return {
@@ -480,52 +495,11 @@ function readJsonObject(value: unknown): Record<string, unknown> {
 
 async function persistUploadedDocumentFile(file: Express.Multer.File, panelKey?: string) {
   const filePath = getKraStoragePath(panelKey, file.originalname, file.mimetype);
-
-  try {
-    const supabase = getSupabase();
-    if (supabase) {
-      const { error } = await supabase.storage
-        .from(DOCUMENTS_BUCKET)
-        .upload(filePath, file.buffer, {
-          contentType: file.mimetype,
-          upsert: true,
-        });
-
-      if (!error) {
-        return {
-          provider: 'supabase',
-          bucket: DOCUMENTS_BUCKET,
-          path: filePath,
-        };
-      }
-    }
-  } catch {
-    // Proceed to local file storage fallback
-  }
-
-  // Fallback to local storage
-  await fs.mkdir(documentStorageRoot, { recursive: true });
-  const localFilePath = path.join(documentStorageRoot, filePath);
-  await fs.writeFile(localFilePath, file.buffer);
-  const relativePath = path.relative(repoRoot, localFilePath);
-
-  return {
-    provider: 'local',
-    relativePath,
-  };
+  return await uploadFileBuffer(filePath, file.buffer, file.mimetype);
 }
 
 export async function removePersistedDocumentFile(storageRef: any) {
-  try {
-    if (storageRef?.provider === 'supabase' && storageRef.path) {
-      await getSupabase().storage.from(DOCUMENTS_BUCKET).remove([storageRef.path]);
-    } else if (storageRef?.relativePath) {
-      const absolutePath = path.resolve(repoRoot, storageRef.relativePath);
-      await fs.unlink(absolutePath);
-    }
-  } catch {
-    // Ignore cleanup failures
-  }
+  await deleteStoredFile(storageRef);
 }
 
 function deriveStorageExtension(originalName: string, mimeType: string) {

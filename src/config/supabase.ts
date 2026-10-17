@@ -6,11 +6,15 @@ export const DOCUMENTS_BUCKET = 'documents';
 
 let _supabase: SupabaseClient | null = null;
 
+export function isSupabaseStorageConfigured(): boolean {
+  return !!(env.SUPABASE_URL && env.SUPABASE_SERVICE_ROLE_KEY);
+}
+
 export function getSupabase(): SupabaseClient {
   if (!_supabase) {
-    if (!env.SUPABASE_URL || !env.SUPABASE_SERVICE_ROLE_KEY) {
+    if (!isSupabaseStorageConfigured()) {
       throw new Error(
-        'SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be set to use document storage',
+        'SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be set to use Supabase document storage',
       );
     }
     _supabase = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY, {

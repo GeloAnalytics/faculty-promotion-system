@@ -1,12 +1,12 @@
 import fs from 'node:fs/promises';
 import type { Prisma } from '@prisma/client';
 import { prisma } from '../config/db';
-import { getSupabase } from '../config/supabase';
 import { extractImageTextWithOcr, readOcrProgress, readPendingOcrPage, type OcrConfig } from '../ocr';
 import type { UploadPanelKey } from '../types';
 import { analyzeDocumentContent } from '../utils';
 import { resolveStoredDocumentPath, toPrismaJson } from './document.utils';
 import { checkPromotionWindow } from './promotionWindow';
+import { downloadFileBuffer } from '../services/storage.service';
 
 /**
  * Large scans cannot be OCR'd inside one serverless request. The first pass
@@ -33,11 +33,7 @@ export async function loadStoredDocumentBuffer(extractionMetadata: unknown): Pro
   if (!stored) {
     return null;
   }
-  if (stored.provider === 'supabase') {
-    const { data, error } = await getSupabase().storage.from(stored.bucket).download(stored.path);
-    return error || !data ? null : Buffer.from(await data.arrayBuffer());
-  }
-  return fs.readFile(stored.path).catch(() => null);
+  return downloadFileBuffer(stored).catch(() => null);
 }
 
 export async function continueDocumentOcr(

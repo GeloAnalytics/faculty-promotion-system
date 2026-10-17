@@ -9,6 +9,11 @@ import { tqeReferenceSummary, guidelinePdfPath } from '../config/globals';
 import { getEmployeeUploadWorkflowSummary } from '../uploadWorkflow';
 import { env } from '../config/env';
 import { DOCUMENTS_BUCKET } from '../config/supabase';
+import {
+  getActiveStorageProvider,
+  getDefaultBucketName,
+  isCloudStorageConfigured,
+} from '../services/storage.service';
 
 export const getTqeSummary = (_req: Request, res: Response) => {
   res.json({
@@ -43,16 +48,17 @@ export const getFacultyOptions = (_req: Request, res: Response) => {
 
 /**
  * GET /api/config/storage
- * Returns the public Supabase credentials the browser needs for direct storage uploads.
- * Only the anon key is returned — never the service role key.
+ * Returns the storage configuration the browser needs for direct storage uploads.
+ * directUploadEnabled is true if Cloudflare R2, S3, or Supabase storage is configured.
  */
 export const getStorageConfig = (_req: Request, res: Response) => {
+  const provider = getActiveStorageProvider();
   res.json({
+    provider,
     supabaseUrl: env.SUPABASE_URL || null,
     supabaseAnonKey: env.SUPABASE_ANON_KEY || null,
-    bucket: DOCUMENTS_BUCKET,
-    // Uploads use backend-issued signed URLs, so a browser anon key is not required.
-    directUploadEnabled: !!(env.SUPABASE_URL && env.SUPABASE_SERVICE_ROLE_KEY),
+    bucket: getDefaultBucketName(),
+    directUploadEnabled: isCloudStorageConfigured(),
   });
 };
 
