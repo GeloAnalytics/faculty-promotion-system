@@ -13,6 +13,7 @@ import { env } from '../config/env';
 import { prisma } from '../config/db';
 import { tqeReferenceRecords, guidelinePdfPath, isOcrReadyFlag, ocrConfig } from '../config/globals';
 import { resolveEffectiveOcrProvider } from '../ocr';
+import { isPromotionModelAvailable, getModelComparison } from '../services/model.service';
 import path from 'node:path';
 
 const router = Router();
@@ -59,10 +60,16 @@ router.get('/health', async (_req: Request, res: Response) => {
       imageOcrProvider: ocrConfig.provider,
       imageOcrEffectiveProvider: resolveEffectiveOcrProvider(ocrConfig),
     },
-    model: {
-      status: 'inactive',
-      reason: 'The system is currently focused on collecting and storing training data.',
-    },
+    model: isPromotionModelAvailable()
+      ? {
+          status: 'active',
+          modelUsed: (getModelComparison() as { winningModel?: string } | null)?.winningModel ?? 'unknown',
+          reason: 'Trained offline on a disclosed-synthetic, policy-grounded dataset (see docs/model-training-results.md); served from models/promotion-model.json.',
+        }
+      : {
+          status: 'inactive',
+          reason: 'No trained model artifact is present. Run `python scripts/ml/train_models.py` to generate models/promotion-model.json.',
+        },
   });
 });
 

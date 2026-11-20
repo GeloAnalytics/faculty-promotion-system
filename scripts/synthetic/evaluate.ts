@@ -28,7 +28,7 @@ export function profileFor(faculty: SyntheticFaculty) {
 }
 
 /** What the live pipeline produces from the observed (scanned/OCR'd) text. */
-function observedMetadata(faculty: SyntheticFaculty) {
+export function observedMetadata(faculty: SyntheticFaculty) {
   return faculty.docs.map((doc) => ({
     extractionMetadata: {
       uploadType: 'evidence',

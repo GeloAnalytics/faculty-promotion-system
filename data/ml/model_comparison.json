@@ -1,0 +1,207 @@
+{
+  "generatedAt": "2026-11-20T11:29:03.267165+00:00",
+  "datasetRows": 1000,
+  "features": [
+    "yearsInService",
+    "rankOrdinal",
+    "attainmentDoctorate",
+    "observedTeachingPoints",
+    "observedKraInstruction",
+    "observedKraResearch",
+    "observedKraExtension",
+    "observedKraProfessionalDevelopment",
+    "observedWeightedScore",
+    "observedCompletenessScore",
+    "documentCount"
+  ],
+  "primaryMetric": "recall",
+  "winningModel": "XGBoost",
+  "results": {
+    "LogisticRegression": {
+      "accuracy": 0.92,
+      "precision": 1.0,
+      "recall": 0.9104477611940298,
+      "f1": 0.953125,
+      "rocAuc": 0.9944029850746269,
+      "confusionMatrix": {
+        "labels": [
+          "not_promoted",
+          "promoted"
+        ],
+        "matrix": [
+          [
+            16,
+            0
+          ],
+          [
+            12,
+            122
+          ]
+        ]
+      },
+      "equalOpportunityDifference": 0.06712962962962965,
+      "groupTruePositiveRates": {
+        "M": 0.8703703703703703,
+        "F": 0.9375
+      }
+    },
+    "DecisionTree": {
+      "accuracy": 0.9466666666666667,
+      "precision": 0.9921875,
+      "recall": 0.9477611940298507,
+      "f1": 0.9694656488549618,
+      "rocAuc": 0.9582555970149254,
+      "confusionMatrix": {
+        "labels": [
+          "not_promoted",
+          "promoted"
+        ],
+        "matrix": [
+          [
+            15,
+            1
+          ],
+          [
+            7,
+            127
+          ]
+        ]
+      },
+      "equalOpportunityDifference": 0.02546296296296291,
+      "groupTruePositiveRates": {
+        "M": 0.9629629629629629,
+        "F": 0.9375
+      }
+    },
+    "AdaBoost": {
+      "accuracy": 0.9666666666666667,
+      "precision": 1.0,
+      "recall": 0.9626865671641791,
+      "f1": 0.9809885931558935,
+      "rocAuc": 1.0,
+      "confusionMatrix": {
+        "labels": [
+          "not_promoted",
+          "promoted"
+        ],
+        "matrix": [
+          [
+            16,
+            0
+          ],
+          [
+            5,
+            129
+          ]
+        ]
+      },
+      "equalOpportunityDifference": 0.030555555555555558,
+      "groupTruePositiveRates": {
+        "M": 0.9444444444444444,
+        "F": 0.975
+      }
+    },
+    "GradientBoosting": {
+      "accuracy": 0.98,
+      "precision": 1.0,
+      "recall": 0.9776119402985075,
+      "f1": 0.9886792452830189,
+      "rocAuc": 0.9967350746268657,
+      "confusionMatrix": {
+        "labels": [
+          "not_promoted",
+          "promoted"
+        ],
+        "matrix": [
+          [
+            16,
+            0
+          ],
+          [
+            3,
+            131
+          ]
+        ]
+      },
+      "equalOpportunityDifference": 0.0064814814814815325,
+      "groupTruePositiveRates": {
+        "M": 0.9814814814814815,
+        "F": 0.975
+      }
+    },
+    "XGBoost": {
+      "accuracy": 0.98,
+      "precision": 1.0,
+      "recall": 0.9776119402985075,
+      "f1": 0.9886792452830189,
+      "rocAuc": 0.9990671641791045,
+      "confusionMatrix": {
+        "labels": [
+          "not_promoted",
+          "promoted"
+        ],
+        "matrix": [
+          [
+            16,
+            0
+          ],
+          [
+            3,
+            131
+          ]
+        ]
+      },
+      "equalOpportunityDifference": 0.0064814814814815325,
+      "groupTruePositiveRates": {
+        "M": 0.9814814814814815,
+        "F": 0.975
+      }
+    }
+  },
+  "featureImportance": [
+    {
+      "feature": "observedCompletenessScore",
+      "importance": 0.27040764689445496
+    },
+    {
+      "feature": "observedWeightedScore",
+      "importance": 0.2349843680858612
+    },
+    {
+      "feature": "attainmentDoctorate",
+      "importance": 0.21866145730018616
+    },
+    {
+      "feature": "documentCount",
+      "importance": 0.07477369904518127
+    },
+    {
+      "feature": "observedTeachingPoints",
+      "importance": 0.061117272824048996
+    },
+    {
+      "feature": "observedKraResearch",
+      "importance": 0.031874142587184906
+    },
+    {
+      "feature": "observedKraProfessionalDevelopment",
+      "importance": 0.026874342933297157
+    },
+    {
+      "feature": "observedKraInstruction",
+      "importance": 0.02533225528895855
+    },
+    {
+      "feature": "rankOrdinal",
+      "importance": 0.022308943793177605
+    },
+    {
+      "feature": "yearsInService",
+      "importance": 0.01975080743432045
+    },
+    {
+      "feature": "observedKraExtension",
+      "importance": 0.013915031217038631
+    }
+  ]
+}

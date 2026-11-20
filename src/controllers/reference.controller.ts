@@ -14,26 +14,27 @@ import {
   getDefaultBucketName,
   isCloudStorageConfigured,
 } from '../services/storage.service';
+import { isPromotionModelAvailable } from '../services/model.service';
 
 export const getTqeSummary = (_req: Request, res: Response) => {
   res.json({
     source: 'TQE.csv',
     summary: tqeReferenceSummary,
     usage:
-      'This dataset is currently used as a teaching-quality and score-distribution reference, not as the final promotion outcome dataset.',
+      'This dataset is a teaching-quality and score-distribution reference only. The promotion-prediction model is trained on a separate, disclosed-synthetic dataset (see docs/model-training-results.md), not on this file.',
   });
 };
 
 export const getUploadPanels = (_req: Request, res: Response) => {
   res.json({
-    modelStatus: 'inactive',
+    modelStatus: isPromotionModelAvailable() ? 'active' : 'inactive',
     panels: uploadPanels,
   });
 };
 
 export const getEmployeeUploadWorkflow = (_req: Request, res: Response) => {
   res.json({
-    modelStatus: 'inactive',
+    modelStatus: isPromotionModelAvailable() ? 'active' : 'inactive',
     workflow: getEmployeeUploadWorkflowSummary(),
   });
 };

@@ -44,6 +44,7 @@ export interface SyntheticFaculty {
   fullName: string;
   email: string;
   employeeId: string;
+  sex: 'F' | 'M';
   rank: string;
   department: string;
   attainment: "Master's" | 'Doctorate Graduate';
@@ -296,6 +297,7 @@ export function buildCohort(seed = 20261120, count = 100): SyntheticFaculty[] {
       fullName: name.full,
       email,
       employeeId,
+      sex: name.sex,
       rank,
       department,
       attainment,

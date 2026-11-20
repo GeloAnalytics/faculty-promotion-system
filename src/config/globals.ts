@@ -10,6 +10,8 @@ export const tqeReferenceRecords = loadTqeReferenceData(tqeCsvPath);
 export const tqeReferenceSummary = summarizeTqeReferenceData(tqeReferenceRecords);
 export const publicDir = path.join(repoRoot, 'public');
 export const ocrScriptPath = path.join(repoRoot, 'scripts', 'ocr-image.ps1');
+export const promotionModelPath = path.join(repoRoot, 'models', 'promotion-model.json');
+export const modelComparisonPath = path.join(repoRoot, 'data', 'ml', 'model_comparison.json');
 
 export const ocrConfig: OcrConfig = {
   provider: env.OCR_PROVIDER as OcrProvider,
