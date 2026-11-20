@@ -13,3 +13,11 @@ __pycache__/
 *.traineddata
 .vercel
 faculty-promotion-system-main/
+
+# Synthetic cohort: identity-level registry stays local (the repo is public)
+scripts/synthetic/registry.json
+docs/synthetic-faculty-registry.md
+
+# Real faculty sample evidence (contains personal data)
+JC3 Sample Data/
+JC3*.zip

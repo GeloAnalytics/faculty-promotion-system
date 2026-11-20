@@ -67,7 +67,15 @@ The scoring and evidence workflow is aligned with `DBM-JC-No-3-s-2022-9th-cycle-
 
 ## Current Verified Status
 
-Verified on 2026-08-12:
+Verified on 2026-11-20:
+
+- `tsc --noEmit` clean, and the `scripts/synthetic/` tooling type-checks against the same compiler settings.
+- `npm test` passes 92 unit/scoring tests (no database required). One run of the same suite showed a single intermittent failure that did not reproduce on rerun; the logs show OCR.space rate-limit and 503 responses during the OCR tests, so a dependency on that service is the likely cause, but this was not confirmed.
+- The production deployment on the custom domain serves all three portals, `/api/health` reports `ok`, and unauthenticated API calls return 401. Latest production deploy matches `main`.
+- The integration and e2e suites (`test:integration`, `test:e2e`) were **not** re-run in this pass because they write to the configured database.
+- A 100-faculty synthetic cohort was used to measure scoring accuracy end to end - see [docs/synthetic-dataset.md](docs/synthetic-dataset.md). Headline: teaching-effectiveness points are within 1 point for 98% of faculty, while criteria outside teaching are systematically overscored when a faculty member has more than one output.
+
+Verified on 2026-08-12 (not re-run since):
 
 - `tsc --noEmit` clean.
 - `npm test` passes 52 pure unit/scoring tests (no database required).
@@ -93,6 +101,9 @@ Verified on 2026-08-12:
 - High-capacity, zero-cost cloud storage via **Cloudflare R2** (S3-compatible, 10 GB free tier with $0 egress fees), bypassing Vercel's 4.5 MB serverless body cap via direct-to-bucket presigned PUT uploads. Supabase and local storage remain supported as fallback providers.
 - Evidence-based score computation with three ordered scoring tiers per panel (`scoreSource`: `ocr-detected` → `evidence-checklist` → `evidence-relevance-estimate` → `0` for no evidence at all). Score extraction is anchored to full panel-title/KRA-heading phrases only (not individual generic words), and rejects both bare calendar years and day-of-month date fragments, to avoid fabricating a score from an unrelated number (control numbers, dates, page numbers) elsewhere in a document.
 - Per-panel evidence-checklist fractional credit (`AND` rules average their conditions' match fractions, `OR` rules take the best alternative) when no explicit score is OCR-detected.
+- NBC 461 teaching-effectiveness scoring (`src/utils/teachingEvaluation.ts`): reads SET (student) and SEF (supervisor) ratings off the letter form, CMO 19 form, weighted SET table and FEDAF layouts, averages them over the semesters evidenced, and applies `SET / 100 x 36 + SEF / 100 x 24`. This replaces any per-document score OCR picked up for that panel. The same semester uploaded twice counts once.
+- Resumable OCR for very long scans (such as theses): a partially read document keeps its resume point, and the rest is read by `/continue-ocr`. OCR.space's hourly request limit is detected and the local engine takes over until it resets. The uploaded DBM-JC circular itself is recognised and earns no points.
+- Synthetic-cohort tooling for measuring scoring accuracy (`scripts/synthetic/`, documented in [docs/synthetic-dataset.md](docs/synthetic-dataset.md)).
 - Live employee-side score summary: per-KRA totals, per-panel scores with their source tier, total score, weighted score (using the verified rank-weight table above), score bracket, and advisory projected rank.
 - Official rank-resolution logic: gates entry into Associate Professor/Professor on doctoral qualification, gates first-time Professor rank on pending EAC accreditation, gates College/University Professor on pending Certification Committee approval, and recomputes weights when a faculty member's sub-rank increments cross into the next rank group.
 - Evaluator review queue and document browser grouped by faculty member, each document annotated with its OCR analysis.
@@ -109,6 +120,11 @@ Most of what was previously tracked here has been closed out. Remaining known ga
 1. OCR score extraction still relies on regex heuristics anchored to panel titles. Two concrete false-positive classes (generic-word matches, date-adjacency matches) were found and fixed on 2026-08-11 with a live-data backfill, but the underlying approach is still heuristic - roughly 16.5% of currently-detected scores still exceed their panel's own max (down from ~24% before the fix), though `usedScore` is always capped to the panel max downstream so this is not currently causing incorrect final scores.
 2. No automated test coverage yet for controllers/routes outside auth (documents, dashboard, review, training, accounts) - the auth suite is the first HTTP-level integration coverage this project has had.
 3. Continue visual polish on the score summary after testing with real evidence packets.
+4. Findings from the 2026-11-20 synthetic-cohort accuracy run (details and caveats in [docs/synthetic-dataset.md](docs/synthetic-dataset.md); the quantity finding depends on an assumption about how the circular awards points per output and should be confirmed against it):
+   - **Quantity blindness:** one complete set of evidence earns full credit for a criterion regardless of how many outputs support it, so criteria such as Research Outputs, Continuing Development and Service to the Community are overscored for faculty with more than one output.
+   - **Underscore keywords:** evidence rules such as `certificate of contribution form_translated research` never match real OCR output, which drops the underscore.
+   - **Plain substring matching:** short keywords (`set`, `role`, `program`, `moa`, `cav`) match inside ordinary words, and multi-word keywords split across a wrapped line are missed because text is not whitespace-normalized before matching.
+   - **Teaching-form fragility under heavy OCR damage:** the single-evaluator detector needs the exact word "evaluation", and a garbled academic-year range loses the semester.
 
 ## Current Development Checkpoint
 
@@ -172,7 +188,7 @@ Most of what was previously tracked here has been closed out. Remaining known ga
 For each panel, in priority order:
 
 1. Read the uploaded evidence text through OCR/PDF parsing (with self-hosted fallback if the primary provider fails).
-2. Try to detect an explicit numeric score for the panel from that text, anchored to the panel's full title/KRA heading (not generic words), rejecting bare calendar years and date fragments. If found: `scoreSource: 'ocr-detected'`.
+2. Try to detect an explicit numeric score for the panel from that text, anchored to the panel's full title/KRA heading (not generic words), rejecting bare calendar years and date fragments. If found: `scoreSource: 'ocr-detected'`. Teaching Effectiveness is the exception: its points always come from the NBC 461 SET/SEF formula when ratings are readable (see `teachingEvaluation.ts`).
 3. Otherwise, compute how much of the panel's evidence checklist (`evidenceRules.ts`) the detected keywords satisfy, as a fraction of the panel max. If any evidence exists: `scoreSource: 'evidence-checklist'`.
 4. If the checklist match is exactly zero but evidence exists and looks topically relevant, use a conservative relevance estimate capped at 45% of the panel max: `scoreSource: 'evidence-relevance-estimate'`.
 5. If no evidence was uploaded at all: `0`, `status: 'missing-evidence'`.
@@ -184,7 +200,7 @@ For each panel, in priority order:
 
 - Backend: Express + TypeScript, split into `src/app.ts` (app/middleware/routes) and `src/server.ts` (bootstrap/listen)
 - Database: PostgreSQL through Prisma (hosted on Supabase)
-- Document Storage: Supabase Storage (`documents` bucket)
+- Document Storage: Cloudflare R2 (`documents` bucket) through the unified `StorageService`, with S3, Supabase Storage and local disk as fallbacks (chosen by which credentials are configured, in that order)
 - Active frontend: static HTML/CSS/JavaScript in `public/`
 - Frontend migration workspace: Vue 3 + Vite in `frontend/` (early-stage scaffold, not deployed)
 - Authentication: JWT via `fps_session` httpOnly cookie, role embedded in the token (`EMPLOYEE` / `EVALUATOR` / `ADMIN`)
@@ -206,6 +222,12 @@ src/controllers/admin.controller.ts    Database overview
 src/utils/document.utils.ts            PDF/OCR processing and file linkage
 src/utils/evidenceValidation.ts        Evidence completeness and checklist-fraction rules
 src/utils/dashboard.utils.ts           Score computation, rank resolution, workbookMirror payload
+src/utils/teachingEvaluation.ts        SET/SEF rating extraction and NBC 461 teaching-effectiveness points
+src/utils/evidenceRules.ts             Machine-readable required-evidence checklist (AND/OR rules)
+src/services/storage.service.ts        Unified storage (R2 / S3 / Supabase / local): signed uploads, download, delete
+src/ocr.ts                             OCR providers, fallback, resumable page-by-page reading
+scripts/synthetic/                     Synthetic-cohort generator, loader, accuracy tooling (see docs/synthetic-dataset.md)
+docs/synthetic-dataset.md              Methodology, assumptions and findings of the synthetic-cohort accuracy run
 src/utils/crypto.ts                    Password hashing and temporary-password generation
 src/uploadPanels.ts                    KRA/criterion upload panel catalog
 src/uploadWorkflow.ts                  Evidence upload workflow metadata
@@ -290,12 +312,18 @@ OCR_API_KEY=""
 OCR_API_KEY_HEADER="Authorization"
 OCR_FILE_FIELD_NAME="file"
 OCR_TIMEOUT_MS=30000
+R2_ACCOUNT_ID="your-cloudflare-account-id"
+R2_ACCESS_KEY_ID="your-r2-access-key-id"
+R2_SECRET_ACCESS_KEY="your-r2-secret-access-key"
+R2_BUCKET_NAME="documents"
 SUPABASE_URL="https://your-project.supabase.co"
 SUPABASE_SERVICE_ROLE_KEY="your-service-role-key"
 SUPABASE_ANON_KEY="your-anon-public-key"
 ```
 
-> **Note:** `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are required for server-side document storage, OCR analysis, and backend-issued signed uploads. `SUPABASE_ANON_KEY` is optional because the browser uploads only to short-lived signed URLs.
+> **Note on storage:** document storage uses Cloudflare R2 whenever `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID` and `R2_SECRET_ACCESS_KEY` are set (the bucket defaults to `documents`). Browser uploads go straight to the bucket through short-lived presigned URLs. If R2 is not configured the service falls back to generic S3, then Supabase Storage (`SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY`), then local disk. `SUPABASE_ANON_KEY` is optional. The database itself is still PostgreSQL via `DATABASE_URL`; if it points at a Supabase project, that project must be active (a paused free-tier project makes every database-backed endpoint, including login, return 500).
+>
+> **Note on OCR quota:** if `OCR_API_URL` and `OCR_API_KEY` for OCR.space are set, the app prefers OCR.space even when `OCR_PROVIDER=tesseract`. To force local OCR for bulk jobs, blank those variables for the process (`OCR_API_URL= OCR_API_KEY=`), as `scripts/synthetic/load.ts` requires.
 >
 > `OCR_PROVIDER` selects the *primary* provider:
 > - `google-vision`: Google Cloud Vision API (`DOCUMENT_TEXT_DETECTION`). 1,000 pages/month free forever, industry-leading accuracy. Set `GOOGLE_VISION_API_KEY`.
@@ -332,6 +360,7 @@ The backend serves the active portals at:
 - `npm run db:deploy` - apply deploy-safe migrations
 - `npm run db:push` - push Prisma schema changes directly
 - `npm run db:studio` - open Prisma Studio
+- `npx tsx scripts/synthetic/evaluate.ts [seed]` - offline scoring-accuracy run on a simulated synthetic cohort (no database); see [docs/synthetic-dataset.md](docs/synthetic-dataset.md) for the loader, verification and removal commands
 
 ## Machine Learning Workflow
 
@@ -340,6 +369,8 @@ The offline machine learning components (dataset preparation, boosting-model com
 The Faculty Promotion System's role in the machine learning pipeline is strictly to prepare, structure, and validate the promotion data. The `bfar-ml` repository consumes this data for offline experimentation. No model training code (`.py`/`.ipynb`) for that offline track exists in this repository - only its data exports (`data/exports/`).
 
 > **Note for anyone using `data/exports/objective-305-training-dataset.csv` as ground truth for promotion outcomes:** its `labelPromoted` field is derived from `Teaching_Quality === 'Excellent'` in the source `TQE.csv` (a teaching-quality evaluation dataset), not from a recorded promotion decision, and several features are explicitly proxy-derived (see `objective-305-training-dataset.metadata.json`). Treat this as a proxy-labeled dataset, not real historical promotion outcomes, unless a genuine promotion-outcome dataset has since replaced it.
+
+> **Synthetic records:** faculty created by `scripts/synthetic/` are fictional and carry no marker in the database. Their identities are listed only in a local, git-ignored registry. Exclude them (or disclose them as synthetic) in any accuracy figure, export or model training run.
 
 ## Thesis Framing
 
@@ -357,6 +388,21 @@ Do not claim that the system makes final promotion decisions. Final evaluation r
 - **Enabled Multi-Panel & Batch File Uploads**: Added multi-file selection support per upload panel and backgrounded post-upload workspace refreshing (`loadEmployeeWorkspace`), allowing users to upload multiple files across KRA cards simultaneously without UI blocking.
 - **Added Document Type Dropdown (Bug #2)**: Added optional 12-category Document Type select menu on upload cards (Certificate, Published Article, Award, Training Proof, Evaluation Form, etc.), stored in `extractionMetadata`.
 - **Production Vercel Deployment**: Configured `SUPABASE_ANON_KEY` in Vercel environment variables and verified production health on `https://faculty-promotion-system-main.vercel.app`.
+
+### 2026-11-20
+
+- Added `scripts/synthetic/`: a seeded generator for 100 fictional faculty (about 2,000 evidence documents, with known ground-truth scores), a loader that pushes them through the real upload path (PDF parsing, then OCR, then analysis) into the database and R2, a scoped removal script, and offline and live accuracy reports. Methodology, assumptions and findings are in [docs/synthetic-dataset.md](docs/synthetic-dataset.md).
+- Accuracy findings: teaching-effectiveness points are within 1 point for 98% of faculty (92.6% of individual SET/SEF ratings read correctly); criteria outside teaching are overscored when a faculty member has more than one output; evidence keywords containing underscores never match real OCR text. See the known gaps above.
+- Incident found while testing: the production database became unreachable (a paused Supabase project), which made login and every database-backed endpoint return 500 while `/api/health` still reported `ok`. Resuming the project restored service. The health check does not exercise the database, so it cannot detect this.
+- The loader refuses to run unless OCR resolves to local Tesseract, because the app prefers OCR.space whenever its URL and key are set, which would spend the quota real users share.
+
+### 2026-10-17
+
+- Replaced Supabase Storage with Cloudflare R2 behind a unified `StorageService` (direct-to-bucket presigned PUT uploads; S3, Supabase and local disk remain as fallbacks).
+
+### 2026-10-12
+
+- Teaching-effectiveness scoring under NBC 461 (SET/SEF ratings, FEDAF layout, garbled-label tolerance), resumable OCR for very long scans, OCR.space hourly-limit handling, and Vercel build fixes so the OCR assets are bundled (PRs #11 and #12).
 
 ### 2026-08-12
 

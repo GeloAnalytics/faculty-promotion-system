@@ -1,0 +1,39 @@
+Cohort: 100 faculty | docs: 2041 (avg 20.41/faculty)
+Doc formats: {"ocr-text":510,"pdf-scan":803,"pdf-text":728}
+
+== Teaching effectiveness (NBC 461: SET/100x36 + SEF/100x24) ==
+Ratings read correctly: 716/773 (recall 92.6%); precision 96.9%
+Points (max 60) MAE 0.28 | within 1pt 98.0% | exact 82.0% | no rating detected 0
+
+== Panel scores vs ground truth (points) ==
+panel                                            n    MAE   bias  <=10%max  falseCredit
+Teaching Effectiveness                         100   0.28  -0.25  99.0%    0
+Instructional Materials Development             69   5.17   5.17  56.5%    0
+Research Advising and Mentorship Services       77   2.59   2.59  36.4%    0
+Research Outputs Published                      68  21.73  21.73  44.1%    0
+Inventions                                       4  16.66 -16.66  50.0%    0
+Creative Works                                   8  18.75  18.75  50.0%    0
+Service to the Institution                      76   4.67   4.54  60.5%    0
+Service to the Community                        76  10.27  10.27  48.7%    0
+Relevance and Quality of Extension Services     76   3.88   3.62  55.3%    0
+Administrative Designation                      25   2.13   2.13  68.0%    0
+Involvement in Professional Organizations       78   0.83  -0.19  84.6%    0
+Continuing Development                          72  12.29  12.29  38.9%    0
+Awards and Recognition                          78   0.43  -0.43  94.9%    0
+Academic Experience                              2   0.00   0.00  100.0%   0
+Industry Experience                              1   0.00   0.00  100.0%   0
+Non-teaching panels overall: MAE 6.64 pts, bias 6.21 pts
+Score source on those panels: {"evidence-checklist":710}
+
+== Faculty-level outcome ==
+KRA total MAE (instruction/research/extension/prof-dev): 5.50 / 14.78 / 13.61 / 9.03
+Weighted score MAE 9.42 (n=100)
+Score bracket agreement 40.0% | suggested-rank agreement 80.0% | status agreement 90.0%
+
+== By archetype / delivery (suggested-rank agreement, teaching MAE) ==
+archetype=average     n= 25  rank-agree  56.0%  teachMAE 0.03
+archetype=solid       n= 35  rank-agree 100.0%  teachMAE 0.71
+archetype=weak        n= 20  rank-agree  60.0%  teachMAE 0.09
+archetype=strong      n= 20  rank-agree  95.0%  teachMAE 0.02
+delivery=ocr-text     n= 25  rank-agree  84.0%  teachMAE 1.12
+delivery=pdf          n= 75  rank-agree  78.7%  teachMAE 0.00

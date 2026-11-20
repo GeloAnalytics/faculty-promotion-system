@@ -1,0 +1,20 @@
+import { prisma } from '../../src/config/db';
+import { buildCohort } from './build';
+import { readRegistry, SEED } from './load';
+(async () => {
+  const registry = readRegistry();
+  const cohort = buildCohort(SEED, 100);
+  const entries = Object.values(registry);
+  const expectedDocs = cohort.reduce((n, f) => n + f.docs.length, 0);
+  const registeredDocs = entries.reduce((n, e) => n + e.docs.length, 0);
+  const incomplete = cohort.filter((f) => (registry[String(f.seq)]?.docs.length ?? -1) !== f.docs.length).map((f) => f.seq);
+  console.log({ facultyInRegistry: entries.length, expectedDocs, registeredDocs, incompleteSeqs: incomplete });
+  const ids = entries.flatMap((e) => e.docs.map((d) => d.id));
+  const rows = await prisma.uploadedDocument.findMany({ where: { id: { in: ids } }, select: { extractedText: true, extractionMetadata: true } });
+  const empty = rows.filter((r) => (r.extractedText ?? '').trim().length < 50).length;
+  const ocrErr = rows.filter((r) => (r.extractionMetadata as any)?.ocrError).length;
+  const stored = rows.filter((r) => (r.extractionMetadata as any)?.storage?.path).length;
+  console.log({ docsInDb: rows.length, emptyText: empty, withOcrError: ocrErr, withStoredFile: stored });
+  console.log({ users: await prisma.user.count(), profiles: await prisma.facultyProfile.count(), documents: await prisma.uploadedDocument.count(), employees: await prisma.user.count({ where: { role: 'EMPLOYEE' } }) });
+  await prisma.$disconnect();
+})();
