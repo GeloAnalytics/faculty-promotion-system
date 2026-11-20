@@ -78,10 +78,10 @@ Measured on the text the live pipeline stored: real `pdf-parse` for text-layer P
 | Suggested rank equals ground truth | 80% |
 | Score bracket equals ground truth | 40% |
 
-1. **Quantity blindness is the dominant error.** One complete set of evidence earns full credit regardless of how many outputs there are. Under the quantity assumption above, Research Outputs is overscored by about 22 points on average, Continuing Development by 12, and Service to the Community by 10. Real OCR moved these numbers by about one point or less compared with the simulated-noise run, so OCR is not the cause.
-2. **Teaching-form extraction is fragile under heavy damage.** On simulated noise, forms are read correctly 63% to 79% of the time, falling to 25% for CMO 19 forms under heavy noise. Two causes are visible: `detectSingleEvaluator` needs the exact word "evaluation" (an OCR typo such as "Evaluotion" drops the whole form), and a garbled academic-year range such as "2024-225" loses the semester.
-3. **Underscore keywords never match real OCR.** Rules such as `certificate of contribution form_translated research` need the underscore, which OCR drops. This produced a Research Outputs score of 33 against a true 100 before the writer bug below was fixed.
-4. **Keyword matching is a plain substring test.** Short terms (`set`, `role`, `program`, `moa`, `cav`, `ched`) match inside ordinary words, so on about 90% of Thesis and Continuing Development panels the scorer saw keywords that were not part of the evidence. The effect on totals nets out to about one point, but it is a precision weakness. Multi-word keywords split across a wrapped line are also missed, because the text is not whitespace-normalized before matching.
+1. **Quantity blindness is the dominant error, and the circular confirms it is a real defect.** One complete set of evidence earns full credit regardless of how many outputs there are. DBM-JC No. 3 s. 2022 Annex II awards points per output and sums them to the cap (KRA II Criterion A: book 100, journal article 50, book chapter 35, each times the author's percentage contribution; KRA III Criterion B: 8 points per local-agency engagement), so a single journal article is credited 100 instead of 50. The generator's `UNITS_FOR_MAX` constants simplify those per-type values. Under that model, Research Outputs is overscored by about 22 points on average, Continuing Development by 12, and Service to the Community by 10. Real OCR moved these numbers by about one point or less compared with the simulated-noise run, so OCR is not the cause.
+2. **Teaching-form extraction is fragile under heavy damage (partly fixed 2026-11-20).** On simulated noise, forms are read correctly 63% to 79% of the time, falling to 25% for CMO 19 forms under heavy noise. Two causes are visible: `detectSingleEvaluator` needs the exact word "evaluation" (an OCR typo such as "Evaluotion" drops the whole form), and a garbled academic-year range such as "2024-225" loses the semester.
+3. **Underscore keywords never matched real OCR (fixed 2026-11-20).** Rules such as `certificate of contribution form_translated research` need the underscore, which OCR drops. This produced a Research Outputs score of 33 against a true 100 before the writer bug below was fixed.
+4. **Keyword matching is a plain substring test (wrapped lines fixed 2026-11-20; short-keyword precision still open).** Short terms (`set`, `role`, `program`, `moa`, `cav`, `ched`) match inside ordinary words, so on about 90% of Thesis and Continuing Development panels the scorer saw keywords that were not part of the evidence. The effect on totals nets out to about one point, but it is a precision weakness. Multi-word keywords split across a wrapped line are also missed, because the text is not whitespace-normalized before matching.
 
 ### Limits of these numbers
 
@@ -93,3 +93,18 @@ Measured on the text the live pipeline stored: real `pdf-parse` for text-layer P
 
 - PDFs are written with `@napi-rs/canvas` (`PDFDocument`). An earlier hand-written PDF writer produced files that `pdf-parse`'s bundled pdf.js rejected for about 45% of documents, which silently pushed those through slow OCR of badly rendered glyphs. If you change the writer, re-run a batch parse of every generated text PDF before loading.
 - The loader writes `ocrError` only when no text was recovered, matching the real upload endpoint.
+
+## Effect of the 2026-11-20 fixes
+
+Matching now normalizes underscores and whitespace, the single-evaluator detector tolerates OCR typos in "Evaluation", and an academic year with a mangled end keeps its start year. Same seed, before and after:
+
+| Measure | Before | After |
+|---|---|---|
+| Rating recall, simulated noise | 76.2% | 77.4% |
+| Rating recall, live stored text | 92.6% | 93.0% |
+| Rating precision, live stored text | 96.9% | 97.2% |
+| Teaching points error, live text | 0.28 | 0.28 |
+| Other criteria points error, live text | 6.64 | 6.64 |
+| Suggested rank / bracket agreement | 80% / 40% | 80% / 40% |
+
+The improvement is small and there is no regression. Panel-level error did not move because quantity blindness, not extraction, drives it.

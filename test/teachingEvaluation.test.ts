@@ -217,3 +217,20 @@ ANNEX II – Implementing Guidelines Points = OR (Overall Rating) ÷ 100 x 36 Te
   const panel = summary.scoreComputation.panelScores.find((item) => item.key === 'kra1_teaching_effectiveness');
   assert.equal(panel?.usedScore, 0);
 });
+
+test('reads a form whose "Evaluation" label has an OCR typo', () => {
+  const form = `Laguna State Polytechnic University
+EVALUATION OF TEACHING EFFECTIVENESS (Student's Evaluotion)
+2nd Semester A.Y. 2024-2025
+Dear MS. Torres,
+Grand Mean 4.04
+Equivalent Percentage 90.40`;
+  assert.deepEqual(extractTeachingEvaluationRatings(form), [{ evaluator: 'student', rating: 90.4, period: '2-2024' }]);
+});
+
+test('keeps the start year when OCR mangles the end of the academic year', () => {
+  assert.equal(parseEvaluationPeriod('1st Semester A.Y. 2024-225'), '1-2024');
+  assert.equal(parseEvaluationPeriod('2nd Semester A.Y. 2023-20245'), '2-2023');
+  // A well-formed range is still preferred over the lenient fallback.
+  assert.equal(parseEvaluationPeriod('1st Semester A.Y. 2024-2025'), '1-2024');
+});

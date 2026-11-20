@@ -23,6 +23,16 @@ import path from 'node:path';
 import { evidenceRules, RequirementRule } from './utils/evidenceRules';
 import { extractTeachingEvaluationRatings } from './utils/teachingEvaluation';
 
+/**
+ * Lower-cases and flattens text for phrase matching. Keyword rules are plain
+ * phrases ("certificate of contribution form_im"), but OCR drops underscores and
+ * page layout wraps phrases across lines, so both are collapsed to single spaces
+ * on the text and on the phrase before comparing.
+ */
+export function normalizeForKeywordMatching(value: string): string {
+  return value.toLowerCase().replace(/_/g, ' ').replace(/\s+/g, ' ');
+}
+
 function extractAllEvidenceKeywords(rules: Record<string, RequirementRule>): string[] {
   const keywords = new Set<string>();
   function traverse(rule: RequirementRule | string) {
@@ -150,10 +160,11 @@ export const analyzeDocumentContent = (
   }
 
   const extraction = extractDocumentInsights(text);
-  const normalizedText = text.toLowerCase();
+  const normalizedText = normalizeForKeywordMatching(text);
+  const containsPhrase = (term: string) => normalizedText.includes(normalizeForKeywordMatching(term));
 
-  const detectedCategories = uploadPanelKeywordMap[panelKey].filter((term) => normalizedText.includes(term));
-  
+  const detectedCategories = uploadPanelKeywordMap[panelKey].filter(containsPhrase);
+
   const evidenceKeywords = extractAllEvidenceKeywords(evidenceRules);
   const baseKeywords = [
     'teaching effectiveness',
@@ -169,7 +180,9 @@ export const analyzeDocumentContent = (
   ];
   
   const allKeywords = Array.from(new Set([...baseKeywords, ...evidenceKeywords]));
-  const keywordHits = allKeywords.filter((term) => normalizedText.includes(term));
+  // Hits keep the rule's own spelling (underscores included) so evidenceRules
+  // can still match them; only the comparison is normalized.
+  const keywordHits = allKeywords.filter(containsPhrase);
 
   const summary = buildDocumentSummary(panelKey, extraction.detectedFields, detectedCategories, extraction.textLength);
   const teachingEvaluations = extractTeachingEvaluationRatings(text);

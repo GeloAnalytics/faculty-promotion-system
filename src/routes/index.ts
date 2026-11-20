@@ -10,16 +10,38 @@ import adminRoutes from './admin.route';
 import reviewRoutes from './review.route';
 import accountsRoutes from './accounts.route';
 import { env } from '../config/env';
+import { prisma } from '../config/db';
 import { tqeReferenceRecords, guidelinePdfPath, isOcrReadyFlag, ocrConfig } from '../config/globals';
 import { resolveEffectiveOcrProvider } from '../ocr';
 import path from 'node:path';
 
 const router = Router();
 
-// Health check mapped as in server.ts
-router.get('/health', (_req: Request, res: Response) => {
-  res.json({
-    status: 'ok',
+const DATABASE_PROBE_TIMEOUT_MS = 4000;
+
+// A paused or unreachable database (e.g. a paused Supabase project) makes login
+// and every other data endpoint fail, so the health check must exercise it
+// rather than only reporting that the process is up.
+async function probeDatabase(): Promise<{ status: 'ok' | 'unreachable'; detail?: string }> {
+  try {
+    await Promise.race([
+      prisma.$queryRaw`SELECT 1`,
+      new Promise((_, reject) => setTimeout(() => reject(new Error('database probe timed out')), DATABASE_PROBE_TIMEOUT_MS)),
+    ]);
+    return { status: 'ok' };
+  } catch (error) {
+    // Deliberately generic: the raw driver error names the database user and host.
+    return { status: 'unreachable', detail: error instanceof Error && /timed out/.test(error.message) ? 'timed out' : 'connection failed' };
+  }
+}
+
+// Health check mapped as in server.ts. Also used as the daily keep-alive request
+// (see crons in vercel.json) that stops an inactive free-tier database pausing.
+router.get('/health', async (_req: Request, res: Response) => {
+  const database = await probeDatabase();
+  res.status(database.status === 'ok' ? 200 : 503).json({
+    status: database.status === 'ok' ? 'ok' : 'degraded',
+    database,
     environment: env.NODE_ENV,
     thesisObjectives: [
       'data collection and preprocessing',
