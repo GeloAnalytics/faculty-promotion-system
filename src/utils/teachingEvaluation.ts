@@ -53,6 +53,7 @@ const NUMBER_RANGE_PATTERN = /\d+(?:\.\d+)?\s*[-–]\s*\d+(?:\.\d+)?\s*%?/g;
 // otherwise pair up as a perfect score on a blank form.
 const COMPUTED_RATING_FORMULA_PATTERN = /\(?\s*total\s*score\s*\/\s*75\s*\)?\s*x\s*100/gi;
 const AY_RANGE_PATTERN =/\b(20\d{2})\s*[-–]\s*(2\.?0\d{2})\b/g;
+const AY_START_WITH_MANGLED_END_PATTERN = /\b(20\d{2})\s*[-–]\s*\d{3,5}\b/;
 
 function inRange(value: number, min: number, max = 100) {
   return Number.isFinite(value) && value >= min && value <= max;
@@ -103,14 +104,20 @@ export function parseEvaluationPeriod(text: string): string | null {
   }
   const [first] = ranges;
   if (!first) {
-    return null;
+    // OCR can mangle the second year beyond recognition ("2024-225"). The start
+    // year is the reliable half, so accept it when the end is merely year-like.
+    const loose = AY_START_WITH_MANGLED_END_PATTERN.exec(afterSemester) ?? AY_START_WITH_MANGLED_END_PATTERN.exec(text);
+    const start = loose ? Number(loose[1]) : Number.NaN;
+    return Number.isFinite(start) && start <= new Date().getFullYear() + 1 ? `${semester}-${start}` : null;
   }
   const latestPlausibleYear = new Date().getFullYear() + 1;
   return `${semester}-${first.start <= latestPlausibleYear ? first.start : first.end - 1}`;
 }
 
 function detectSingleEvaluator(text: string): TeachingEvaluator | null {
-  const match = /\b(students?|supervisor)\W{0,3}s?\W{0,2}\s*evaluation/i.exec(text);
+  // "e[vy]al\w{2,8}" rather than the literal word so an OCR slip such as
+  // "Evaluotion" or "Evalution" does not discard the whole form.
+  const match = /\b(students?|supervisor)\W{0,3}s?\W{0,2}\s*e[vy]al\w{2,8}/i.exec(text);
   if (!match) {
     return null;
   }

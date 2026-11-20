@@ -11,6 +11,12 @@
       "includeFiles": "{TQE.csv,DBM-*.pdf,node_modules/{tesseract.js-core/*.wasm,@tesseract.js-data/eng/4.0.0_best_int/*,pdfjs-dist/{package.json,legacy/build/pdf.worker.mjs,standard_fonts/*,cmaps/*},@napi-rs/canvas*/**}}"
     }
   },
+  "crons": [
+    {
+      "path": "/api/health",
+      "schedule": "0 3 * * *"
+    }
+  ],
   "rewrites": [
     {
       "source": "/api/(.*)",
