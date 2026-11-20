@@ -3,16 +3,9 @@ import { prisma } from '../config/db';
 import { facultyIngestionSchema } from '../validations/faculty.validation';
 import { attachExistingDocumentsToProfile, toPrismaJson } from '../utils/document.utils';
 import { fixedReviewPeriodLabel } from '../constants/reviewCycle';
-import { UserRole, CriterionDecision } from '@prisma/client';
-import { buildDraftPointSummary, mergeFacultyRecordInput } from '../utils/dashboard.utils';
-import {
-  isPromotionModelAvailable,
-  predictPromotion,
-  buildFeatureVectorFromDraftPoints,
-  getModelComparison,
-  getFeatureImportance,
-} from '../services/model.service';
-import type { UploadPanelKey } from '../types';
+import { UserRole } from '@prisma/client';
+import { isPromotionModelAvailable, getModelComparison, getFeatureImportance } from '../services/model.service';
+import { evaluateProfilePromotion } from '../services/promotionEvaluation.service';
 
 // Identity only - academic rank, department, etc. Every KRA score comes from
 // OCR of uploaded score sheets/evidence instead (see dashboard.utils.ts), never
@@ -138,69 +131,25 @@ export const generatePredictions = async (req: Request, res: Response) => {
   const isElevated = req.user!.role === UserRole.ADMIN || req.user!.role === UserRole.EVALUATOR;
   const profile = await prisma.facultyProfile.findFirst({
     where: { id: profileId, ...(isElevated ? {} : { createdByUserId: req.user!.id }) },
-    include: {
-      documents: { select: { extractionMetadata: true } },
-      criterionReviews: { select: { panelKey: true, decision: true } },
-    },
+    select: { id: true },
   });
-
   if (!profile) {
     return res.status(404).json({ error: 'Faculty profile not found' });
   }
 
-  const criterionReviews = new Map<UploadPanelKey, CriterionDecision>(
-    profile.criterionReviews.map((review) => [review.panelKey as UploadPanelKey, review.decision]),
-  );
-  const draftPoints = buildDraftPointSummary(
-    { features: profile.features, semester: profile.semester },
-    profile.documents,
-    undefined,
-    undefined,
-    criterionReviews,
-  );
-  const { personalData } = mergeFacultyRecordInput(profile.features);
-
-  const featureVector = buildFeatureVectorFromDraftPoints(
-    draftPoints,
-    {
-      academicRank: typeof personalData.academicRank === 'string' ? personalData.academicRank : null,
-      highestEducationalAttainment:
-        typeof personalData.highestEducationalAttainment === 'string' ? personalData.highestEducationalAttainment : null,
-      yearsInService: typeof personalData.yearsInService === 'number' ? personalData.yearsInService : null,
-    },
-    profile.documents.length,
-  );
-
-  const prediction = predictPromotion(featureVector);
-
-  const saved = await prisma.prediction.create({
-    data: {
-      profileId: profile.id,
-      probability: prediction.probability,
-      predictedClass: prediction.predictedClass,
-      modelUsed: prediction.modelUsed,
-      generatedByUserId: req.user!.id,
-    },
-  });
+  const evaluation = await evaluateProfilePromotion(profileId, { generatedByUserId: req.user!.id });
 
   return res.json({
     prediction: {
-      id: saved.id,
-      probability: prediction.probability,
-      predictedClass: prediction.predictedClass,
-      modelUsed: prediction.modelUsed,
-      topFactors: prediction.topFactors,
-      createdAt: saved.createdAt,
+      probability: evaluation.prediction.probability,
+      predictedClass: evaluation.prediction.predictedClass,
+      modelUsed: evaluation.prediction.modelUsed,
+      topFactors: evaluation.prediction.topFactors,
     },
     // The rule-based draft (NBC 461 / DBM-JC evidence scoring) is the authoritative,
     // evaluator-reviewed basis for any promotion decision. The model output above is a
     // separate, explainable advisory signal; it never substitutes for the draft below.
-    ruleBasedDraft: {
-      weightedScore: draftPoints.scoreComputation.weightedScore,
-      scoreBracket: draftPoints.scoreComputation.scoreBracket,
-      suggestedRank: draftPoints.promotionDraft.suggestedRank,
-      status: draftPoints.promotionDraft.status,
-    },
+    ruleBasedDraft: evaluation.ruleBasedDraft,
   });
 };
 

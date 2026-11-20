@@ -17,6 +17,7 @@ faculty-promotion-system-main/
 # Synthetic cohort: identity-level registry stays local (the repo is public)
 scripts/synthetic/registry.json
 docs/synthetic-faculty-registry.md
+docs/synthetic-promotion-evaluations.csv
 
 # Real faculty sample evidence (contains personal data)
 JC3 Sample Data/
